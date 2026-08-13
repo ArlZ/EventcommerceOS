@@ -10,7 +10,12 @@ class LocalOutbox(
 ) {
   private val dao = db.pendingEvents()
 
-  suspend fun appendOrder(eventType: String, order: OrderEntity, idempotencyKey: String? = null) {
+  suspend fun appendOrder(
+    eventType: String,
+    order: OrderEntity,
+    items: List<OrderItemEntity>,
+    idempotencyKey: String? = null,
+  ) {
     val instanceId = idFactory()
     dao.insert(
       OutboxEventEntity(
@@ -24,7 +29,7 @@ class LocalOutbox(
         sequence = deviceState.nextSequence(),
         occurredAtEpochMs = clock(),
         idempotencyKey = idempotencyKey ?: instanceId,
-        payloadJson = "{\"orderId\":\"${order.id}\",\"state\":\"${order.state}\",\"totalMinor\":${order.totalMinor},\"currency\":\"${order.currency}\"}",
+        payloadJson = OrderEventPayload.snapshot(order, items),
         sentAtEpochMs = null,
       ),
     )
