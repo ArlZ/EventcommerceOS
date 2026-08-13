@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EdgeDatabaseService } from '../database/database.service';
 import { CloudForwarderService } from './cloud-forwarder.service';
 import { CloudSyncTransport } from './cloud-sync.transport';
 import { DeviceSyncController } from './device-sync.controller';
@@ -8,9 +9,18 @@ import { HttpCloudSyncTransport } from './http-cloud-sync.transport';
 @Module({
   controllers: [DeviceSyncController],
   providers: [
-    DeviceSyncService,
-    CloudForwarderService,
     { provide: CloudSyncTransport, useClass: HttpCloudSyncTransport },
+    {
+      provide: DeviceSyncService,
+      useFactory: (database: EdgeDatabaseService) => new DeviceSyncService(database),
+      inject: [EdgeDatabaseService],
+    },
+    {
+      provide: CloudForwarderService,
+      useFactory: (database: EdgeDatabaseService, transport: CloudSyncTransport) =>
+        new CloudForwarderService(database, transport),
+      inject: [EdgeDatabaseService, CloudSyncTransport],
+    },
   ],
   exports: [DeviceSyncService, CloudForwarderService],
 })
