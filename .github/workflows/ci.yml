@@ -24,6 +24,12 @@ jobs:
           name: pnpm-lockfile
           path: pnpm-lock.yaml
           if-no-files-found: error
+      - run: pnpm exec prettier --write scripts/check-architecture.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formatted-architecture-check
+          path: scripts/check-architecture.mjs
+          if-no-files-found: error
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
