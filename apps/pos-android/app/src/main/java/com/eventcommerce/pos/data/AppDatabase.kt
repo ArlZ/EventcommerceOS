@@ -21,7 +21,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 )
 abstract class AppDatabase : RoomDatabase() {
   abstract fun localMetadata(): LocalMetadataDao
-  abstract fun pos(): PosDao
+  abstract fun menu(): MenuDao
+  abstract fun orders(): OrderDao
+  abstract fun pendingEvents(): PendingEventDao
 
   companion object {
     private const val DATABASE_NAME = "event-commerce-pos.db"
