@@ -1,4 +1,5 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import type { OnModuleDestroy } from '@nestjs/common';
 import pg, { type PoolClient } from 'pg';
 
 const { Pool } = pg;
