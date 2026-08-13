@@ -61,10 +61,10 @@ No production secrets belong in this repository. Values in `infra/docker-compose
 ## Install
 
 ```bash
-pnpm install --no-frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
-A committed pnpm lockfile should be generated once dependency resolution has been validated. The initial foundation PR intentionally does not claim registry/toolchain validation from the GitHub connector environment.
+`pnpm-lock.yaml` is committed and CI uses frozen-lockfile installation so dependency resolution is reproducible.
 
 ## Start the local TypeScript stack
 
@@ -108,7 +108,9 @@ GitHub Actions runs equivalent TypeScript and Android jobs on pull requests.
 
 ## Validation status
 
-The repository structure and CI workflow were authored through the GitHub connector, which cannot install registry dependencies or execute Android/Node toolchains. Therefore no local command is claimed as passed yet. The Task 001 pull request's GitHub Actions runs are the first executable validation gate; README and the completion record should be updated if CI exposes any command/toolchain mismatch.
+Task 001 has been exercised in GitHub Actions. The validation gate includes dependency installation, TypeScript builds, linting, typechecking, unit and smoke tests, formatting checks, architecture dependency guardrails, Android unit tests and Android lint. Every subsequent change must pass the same CI gate before merge.
+
+`make dev` remains a developer runtime command rather than a CI integration test; local PostgreSQL startup and real-device Android behaviour should still be validated in the appropriate development and pilot environments.
 
 ## Read first
 

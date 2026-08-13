@@ -56,6 +56,7 @@ Create a legible, testable repository skeleton that enforces the architectural i
 - Added two reproducible local PostgreSQL services for cloud and edge development.
 - Added mechanical dependency-boundary checks and GitHub Actions jobs for TypeScript and Android.
 - Added `make dev`, `make check` and `make android-check` developer entry points.
+- Committed `pnpm-lock.yaml` and configured CI to require frozen-lockfile installation.
 
 ### Architecture decisions changed
 
@@ -63,15 +64,22 @@ None. The implementation follows the previously locked modular-monolith, local-f
 
 ### Commands/tests run
 
-No build/test command is claimed as executed successfully from the GitHub connector environment because that environment cannot install package registries or run the Android/Node toolchains. GitHub Actions on the pull request is the executable validation gate for:
+GitHub Actions on the Task 001 pull request has executed the repository validation gate successfully, including:
 
-- TypeScript build, lint, typecheck, tests, formatting and architecture checks.
+- pnpm dependency installation from the committed lockfile;
+- TypeScript production builds;
+- linting and strict typechecking;
+- shared package and application unit/smoke tests;
+- formatting checks;
+- architecture dependency guardrails;
 - Android `testDebugUnitTest` and `lintDebug`.
+
+Any subsequent commit must pass the same CI gate before merge.
 
 ### Known debt
 
-- `pnpm-lock.yaml` is not yet committed because dependency resolution could not be executed in the connector environment. Generate and commit it after a successful dependency install.
 - Production database migrations, auth, telemetry exporters and domain features are deliberately absent from Task 001.
+- `make dev` and the local PostgreSQL runtime still require developer-environment validation rather than being covered by the current CI integration gate.
 - Real-device Android performance and persistence behaviour remains a later hardware validation requirement.
 
 ### Recommended Plan 002
