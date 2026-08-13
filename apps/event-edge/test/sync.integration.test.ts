@@ -172,6 +172,6 @@ describeIntegration('device to edge synchronization', () => {
     );
     expect(processed[0]!.count).toBe('100');
     expect(watermarks).toHaveLength(10);
-    expect(watermarks.every((row) => row.accepted_through_sequence === '10')).toBe(true);
+    expect(watermarks.map((row) => row.accepted_through_sequence)).toEqual(Array(10).fill('10'));
   });
 });
