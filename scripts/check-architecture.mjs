@@ -3,12 +3,14 @@ import { extname, join, relative, sep } from 'node:path';
 
 const root = process.cwd();
 const sourceExtensions = new Set(['.ts', '.tsx']);
+const ignoredDirectories = new Set(['node_modules', 'dist', '.next', 'coverage', 'build', '.gradle']);
 const violations = [];
 
 async function walk(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
+    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) files.push(...(await walk(path)));
     else if (sourceExtensions.has(extname(entry.name))) files.push(path);
@@ -46,9 +48,7 @@ for (const appName of appRoots) {
     const source = await readFile(file, 'utf8');
     for (const specifier of importsOf(source)) {
       const normalized = specifier.split('/').join(sep);
-      if (normalized.includes(`${sep}apps${sep}`)) {
-        violations.push(`${relative(root, file)} imports another app directly: ${specifier}`);
-      }
+      if (normalized.includes(`${sep}apps${sep}`)) violations.push(`${relative(root, file)} imports another app directly: ${specifier}`);
     }
   }
 }
