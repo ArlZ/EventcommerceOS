@@ -11,7 +11,7 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
+    "format:check": "node scripts/dump-prettier-output.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
