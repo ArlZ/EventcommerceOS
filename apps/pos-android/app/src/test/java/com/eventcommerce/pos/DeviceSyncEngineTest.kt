@@ -1,0 +1,113 @@
+package com.eventcommerce.pos
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.eventcommerce.pos.data.AppDatabase
+import com.eventcommerce.pos.data.DeviceSyncStateStore
+import com.eventcommerce.pos.data.LocalPosRepository
+import com.eventcommerce.pos.sync.DeviceEdgeAck
+import com.eventcommerce.pos.sync.DeviceEdgeTransport
+import com.eventcommerce.pos.sync.DeviceSyncEngine
+import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
+import com.eventcommerce.pos.sync.deviceRetryDelayMs
+import java.util.UUID
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
+class DeviceSyncEngineTest {
+  private lateinit var context: Context
+  private lateinit var db: AppDatabase
+  private lateinit var repository: LocalPosRepository
+  private lateinit var state: DeviceSyncStateStore
+  private lateinit var dbName: String
+
+  @Before
+  fun setUp() {
+    context = ApplicationProvider.getApplicationContext()
+    dbName = "task004-${UUID.randomUUID()}.db"
+    db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+      .addMigrations(AppDatabase.MIGRATION_1_2)
+      .allowMainThreadQueries()
+      .build()
+    repository = LocalPosRepository(db)
+    state = DeviceSyncStateStore(db)
+  }
+
+  @After
+  fun tearDown() {
+    db.close()
+    context.deleteDatabase(dbName)
+  }
+
+  @Test
+  fun `lost acknowledgement safely replays durable events and stores later watermark`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    val order = repository.addItem(menu.items.first().itemId)
+    repository.recordCashPayment(order.id)
+    val highest = repository.allOutboxEvents().maxOf { it.sequence }
+    var attempts = 0
+    val transport = DeviceEdgeTransport { deviceId, _ ->
+      attempts += 1
+      if (attempts == 1) error("acknowledgement lost after Edge persisted batch")
+      DeviceEdgeAck(deviceId, highest, 0)
+    }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    assertThrows(IllegalStateException::class.java) { runBlocking { engine.syncOnce() } }
+    assertEquals(0L, state.health().acknowledgedThroughSequence)
+    val recovered = engine.syncOnce()
+    assertEquals(highest, recovered.acceptedThroughSequence)
+    assertEquals(0, recovered.remaining)
+    assertEquals(highest, state.health().acknowledgedThroughSequence)
+  }
+
+  @Test
+  fun `device refuses an Edge watermark beyond its highest durable event`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repository.addItem(menu.items.first().itemId)
+    val highest = repository.allOutboxEvents().maxOf { it.sequence }
+    val transport = DeviceEdgeTransport { deviceId, _ -> DeviceEdgeAck(deviceId, highest + 10, 0) }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    assertThrows(IllegalArgumentException::class.java) { runBlocking { engine.syncOnce() } }
+    assertEquals(0L, state.health().acknowledgedThroughSequence)
+  }
+
+  @Test
+  fun `acknowledged events are not sent again`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repository.addItem(menu.items.first().itemId)
+    val highest = repository.allOutboxEvents().maxOf { it.sequence }
+    var calls = 0
+    val transport = DeviceEdgeTransport { deviceId, _ ->
+      calls += 1
+      DeviceEdgeAck(deviceId, highest, 4)
+    }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    engine.syncOnce()
+    val empty = engine.syncOnce()
+    assertEquals(1, calls)
+    assertEquals(0, empty.attempted)
+    assertEquals(4, state.health().edgeBacklogCount)
+  }
+
+  @Test
+  fun `retry delay is bounded and HTTPS transport rejects cleartext endpoint`() {
+    assertEquals(500L, deviceRetryDelayMs(1, random = { 0.0 }))
+    assertEquals(30_000L, deviceRetryDelayMs(30, random = { 1.0 }))
+    assertThrows(IllegalArgumentException::class.java) {
+      HttpsDeviceEdgeTransport("http://edge.local/sync/device-events")
+    }
+  }
+}
