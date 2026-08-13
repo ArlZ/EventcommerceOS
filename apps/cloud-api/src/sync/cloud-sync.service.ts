@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type {
@@ -24,7 +24,7 @@ interface OrderStateRow extends QueryResultRow {
 
 @Injectable()
 export class CloudSyncService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
   async ingest(batch: EdgeCloudBatch): Promise<EdgeCloudAck> {
     const result = await this.database.transaction(async (client) => {
