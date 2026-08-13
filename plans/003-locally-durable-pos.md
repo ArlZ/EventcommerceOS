@@ -2,120 +2,75 @@
 
 ## Goal
 
-Implement the first real Android POS sale-building slice so a device can use a cached versioned menu, lose all network connectivity, create and close cash test orders durably in Room/SQLite, restart, and retain every acknowledged order.
+Build the first real Android POS sale flow so the device can use cached configuration, lose all network connectivity, create and close local cash-test orders, restart repeatedly, and retain every acknowledged order.
 
-## Locked implementation decisions
+## Locked decisions
 
-### Local authority and acknowledgement
+### Local authority
 
-- Room/SQLite is authoritative for unsynced device-created order state.
-- Every user-visible successful order mutation is rendered only after the corresponding Room transaction completes.
-- No cloud, Event Edge, analytics, telemetry or network call is allowed on the synchronous item-selection or cash-close path.
-- Local failures surface as failures; the UI must never optimistically acknowledge a mutation that did not commit.
+- Room/SQLite is authoritative for unsynced device activity.
+- UI success is shown only after the Room transaction returns successfully.
+- Cloud, Event Edge, analytics and telemetry are not part of the synchronous sale path.
+- Failed local transactions are surfaced as failures rather than optimistic success.
 
-### Order aggregate
+### Orders and money
 
-- Order IDs and outbox event IDs are UUIDs generated locally before persistence.
-- Device sequence numbers are monotonically incremented in SQLite and allocated inside the same transaction as the domain mutation that emits an outbox event.
-- Task 003 uses `OPEN`, `PAID`, `CLOSED`, and `VOIDED` from the documented order state machine. A persisted sale starts as `OPEN`; cash checkout transitions it through `PAID` to `CLOSED` atomically for this development-only payment path.
-- Order totals are integer minor units with an explicit currency code. No floating-point money exists in the POS data model.
-- Order items store the sell-time snapshot of menu item identity, SKU identity, display name, unit price, quantity and line total so later menu changes cannot rewrite history.
-- Closed orders and their items are immutable in normal POS operations.
+- Order IDs and local event IDs are generated on-device before persistence.
+- Money is integer minor units plus currency; overflow is checked.
+- The local cash-development path uses documented `OPEN -> PAID -> CLOSED` transitions in one database transaction.
+- Order items persist sell-time menu item, SKU, name, unit price, quantity and line total so later menu changes do not rewrite closed history.
+- Closed orders have no normal POS mutation path.
 
 ### Transactional outbox
 
-- Every relevant order mutation writes domain state and an outbox row in one Room transaction.
-- Outbox rows contain a stable event instance ID, aggregate ID/type, event type/version, device ID, per-device sequence, occurred-at UTC timestamp, idempotency key and a compact JSON payload.
-- Task 003 only persists the outbox. Network delivery and replay handling belong to Task 004.
+- Relevant order state and an outbox record are committed in the same Room transaction.
+- Outbox records carry a stable instance ID, aggregate identity, event type/version, device ID, monotonic per-device sequence, timestamp and idempotency key.
+- Task 003 persists a compact order-state payload. Network delivery, receiver replay semantics and any richer synchronization envelope are Task 004 work.
 
 ### Menu cache
 
-- POS menu configuration is versioned and stored locally.
-- A menu candidate contains version, activation time, source actor, currency, item data and a SHA-256 checksum over a deterministic canonical representation.
-- A candidate is fully validated before any active-menu state is changed.
-- Invalid checksum, malformed money, duplicate item IDs/SKU IDs, empty menu, invalid version or invalid item data rejects the update and leaves the last valid active menu untouched.
-- A deterministic built-in development menu is seeded only when no valid active menu exists, allowing the Task 003 acceptance flow to run with all network services stopped.
+- Menu configuration is versioned and locally persisted.
+- Candidates include event/menu identity, version, activation time, source actor, currency, item data and a deterministic CRC32 checksum over canonical content.
+- CRC32 is used for accidental-corruption detection only, not peer authenticity.
+- Validation occurs before active configuration changes.
+- Invalid checksum, invalid version/data, malformed money, empty menus or duplicate item/SKU identities are rejected while the last valid menu remains active.
+- A deterministic development menu is seeded only when no active menu exists so the offline acceptance test needs no server.
 
-### Concurrency and double-submit protection
+### Concurrency and restart behavior
 
-- Repository mutations are serialized with a process-local mutex and enforced again through Room transactions/state checks.
-- Cash close is idempotent for an already-closed order: repeated taps return the same closed order and do not emit another cash-close outbox event.
-- Item mutations reject closed/non-open orders.
+- Order mutations are serialized by a process-local mutex and Room transactions.
+- SQLite serializes persisted menu/order writes.
+- Repeated cash close on an already-closed order returns the existing order and emits no second close event.
+- The current open order and history are always reconstructed from SQLite after startup.
 
-### Restart recovery
+### UX
 
-- The current open order is derived from SQLite at startup.
-- Local transaction history reads closed orders from SQLite.
-- No in-memory-only sale state is considered authoritative.
+- Compose uses large product targets, categories, favourites-ready metadata, visible current order/total, fast quantity controls, one cash-close action, clear-order confirmation and local history.
+- Normal checkout requires no typing.
+- The screen clearly communicates offline-local operation and pending local events.
 
-### UI
+## Local schema
 
-- Compose POS screen uses large product targets, category filters, favourites-ready item metadata, always-visible current order and total, fast quantity controls, one clear cash-close action, clear-order guardrail, and local transaction history.
-- Normal checkout requires no keyboard input.
-- The UI visibly states that the development cash path is local-only and that ordering remains available without network connectivity.
+Task 003 adds versioned menu tables, cached menu items, orders, order items and durable pending-event/outbox rows while retaining local metadata for device identity and sequence. Database version 2 uses an explicit migration from the Task 001 schema; destructive migration is not allowed.
 
-## Room schema
+## Failure-mode tests
 
-Task 003 adds local tables for:
+Automated Android tests must cover:
 
-- menu versions;
-- cached menu items;
-- orders;
-- order items;
-- outbox events;
-- device counters/identity metadata.
+1. 100 cash-test orders with no network dependency;
+2. database close/reopen several times during that 100-order run;
+3. committed open/closed orders and pending events surviving reopen;
+4. failure before commit rolling back order state and pending events together;
+5. repeated close remaining idempotent;
+6. invalid menu update retaining the last valid menu;
+7. monotonic, non-duplicated device event sequence numbers.
 
-Database version increases with an explicit migration from the Task 001 metadata-only schema. Destructive migration is not permitted.
-
-## Test strategy
-
-### Pure/unit tests
-
-- integer-money/order total rules;
-- order state transition rules;
-- deterministic menu checksum;
-- invalid menu candidate rejection;
-- duplicate tap/cash-close idempotency rules where testable without Android runtime.
-
-### Room/JVM integration tests
-
-Use Robolectric with an in-memory Room database to cover:
-
-- local order/item mutation and outbox atomicity;
-- close and restore order history;
-- repeated cash-close does not duplicate the close event;
-- transaction rollback does not acknowledge/persist partial state;
-- last valid menu remains active after corrupt update;
-- 100 offline cash orders persist with the expected closed-order and outbox counts.
-
-### Existing regression gate
-
-Task 001 and Task 002 TypeScript/PostgreSQL checks remain green. Android `testDebugUnitTest` and `lintDebug` must pass.
-
-## Failure-mode acceptance
-
-Automated coverage must demonstrate:
-
-1. order creation works without any network dependency;
-2. a committed order/outbox survives repository/database re-open;
-3. a failed transaction leaves no partial acknowledged order;
-4. repeated close requests are idempotent;
-5. open and closed local orders restore after restart;
-6. corrupt menu updates do not replace the last valid menu;
-7. 100 local cash orders can be created and closed using only SQLite.
+The existing PostgreSQL/TypeScript regression gate must remain green, together with Android `testDebugUnitTest` and `lintDebug`.
 
 ## Non-goals
 
-- M-PESA, card or provider SDKs;
-- network sync/outbox delivery;
-- Event Edge ingestion;
-- cloud order persistence;
-- inventory depletion or stock ledger entries;
-- refunds, comps, void approval or supervisor authorization;
-- production authentication;
-- receipt printer integration;
-- final POS visual design.
+Task 003 does not add electronic payment providers, network synchronization, Event Edge order ingestion, cloud order persistence, inventory depletion, refunds/comps, production authentication, receipt printing or final visual design.
 
 ## Completion criteria
 
-Task 003 is complete only when the POS can operate from cached local configuration with cloud and edge absent, acknowledge mutations only after durable SQLite commits, recover open/closed orders after database re-open, protect against repeated close submission, retain the last valid menu after an invalid update, and pass the full existing CI gate.
+Task 003 is complete when the POS can operate using only cached SQLite data, acknowledge state only after durable commit, recover after repeated database/app restarts, protect cash close from duplicate submission, retain valid configuration after a bad update, preserve a same-transaction local outbox and pass the full repository CI gate.
