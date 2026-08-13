@@ -3,7 +3,14 @@ import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 
 const root = process.cwd();
 const sourceExtensions = new Set(['.ts', '.tsx']);
-const ignoredDirectories = new Set(['node_modules', 'dist', '.next', 'coverage', 'build', '.gradle']);
+const ignoredDirectories = new Set([
+  'node_modules',
+  'dist',
+  '.next',
+  'coverage',
+  'build',
+  '.gradle',
+]);
 const violations = [];
 
 async function walk(directory) {
@@ -40,12 +47,25 @@ for (const packageName of packageRoots) {
   for (const file of await walk(directory)) {
     const source = await readFile(file, 'utf8');
     for (const specifier of importsOf(source)) {
-      const importsAppAlias = appRoots.some((name) => specifier === `@event-commerce/${name}` || specifier.startsWith(`@event-commerce/${name}/`));
-      const importsAppRelatively = [...appDirectories.values()].some((appDirectory) => resolvesInside(specifier, file, appDirectory));
+      const importsAppAlias = appRoots.some(
+        (name) =>
+          specifier === `@event-commerce/${name}` ||
+          specifier.startsWith(`@event-commerce/${name}/`),
+      );
+      const importsAppRelatively = [...appDirectories.values()].some((appDirectory) =>
+        resolvesInside(specifier, file, appDirectory),
+      );
       if (importsAppAlias || importsAppRelatively) {
         violations.push(`${relative(root, file)} imports application code: ${specifier}`);
       }
-      if (packageName === 'domain' && (specifier.startsWith('@nestjs/') || specifier === 'next' || specifier.startsWith('next/') || specifier === 'react' || specifier.startsWith('react/'))) {
+      if (
+        packageName === 'domain' &&
+        (specifier.startsWith('@nestjs/') ||
+          specifier === 'next' ||
+          specifier.startsWith('next/') ||
+          specifier === 'react' ||
+          specifier.startsWith('react/'))
+      ) {
         violations.push(`${relative(root, file)} couples domain code to framework: ${specifier}`);
       }
     }
@@ -58,8 +78,14 @@ for (const appName of appRoots) {
   for (const file of await walk(directory)) {
     const source = await readFile(file, 'utf8');
     for (const specifier of importsOf(source)) {
-      const importsOtherAlias = otherApps.some((name) => specifier === `@event-commerce/${name}` || specifier.startsWith(`@event-commerce/${name}/`));
-      const importsOtherRelatively = otherApps.some((name) => resolvesInside(specifier, file, appDirectories.get(name)));
+      const importsOtherAlias = otherApps.some(
+        (name) =>
+          specifier === `@event-commerce/${name}` ||
+          specifier.startsWith(`@event-commerce/${name}/`),
+      );
+      const importsOtherRelatively = otherApps.some((name) =>
+        resolvesInside(specifier, file, appDirectories.get(name)),
+      );
       if (importsOtherAlias || importsOtherRelatively) {
         violations.push(`${relative(root, file)} imports another app directly: ${specifier}`);
       }
@@ -68,7 +94,9 @@ for (const appName of appRoots) {
 }
 
 if (violations.length > 0) {
-  console.error('Architecture boundary violations:\n' + violations.map((item) => `- ${item}`).join('\n'));
+  console.error(
+    'Architecture boundary violations:\n' + violations.map((item) => `- ${item}`).join('\n'),
+  );
   process.exit(1);
 }
 
