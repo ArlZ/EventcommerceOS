@@ -8,3 +8,5 @@ export interface HealthResponse {
 export function makeHealthResponse(service: string, now: Date = new Date()): HealthResponse {
   return { service, status: 'ok', version: '0.1.0', timestamp: now.toISOString() };
 }
+
+export * from './configuration';
