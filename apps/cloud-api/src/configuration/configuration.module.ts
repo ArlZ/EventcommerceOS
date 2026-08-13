@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import './injection-metadata';
 import { ConfigurationController } from './configuration.controller';
 import { ConfigurationService } from './configuration.service';
 
