@@ -3,6 +3,9 @@ package com.eventcommerce.pos
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.DeviceSyncProvisioningStore
@@ -29,6 +32,11 @@ class MainActivity : ComponentActivity() {
         ).run()
       }
     }
-    setContent { PosScreen(repository, syncState, syncProvisioning) }
+    setContent {
+      Column(modifier = Modifier.fillMaxSize()) {
+        SyncStatusLine(repository, syncState, syncProvisioning)
+        PosScreen(repository)
+      }
+    }
   }
 }
