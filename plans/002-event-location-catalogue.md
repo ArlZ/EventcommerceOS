@@ -43,6 +43,7 @@ Organisation -> Event -> Sales Location -> Inventory Location -> Product -> SKU 
 
 - Event timestamps are persisted as `timestamptz` UTC instants.
 - Each event stores its IANA timezone separately for event-local display and future business rules.
+- API event timestamps must include either UTC `Z` or an explicit numeric offset; offset-less timestamps are rejected rather than interpreted using server-local time.
 
 ### Catalogue
 
@@ -102,6 +103,7 @@ Add an Event Setup screen that can execute the acceptance path and view the resu
 
 - migrations apply from an empty database;
 - event timezone validation and UTC timestamp persistence;
+- offset-less event timestamps are rejected;
 - same-tenant references succeed;
 - cross-tenant references fail;
 - duplicate/invalid menu assignments fail;
@@ -126,3 +128,13 @@ Task 001 build, lint, typecheck, tests, formatting, architecture checks and Andr
 ## Completion criteria
 
 Task 002 is complete only when a fresh CI PostgreSQL database can be migrated and the acceptance configuration can be created through the Cloud API, represented in Control Web, and all Task 001 gates remain green.
+
+## Completion record — Task 002
+
+Task 002 implements persisted organisation/event configuration, sales and inventory locations, product/SKU catalogue setup, event menus and assignments, default and location-specific integer-minor-unit pricing, organisation tenancy checks and transactional audit records. Control Web exposes the Event Setup workflow at `/configuration` and the home screen links to it.
+
+Final review tightened event-time handling so the API refuses timestamps without `Z` or an explicit numeric offset. Production Cloud API startup now relies on standard TypeScript/Nest `emitDecoratorMetadata` rather than importing the manual injection metadata side effect from `ConfigurationModule`. The existing Vitest setup shim remains test-only because the Vitest transform does not emit TypeScript decorator metadata; the associated lint exception is narrowed to the two constructor-DI files that require runtime class imports.
+
+Final validation must pass in normal read-only CI on the committed branch with frozen dependency installation, a fresh PostgreSQL migration, TypeScript build/lint/typecheck/tests/format/architecture checks, and Android unit tests/lint. No Task 003 scope is included.
+
+Still intentionally out of scope: orders, payments, inventory ledger movements or stock quantities, production identity/session management, Event Edge replication, offline POS configuration sync and final Control Web visual design.
