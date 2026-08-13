@@ -51,7 +51,17 @@ export class DeviceSyncService {
         [batch.deviceId, highest],
       );
 
-      const acceptedThroughSequence = await this.advanceWatermark(client, batch.deviceId);
+      const durableWatermark = await this.advanceWatermark(client, batch.deviceId);
+      const firstConflictSequence = receipts.reduce<number | null>((lowest, receipt, index) => {
+        if (receipt.status !== 'CONFLICT') return lowest;
+        const sequence = batch.events[index]!.sequence;
+        return lowest === null ? sequence : Math.min(lowest, sequence);
+      }, null);
+      const acceptedThroughSequence =
+        firstConflictSequence === null
+          ? durableWatermark
+          : Math.min(durableWatermark, Math.max(0, firstConflictSequence - 1));
+
       const backlog = await client.query<CountRow>(
         'SELECT count(*)::text AS count FROM edge_cloud_outbox WHERE delivered_at IS NULL',
       );
