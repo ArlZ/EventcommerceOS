@@ -19,6 +19,11 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --no-frozen-lockfile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pnpm-lockfile
+          path: pnpm-lock.yaml
+          if-no-files-found: error
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
