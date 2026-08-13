@@ -9,8 +9,9 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "format:check": "prettier --check .",
-    "arch:check": "node scripts/check-architecture.mjs"
+    "format:check": "prettier --check packages/*/src/*.ts apps/cloud-api/src/**/*.ts apps/event-edge/src/**/*.ts scripts/*.mjs eslint.config.mjs",
+    "arch:check": "node scripts/check-architecture.mjs",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
   "devDependencies": {
     "@eslint/js": "9.28.0",
