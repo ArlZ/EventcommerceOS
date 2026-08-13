@@ -1,11 +1,11 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
 import type { EdgeCloudAck } from '@event-commerce/contracts';
 import { CloudSyncService } from './cloud-sync.service';
 import { parseEdgeBatch } from './sync-validation';
 
 @Controller('sync')
 export class CloudSyncController {
-  constructor(private readonly sync: CloudSyncService) {}
+  constructor(@Inject(CloudSyncService) private readonly sync: CloudSyncService) {}
 
   @Post('edge-events')
   async ingest(@Body() body: unknown): Promise<EdgeCloudAck> {
