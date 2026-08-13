@@ -166,7 +166,16 @@ export class CloudSyncService {
     client: PoolClient,
     event: SyncEventEnvelope,
   ): Promise<'ACCEPTED' | 'CONFLICT'> {
-    const payload = this.orderPayload(event);
+    let payload: { state: string; totalMinor: number; currency: string };
+    try {
+      payload = this.orderPayload(event);
+    } catch (error) {
+      await this.exception(client, 'INVALID_ORDER_EVENT', event, {
+        reason: error instanceof Error ? error.message : 'invalid synced order payload',
+      });
+      return 'CONFLICT';
+    }
+
     const current = await client.query<OrderStateRow>(
       `SELECT device_id, last_sequence::text, state
        FROM sync_order_state WHERE order_id = $1 FOR UPDATE`,
