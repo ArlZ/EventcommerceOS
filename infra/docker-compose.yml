@@ -1,0 +1,37 @@
+name: event-commerce-os
+services:
+  cloud-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: event_commerce_cloud
+      POSTGRES_USER: event_commerce
+      POSTGRES_PASSWORD: localdev_only
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U event_commerce -d event_commerce_cloud']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - cloud-postgres-data:/var/lib/postgresql/data
+
+  edge-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: event_commerce_edge
+      POSTGRES_USER: event_commerce
+      POSTGRES_PASSWORD: localdev_only
+    ports:
+      - '5433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U event_commerce -d event_commerce_edge']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - edge-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  cloud-postgres-data:
+  edge-postgres-data:

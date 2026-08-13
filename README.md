@@ -29,39 +29,91 @@ The first wedge is event bar operations. The underlying domain model remains gen
 - Inventory alerts are operational workflows, not passive dashboard widgets.
 - The bartender path is optimised for speed and simplicity over administrative flexibility.
 
-## Repository shape to build
+## Repository structure
 
 ```text
 /apps
   /cloud-api          NestJS / TypeScript
   /control-web        Next.js / TypeScript
   /event-edge         NestJS / TypeScript
-  /pos-android        Kotlin / Jetpack Compose
+  /pos-android        Kotlin / Jetpack Compose / Room
 /packages
-  /domain             Core domain rules and types
-  /contracts          API/event schemas
-  /observability      Logging, tracing, metrics conventions
-  /testkit            Shared fixtures and simulation utilities
-/infra
+  /domain             Framework-independent domain foundation
+  /contracts          Shared API/event contracts
+  /observability      Logging/tracing interfaces and conventions
+  /testkit            Shared deterministic test utilities
+/infra                 Local PostgreSQL services
+/scripts               Architecture dependency checks
 /docs
 /plans
 /prompts
-AGENTS.md
 ```
+
+## Development prerequisites
+
+- Node.js 22+
+- pnpm 10.12.1
+- Docker with Compose support
+- For Android: JDK 17, Android SDK 35 and Gradle 8.11.1 (or Android Studio with an equivalent supported toolchain)
+
+No production secrets belong in this repository. Values in `infra/docker-compose.yml` are local-development-only credentials.
+
+## Install
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+`pnpm-lock.yaml` is committed and CI uses frozen-lockfile installation so dependency resolution is reproducible.
+
+## Start the local TypeScript stack
+
+One command starts the two local PostgreSQL services, builds shared packages, then runs Cloud API, Event Edge and Control Web:
+
+```bash
+make dev
+```
+
+Health endpoints:
+
+- Control Web: `http://localhost:3000/api/health`
+- Cloud API: `http://localhost:3001/health`
+- Event Edge: `http://localhost:3002/health`
+
+Stop infrastructure with:
+
+```bash
+make infra-down
+```
+
+## Quality checks
+
+```bash
+make check
+```
+
+This runs TypeScript builds, linting, typechecking, tests, formatting checks and architecture dependency guardrails.
+
+Android checks are intentionally separate from the JavaScript workspace:
+
+```bash
+make android-check
+```
+
+GitHub Actions runs equivalent TypeScript and Android jobs on pull requests.
+
+## Architecture guardrails
+
+`pnpm arch:check` mechanically rejects shared packages importing application code, framework dependencies entering `packages/domain`, and direct cross-application TypeScript imports. These checks supplement the architecture invariants in `AGENTS.md`; they do not replace code review.
+
+## Validation status
+
+Task 001 has been exercised in GitHub Actions. The validation gate includes dependency installation, TypeScript builds, linting, typechecking, unit and smoke tests, formatting checks, architecture dependency guardrails, Android unit tests and Android lint. Every subsequent change must pass the same CI gate before merge.
+
+`make dev` remains a developer runtime command rather than a CI integration test; local PostgreSQL startup and real-device Android behaviour should still be validated in the appropriate development and pilot environments.
 
 ## Read first
 
-Codex and human contributors should read, in order:
-
-1. `AGENTS.md`
-2. `docs/PRODUCT.md`
-3. `docs/ARCHITECTURE.md`
-4. `docs/DOMAIN_MODEL.md`
-5. the relevant domain document for the task
-6. the active file in `plans/`
-
-## First build task
-
-Open `prompts/CODEX_TASK_001.md` and give it to Codex from the repository root.
+Contributors should read `AGENTS.md`, the relevant documents under `docs/`, and the active execution plan under `plans/` before implementation work.
 
 Do not start payment-provider integrations until Tasks 001–004 have established the domain model, local transaction durability, sync contract and inventory ledger.

@@ -21,7 +21,7 @@ Create a legible, testable repository skeleton that enforces the architectural i
 - Event Edge: TypeScript + NestJS initially.
 - POS: Kotlin + Jetpack Compose.
 - Cloud/edge DB: PostgreSQL.
-- POS DB: SQLite.
+- POS DB: SQLite/Room.
 - Start as a modular monolith, not microservices.
 - Money/inventory/payment invariants in `AGENTS.md` are mandatory.
 
@@ -44,11 +44,44 @@ Create a legible, testable repository skeleton that enforces the architectural i
 - inventory implementation;
 - real order processing.
 
-## Completion record
+## Completion record — Task 001 implementation
 
-When completed, append:
-- implementation summary;
-- changed architecture decisions;
-- commands/tests run;
-- known debt;
-- recommended Plan 002.
+### Implementation summary
+
+- Established the pnpm workspace and strict shared TypeScript compiler baseline.
+- Added NestJS Cloud API and Event Edge shells with `/health` endpoints and smoke tests.
+- Added a minimal Next.js Event Control shell with `/api/health` and a smoke test.
+- Added native Android Kotlin/Jetpack Compose POS shell with a Room/SQLite metadata database foundation and unit test.
+- Added framework-independent `domain`, `contracts`, `observability` and `testkit` packages.
+- Added two reproducible local PostgreSQL services for cloud and edge development.
+- Added mechanical dependency-boundary checks and GitHub Actions jobs for TypeScript and Android.
+- Added `make dev`, `make check` and `make android-check` developer entry points.
+- Committed `pnpm-lock.yaml` and configured CI to require frozen-lockfile installation.
+
+### Architecture decisions changed
+
+None. The implementation follows the previously locked modular-monolith, local-first and framework-independent-domain decisions.
+
+### Commands/tests run
+
+GitHub Actions on the Task 001 pull request has executed the repository validation gate successfully, including:
+
+- pnpm dependency installation from the committed lockfile;
+- TypeScript production builds;
+- linting and strict typechecking;
+- shared package and application unit/smoke tests;
+- formatting checks;
+- architecture dependency guardrails;
+- Android `testDebugUnitTest` and `lintDebug`.
+
+Any subsequent commit must pass the same CI gate before merge.
+
+### Known debt
+
+- Production database migrations, auth, telemetry exporters and domain features are deliberately absent from Task 001.
+- `make dev` and the local PostgreSQL runtime still require developer-environment validation rather than being covered by the current CI integration gate.
+- Real-device Android performance and persistence behaviour remains a later hardware validation requirement.
+
+### Recommended Plan 002
+
+Implement the smallest vertical slice toward `create event -> create sales location -> create product -> open POS -> create locally durable order`: begin with event, generic sales-location and product/catalogue configuration only, keeping domain rules framework-independent and without payment-provider integration.
