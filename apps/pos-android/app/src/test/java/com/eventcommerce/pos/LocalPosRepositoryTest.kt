@@ -44,14 +44,21 @@ class LocalPosRepositoryTest {
   }
 
   @Test
-  fun `one hundred local orders close without network services`() = runBlocking {
-    val menu = repository.ensureDevelopmentMenu()
-    val itemId = menu.items.first().itemId
+  fun `one hundred local orders survive repeated restarts without network services`() = runBlocking {
+    val itemId = repository.ensureDevelopmentMenu().items.first().itemId
 
-    repeat(100) {
+    repeat(100) { index ->
       val open = repository.addItem(itemId)
       val closed = repository.recordCashPayment(open.id)
       assertEquals(OrderState.CLOSED, closed.state)
+
+      if ((index + 1) % 25 == 0 && index < 99) {
+        db.close()
+        db = openDatabase()
+        repository = LocalPosRepository(db)
+        assertEquals(index + 1, repository.closedOrderCount())
+        assertNull(repository.currentOpenOrder())
+      }
     }
 
     assertEquals(100, repository.closedOrderCount())
