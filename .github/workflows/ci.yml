@@ -1,35 +1,57 @@
-name: Task 002 Normalize
+name: CI
 on:
+  pull_request:
   push:
-    branches: [task/002-event-location-catalogue-clean]
+    branches: [main, task/002-event-location-catalogue-clean]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  normalize:
+  typescript:
     runs-on: ubuntu-latest
-    if: github.actor != 'github-actions[bot]'
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: event_commerce_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: task/002-event-location-catalogue-clean
       - uses: pnpm/action-setup@v4
         with:
           version: 10.12.1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm exec prettier --write "apps/**/*.{ts,tsx,mjs}" "packages/**/*.{ts,tsx}" "scripts/*.mjs" eslint.config.mjs
-      - name: Commit canonical source and dependency lock
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml apps packages scripts eslint.config.mjs
-          if git diff --cached --quiet; then
-            echo "No normalization changes required."
-            exit 0
-          fi
-          git commit -m "Normalize Task 002 source and lock dependencies"
-          git push origin HEAD:task/002-event-location-catalogue-clean
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @event-commerce/cloud-api db:migrate
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm format:check
+      - run: pnpm arch:check
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle -p apps/pos-android testDebugUnitTest lintDebug --stacktrace
