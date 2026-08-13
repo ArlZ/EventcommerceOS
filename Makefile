@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: dev infra-up infra-down check android-check
+.PHONY: dev infra-up infra-down db-migrate check android-check
 
 infra-up:
 	docker compose -f infra/docker-compose.yml up -d
@@ -8,7 +8,10 @@ infra-up:
 infra-down:
 	docker compose -f infra/docker-compose.yml down
 
-dev: infra-up
+db-migrate:
+	pnpm --filter @event-commerce/cloud-api db:migrate
+
+dev: infra-up db-migrate
 	pnpm --filter './packages/**' build
 	pnpm --parallel --filter @event-commerce/cloud-api --filter @event-commerce/event-edge --filter @event-commerce/control-web dev
 
