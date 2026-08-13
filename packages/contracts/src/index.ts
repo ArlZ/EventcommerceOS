@@ -10,3 +10,4 @@ export function makeHealthResponse(service: string, now: Date = new Date()): Hea
 }
 
 export * from './configuration';
+export * from './sync';
