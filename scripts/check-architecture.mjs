@@ -1,5 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { extname, join, relative, sep } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 
 const root = process.cwd();
 const sourceExtensions = new Set(['.ts', '.tsx']);
@@ -25,30 +25,44 @@ function importsOf(source) {
   return imports;
 }
 
+function resolvesInside(specifier, file, directory) {
+  if (!specifier.startsWith('.')) return false;
+  const target = resolve(dirname(file), specifier);
+  return target === directory || target.startsWith(directory + sep);
+}
+
+const appRoots = ['cloud-api', 'control-web', 'event-edge'];
+const appDirectories = new Map(appRoots.map((name) => [name, join(root, 'apps', name)]));
+
 const packageRoots = ['domain', 'contracts', 'observability', 'testkit'];
 for (const packageName of packageRoots) {
   const directory = join(root, 'packages', packageName);
   for (const file of await walk(directory)) {
     const source = await readFile(file, 'utf8');
     for (const specifier of importsOf(source)) {
-      if (specifier.includes('/apps/') || specifier.startsWith('@event-commerce/cloud-api') || specifier.startsWith('@event-commerce/event-edge') || specifier.startsWith('@event-commerce/control-web')) {
+      const importsAppAlias = appRoots.some((name) => specifier === `@event-commerce/${name}` || specifier.startsWith(`@event-commerce/${name}/`));
+      const importsAppRelatively = [...appDirectories.values()].some((appDirectory) => resolvesInside(specifier, file, appDirectory));
+      if (importsAppAlias || importsAppRelatively) {
         violations.push(`${relative(root, file)} imports application code: ${specifier}`);
       }
-      if (packageName === 'domain' && (specifier.startsWith('@nestjs/') || specifier === 'next' || specifier.startsWith('next/') || specifier === 'react')) {
+      if (packageName === 'domain' && (specifier.startsWith('@nestjs/') || specifier === 'next' || specifier.startsWith('next/') || specifier === 'react' || specifier.startsWith('react/'))) {
         violations.push(`${relative(root, file)} couples domain code to framework: ${specifier}`);
       }
     }
   }
 }
 
-const appRoots = ['cloud-api', 'control-web', 'event-edge'];
 for (const appName of appRoots) {
-  const directory = join(root, 'apps', appName);
+  const directory = appDirectories.get(appName);
+  const otherApps = appRoots.filter((name) => name !== appName);
   for (const file of await walk(directory)) {
     const source = await readFile(file, 'utf8');
     for (const specifier of importsOf(source)) {
-      const normalized = specifier.split('/').join(sep);
-      if (normalized.includes(`${sep}apps${sep}`)) violations.push(`${relative(root, file)} imports another app directly: ${specifier}`);
+      const importsOtherAlias = otherApps.some((name) => specifier === `@event-commerce/${name}` || specifier.startsWith(`@event-commerce/${name}/`));
+      const importsOtherRelatively = otherApps.some((name) => resolvesInside(specifier, file, appDirectories.get(name)));
+      if (importsOtherAlias || importsOtherRelatively) {
+        violations.push(`${relative(root, file)} imports another app directly: ${specifier}`);
+      }
     }
   }
 }
