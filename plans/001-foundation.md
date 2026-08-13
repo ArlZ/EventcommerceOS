@@ -21,7 +21,7 @@ Create a legible, testable repository skeleton that enforces the architectural i
 - Event Edge: TypeScript + NestJS initially.
 - POS: Kotlin + Jetpack Compose.
 - Cloud/edge DB: PostgreSQL.
-- POS DB: SQLite.
+- POS DB: SQLite/Room.
 - Start as a modular monolith, not microservices.
 - Money/inventory/payment invariants in `AGENTS.md` are mandatory.
 
@@ -44,11 +44,36 @@ Create a legible, testable repository skeleton that enforces the architectural i
 - inventory implementation;
 - real order processing.
 
-## Completion record
+## Completion record — Task 001 implementation
 
-When completed, append:
-- implementation summary;
-- changed architecture decisions;
-- commands/tests run;
-- known debt;
-- recommended Plan 002.
+### Implementation summary
+
+- Established the pnpm workspace and strict shared TypeScript compiler baseline.
+- Added NestJS Cloud API and Event Edge shells with `/health` endpoints and smoke tests.
+- Added a minimal Next.js Event Control shell with `/api/health` and a smoke test.
+- Added native Android Kotlin/Jetpack Compose POS shell with a Room/SQLite metadata database foundation and unit test.
+- Added framework-independent `domain`, `contracts`, `observability` and `testkit` packages.
+- Added two reproducible local PostgreSQL services for cloud and edge development.
+- Added mechanical dependency-boundary checks and GitHub Actions jobs for TypeScript and Android.
+- Added `make dev`, `make check` and `make android-check` developer entry points.
+
+### Architecture decisions changed
+
+None. The implementation follows the previously locked modular-monolith, local-first and framework-independent-domain decisions.
+
+### Commands/tests run
+
+No build/test command is claimed as executed successfully from the GitHub connector environment because that environment cannot install package registries or run the Android/Node toolchains. GitHub Actions on the pull request is the executable validation gate for:
+
+- TypeScript build, lint, typecheck, tests, formatting and architecture checks.
+- Android `testDebugUnitTest` and `lintDebug`.
+
+### Known debt
+
+- `pnpm-lock.yaml` is not yet committed because dependency resolution could not be executed in the connector environment. Generate and commit it after a successful dependency install.
+- Production database migrations, auth, telemetry exporters and domain features are deliberately absent from Task 001.
+- Real-device Android performance and persistence behaviour remains a later hardware validation requirement.
+
+### Recommended Plan 002
+
+Implement the smallest vertical slice toward `create event -> create sales location -> create product -> open POS -> create locally durable order`: begin with event, generic sales-location and product/catalogue configuration only, keeping domain rules framework-independent and without payment-provider integration.
