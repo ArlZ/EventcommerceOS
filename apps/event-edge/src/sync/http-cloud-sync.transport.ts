@@ -6,6 +6,11 @@ import { CloudSyncTransport } from './cloud-sync.transport';
 export class HttpCloudSyncTransport extends CloudSyncTransport {
   async send(batch: EdgeCloudBatch): Promise<EdgeCloudAck> {
     const url = process.env.CLOUD_SYNC_URL ?? 'http://localhost:3001/sync/edge-events';
+    const parsed = new URL(url);
+    const loopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+    if (parsed.protocol !== 'https:' && !loopback) {
+      throw new Error('cloud sync URL must use HTTPS outside loopback development');
+    }
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
