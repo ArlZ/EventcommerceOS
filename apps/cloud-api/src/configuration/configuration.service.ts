@@ -26,7 +26,12 @@ import { assertOrganisationAccess, type AdminContext } from './admin-context';
 type Row = QueryResultRow & Record<string, unknown>;
 
 function uniqueViolation(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === '23505';
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '23505'
+  );
 }
 
 function lifecycleArchive(lifecycle: string): Date | null {
@@ -50,12 +55,22 @@ export class ConfigurationService {
       `INSERT INTO audit_events
        (id, organisation_id, actor_id, action, entity_type, entity_id, changes)
        VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
-      [randomUUID(), organisationId, context.actorId, action, entityType, entityId, JSON.stringify(changes)],
+      [
+        randomUUID(),
+        organisationId,
+        context.actorId,
+        action,
+        entityType,
+        entityId,
+        JSON.stringify(changes),
+      ],
     );
   }
 
   private async organisationExists(client: PoolClient, organisationId: string): Promise<void> {
-    const result = await client.query('SELECT id FROM organisations WHERE id = $1', [organisationId]);
+    const result = await client.query('SELECT id FROM organisations WHERE id = $1', [
+      organisationId,
+    ]);
     if (result.rowCount === 0) throw new NotFoundException('Organisation not found');
   }
 
@@ -78,7 +93,9 @@ export class ConfigurationService {
   }
 
   private async skuRow(client: PoolClient, skuId: string): Promise<Row> {
-    const result = await client.query<Row>('SELECT id, organisation_id FROM skus WHERE id = $1', [skuId]);
+    const result = await client.query<Row>('SELECT id, organisation_id FROM skus WHERE id = $1', [
+      skuId,
+    ]);
     if (result.rowCount === 0) throw new NotFoundException('SKU not found');
     return result.rows[0]!;
   }
@@ -128,7 +145,10 @@ export class ConfigurationService {
     });
   }
 
-  async getOrganisation(context: AdminContext, organisationId: string): Promise<OrganisationRecord> {
+  async getOrganisation(
+    context: AdminContext,
+    organisationId: string,
+  ): Promise<OrganisationRecord> {
     assertOrganisationAccess(context, organisationId);
     const rows = await this.database.query<OrganisationRecord>(
       `SELECT id, name, lifecycle, archived_at AS "archivedAt",
@@ -151,7 +171,10 @@ export class ConfigurationService {
     }
     return this.database.transaction(async (client) => {
       await this.organisationExists(client, organisationId);
-      const current = await client.query<Row>('SELECT name, lifecycle FROM organisations WHERE id = $1', [organisationId]);
+      const current = await client.query<Row>(
+        'SELECT name, lifecycle FROM organisations WHERE id = $1',
+        [organisationId],
+      );
       const nextName = patch.name ?? String(current.rows[0]!.name);
       const nextLifecycle = patch.lifecycle ?? String(current.rows[0]!.lifecycle);
       const result = await client.query<OrganisationRecord & QueryResultRow>(
@@ -162,14 +185,28 @@ export class ConfigurationService {
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
         [organisationId, nextName, nextLifecycle, lifecycleArchive(nextLifecycle)],
       );
-      await this.audit(client, context, organisationId, 'ORGANISATION_UPDATED', 'Organisation', organisationId, patch);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'ORGANISATION_UPDATED',
+        'Organisation',
+        organisationId,
+        patch,
+      );
       return result.rows[0]!;
     });
   }
 
   async createEvent(
     context: AdminContext,
-    input: { organisationId: string; name: string; timezone: string; startsAt: string; endsAt: string },
+    input: {
+      organisationId: string;
+      name: string;
+      timezone: string;
+      startsAt: string;
+      endsAt: string;
+    },
   ): Promise<EventRecord> {
     assertOrganisationAccess(context, input.organisationId);
     if (new Date(input.endsAt).getTime() <= new Date(input.startsAt).getTime()) {
@@ -195,9 +232,16 @@ export class ConfigurationService {
   async updateEvent(
     context: AdminContext,
     eventId: string,
-    patch: Partial<{ name: string; timezone: string; startsAt: string; endsAt: string; lifecycle: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED' }>,
+    patch: Partial<{
+      name: string;
+      timezone: string;
+      startsAt: string;
+      endsAt: string;
+      lifecycle: 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
+    }>,
   ): Promise<EventRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one event field must be supplied');
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one event field must be supplied');
     return this.database.transaction(async (client) => {
       const event = await this.eventRow(client, eventId);
       const organisationId = String(event.organisation_id);
@@ -218,14 +262,26 @@ export class ConfigurationService {
          RETURNING id, organisation_id AS "organisationId", name, timezone, lifecycle,
                    starts_at AS "startsAt", ends_at AS "endsAt", archived_at AS "archivedAt",
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [eventId, patch.name ?? row.name, patch.timezone ?? row.timezone, startsAt, endsAt, lifecycle, lifecycleArchive(lifecycle)],
+        [
+          eventId,
+          patch.name ?? row.name,
+          patch.timezone ?? row.timezone,
+          startsAt,
+          endsAt,
+          lifecycle,
+          lifecycleArchive(lifecycle),
+        ],
       );
       await this.audit(client, context, organisationId, 'EVENT_UPDATED', 'Event', eventId, patch);
       return result.rows[0]!;
     });
   }
 
-  async createSalesLocation(context: AdminContext, eventId: string, input: { name: string; type: string }): Promise<SalesLocationRecord> {
+  async createSalesLocation(
+    context: AdminContext,
+    eventId: string,
+    input: { name: string; type: string },
+  ): Promise<SalesLocationRecord> {
     return this.database.transaction(async (client) => {
       const event = await this.eventRow(client, eventId);
       const organisationId = String(event.organisation_id);
@@ -239,7 +295,15 @@ export class ConfigurationService {
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
         [id, organisationId, eventId, input.name, input.type],
       );
-      await this.audit(client, context, organisationId, 'SALES_LOCATION_CREATED', 'SalesLocation', id, input);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'SALES_LOCATION_CREATED',
+        'SalesLocation',
+        id,
+        input,
+      );
       return result.rows[0]!;
     });
   }
@@ -249,7 +313,8 @@ export class ConfigurationService {
     id: string,
     patch: Partial<{ name: string; type: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>,
   ): Promise<SalesLocationRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one sales location field must be supplied');
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one sales location field must be supplied');
     return this.database.transaction(async (client) => {
       const current = await client.query<Row>('SELECT * FROM sales_locations WHERE id = $1', [id]);
       if (current.rowCount === 0) throw new NotFoundException('Sales location not found');
@@ -264,14 +329,32 @@ export class ConfigurationService {
          RETURNING id, organisation_id AS "organisationId", event_id AS "eventId",
                    name, type, lifecycle, archived_at AS "archivedAt",
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [id, patch.name ?? row.name, patch.type ?? row.type, lifecycle, lifecycleArchive(lifecycle)],
+        [
+          id,
+          patch.name ?? row.name,
+          patch.type ?? row.type,
+          lifecycle,
+          lifecycleArchive(lifecycle),
+        ],
       );
-      await this.audit(client, context, organisationId, 'SALES_LOCATION_UPDATED', 'SalesLocation', id, patch);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'SALES_LOCATION_UPDATED',
+        'SalesLocation',
+        id,
+        patch,
+      );
       return result.rows[0]!;
     });
   }
 
-  async createInventoryLocation(context: AdminContext, eventId: string, input: { name: string; type: string }): Promise<InventoryLocationRecord> {
+  async createInventoryLocation(
+    context: AdminContext,
+    eventId: string,
+    input: { name: string; type: string },
+  ): Promise<InventoryLocationRecord> {
     return this.database.transaction(async (client) => {
       const event = await this.eventRow(client, eventId);
       const organisationId = String(event.organisation_id);
@@ -285,7 +368,15 @@ export class ConfigurationService {
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
         [id, organisationId, eventId, input.name, input.type],
       );
-      await this.audit(client, context, organisationId, 'INVENTORY_LOCATION_CREATED', 'InventoryLocation', id, input);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'INVENTORY_LOCATION_CREATED',
+        'InventoryLocation',
+        id,
+        input,
+      );
       return result.rows[0]!;
     });
   }
@@ -295,9 +386,12 @@ export class ConfigurationService {
     id: string,
     patch: Partial<{ name: string; type: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>,
   ): Promise<InventoryLocationRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one inventory location field must be supplied');
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one inventory location field must be supplied');
     return this.database.transaction(async (client) => {
-      const current = await client.query<Row>('SELECT * FROM inventory_locations WHERE id = $1', [id]);
+      const current = await client.query<Row>('SELECT * FROM inventory_locations WHERE id = $1', [
+        id,
+      ]);
       if (current.rowCount === 0) throw new NotFoundException('Inventory location not found');
       const row = current.rows[0]!;
       const organisationId = String(row.organisation_id);
@@ -310,14 +404,31 @@ export class ConfigurationService {
          RETURNING id, organisation_id AS "organisationId", event_id AS "eventId",
                    name, type, lifecycle, archived_at AS "archivedAt",
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [id, patch.name ?? row.name, patch.type ?? row.type, lifecycle, lifecycleArchive(lifecycle)],
+        [
+          id,
+          patch.name ?? row.name,
+          patch.type ?? row.type,
+          lifecycle,
+          lifecycleArchive(lifecycle),
+        ],
       );
-      await this.audit(client, context, organisationId, 'INVENTORY_LOCATION_UPDATED', 'InventoryLocation', id, patch);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'INVENTORY_LOCATION_UPDATED',
+        'InventoryLocation',
+        id,
+        patch,
+      );
       return result.rows[0]!;
     });
   }
 
-  async createProduct(context: AdminContext, input: { organisationId: string; name: string; category?: string }): Promise<ProductRecord> {
+  async createProduct(
+    context: AdminContext,
+    input: { organisationId: string; name: string; category?: string },
+  ): Promise<ProductRecord> {
     assertOrganisationAccess(context, input.organisationId);
     return this.database.transaction(async (client) => {
       await this.organisationExists(client, input.organisationId);
@@ -329,13 +440,26 @@ export class ConfigurationService {
                    archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt"`,
         [id, input.organisationId, input.name, input.category ?? null],
       );
-      await this.audit(client, context, input.organisationId, 'PRODUCT_CREATED', 'Product', id, input);
+      await this.audit(
+        client,
+        context,
+        input.organisationId,
+        'PRODUCT_CREATED',
+        'Product',
+        id,
+        input,
+      );
       return result.rows[0]!;
     });
   }
 
-  async updateProduct(context: AdminContext, id: string, patch: Partial<{ name: string; category: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>): Promise<ProductRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one product field must be supplied');
+  async updateProduct(
+    context: AdminContext,
+    id: string,
+    patch: Partial<{ name: string; category: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>,
+  ): Promise<ProductRecord> {
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one product field must be supplied');
     return this.database.transaction(async (client) => {
       const current = await client.query<Row>('SELECT * FROM products WHERE id = $1', [id]);
       if (current.rowCount === 0) throw new NotFoundException('Product not found');
@@ -349,14 +473,24 @@ export class ConfigurationService {
          WHERE id = $1
          RETURNING id, organisation_id AS "organisationId", name, category, lifecycle,
                    archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [id, patch.name ?? row.name, patch.category ?? row.category, lifecycle, lifecycleArchive(lifecycle)],
+        [
+          id,
+          patch.name ?? row.name,
+          patch.category ?? row.category,
+          lifecycle,
+          lifecycleArchive(lifecycle),
+        ],
       );
       await this.audit(client, context, organisationId, 'PRODUCT_UPDATED', 'Product', id, patch);
       return result.rows[0]!;
     });
   }
 
-  async createSku(context: AdminContext, productId: string, input: { name: string; code: string; unitName: string }): Promise<SkuRecord> {
+  async createSku(
+    context: AdminContext,
+    productId: string,
+    input: { name: string; code: string; unitName: string },
+  ): Promise<SkuRecord> {
     try {
       return await this.database.transaction(async (client) => {
         const product = await this.productRow(client, productId);
@@ -375,13 +509,24 @@ export class ConfigurationService {
         return result.rows[0]!;
       });
     } catch (error) {
-      if (uniqueViolation(error)) throw new ConflictException('SKU code already exists in this organisation');
+      if (uniqueViolation(error))
+        throw new ConflictException('SKU code already exists in this organisation');
       throw error;
     }
   }
 
-  async updateSku(context: AdminContext, id: string, patch: Partial<{ name: string; code: string; unitName: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>): Promise<SkuRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one SKU field must be supplied');
+  async updateSku(
+    context: AdminContext,
+    id: string,
+    patch: Partial<{
+      name: string;
+      code: string;
+      unitName: string;
+      lifecycle: 'ACTIVE' | 'ARCHIVED';
+    }>,
+  ): Promise<SkuRecord> {
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one SKU field must be supplied');
     try {
       return await this.database.transaction(async (client) => {
         const current = await client.query<Row>('SELECT * FROM skus WHERE id = $1', [id]);
@@ -398,13 +543,21 @@ export class ConfigurationService {
            RETURNING id, organisation_id AS "organisationId", product_id AS "productId",
                      name, code, unit_name AS "unitName", lifecycle, archived_at AS "archivedAt",
                      created_at AS "createdAt", updated_at AS "updatedAt"`,
-          [id, patch.name ?? row.name, patch.code ?? row.code, patch.unitName ?? row.unit_name, lifecycle, lifecycleArchive(lifecycle)],
+          [
+            id,
+            patch.name ?? row.name,
+            patch.code ?? row.code,
+            patch.unitName ?? row.unit_name,
+            lifecycle,
+            lifecycleArchive(lifecycle),
+          ],
         );
         await this.audit(client, context, organisationId, 'SKU_UPDATED', 'Sku', id, patch);
         return result.rows[0]!;
       });
     } catch (error) {
-      if (uniqueViolation(error)) throw new ConflictException('SKU code already exists in this organisation');
+      if (uniqueViolation(error))
+        throw new ConflictException('SKU code already exists in this organisation');
       throw error;
     }
   }
@@ -423,13 +576,21 @@ export class ConfigurationService {
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
         [id, organisationId, eventId, name],
       );
-      await this.audit(client, context, organisationId, 'MENU_CREATED', 'Menu', id, { name, eventId });
+      await this.audit(client, context, organisationId, 'MENU_CREATED', 'Menu', id, {
+        name,
+        eventId,
+      });
       return result.rows[0]!;
     });
   }
 
-  async updateMenu(context: AdminContext, id: string, patch: Partial<{ name: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>): Promise<MenuRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one menu field must be supplied');
+  async updateMenu(
+    context: AdminContext,
+    id: string,
+    patch: Partial<{ name: string; lifecycle: 'ACTIVE' | 'ARCHIVED' }>,
+  ): Promise<MenuRecord> {
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one menu field must be supplied');
     return this.database.transaction(async (client) => {
       const current = await client.query<Row>('SELECT * FROM menus WHERE id = $1', [id]);
       if (current.rowCount === 0) throw new NotFoundException('Menu not found');
@@ -451,15 +612,21 @@ export class ConfigurationService {
     });
   }
 
-  async assignMenu(context: AdminContext, menuId: string, salesLocationId: string): Promise<MenuAssignmentRecord> {
+  async assignMenu(
+    context: AdminContext,
+    menuId: string,
+    salesLocationId: string,
+  ): Promise<MenuAssignmentRecord> {
     try {
       return await this.database.transaction(async (client) => {
         const menu = await this.menuRow(client, menuId);
         const location = await this.salesLocationRow(client, salesLocationId);
         const organisationId = String(menu.organisation_id);
         assertOrganisationAccess(context, organisationId);
-        if (String(location.organisation_id) !== organisationId) throw new ForbiddenException('Cross-organisation menu assignment is not allowed');
-        if (String(location.event_id) !== String(menu.event_id)) throw new BadRequestException('Menu can only be assigned inside its own event');
+        if (String(location.organisation_id) !== organisationId)
+          throw new ForbiddenException('Cross-organisation menu assignment is not allowed');
+        if (String(location.event_id) !== String(menu.event_id))
+          throw new BadRequestException('Menu can only be assigned inside its own event');
         const id = randomUUID();
         const result = await client.query<MenuAssignmentRecord & QueryResultRow>(
           `INSERT INTO menu_assignments (id, organisation_id, menu_id, sales_location_id)
@@ -468,23 +635,32 @@ export class ConfigurationService {
                      sales_location_id AS "salesLocationId", created_at AS "createdAt"`,
           [id, organisationId, menuId, salesLocationId],
         );
-        await this.audit(client, context, organisationId, 'MENU_ASSIGNED', 'MenuAssignment', id, { menuId, salesLocationId });
+        await this.audit(client, context, organisationId, 'MENU_ASSIGNED', 'MenuAssignment', id, {
+          menuId,
+          salesLocationId,
+        });
         return result.rows[0]!;
       });
     } catch (error) {
-      if (uniqueViolation(error)) throw new ConflictException('Menu is already assigned to this sales location');
+      if (uniqueViolation(error))
+        throw new ConflictException('Menu is already assigned to this sales location');
       throw error;
     }
   }
 
-  async createMenuItem(context: AdminContext, menuId: string, input: { skuId: string; displayName: string; sortOrder: number }): Promise<MenuItemRecord> {
+  async createMenuItem(
+    context: AdminContext,
+    menuId: string,
+    input: { skuId: string; displayName: string; sortOrder: number },
+  ): Promise<MenuItemRecord> {
     try {
       return await this.database.transaction(async (client) => {
         const menu = await this.menuRow(client, menuId);
         const sku = await this.skuRow(client, input.skuId);
         const organisationId = String(menu.organisation_id);
         assertOrganisationAccess(context, organisationId);
-        if (String(sku.organisation_id) !== organisationId) throw new ForbiddenException('Cross-organisation SKU reference is not allowed');
+        if (String(sku.organisation_id) !== organisationId)
+          throw new ForbiddenException('Cross-organisation SKU reference is not allowed');
         const id = randomUUID();
         const result = await client.query<MenuItemRecord & QueryResultRow>(
           `INSERT INTO menu_items (id, organisation_id, menu_id, sku_id, display_name, sort_order)
@@ -494,7 +670,15 @@ export class ConfigurationService {
                      lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt"`,
           [id, organisationId, menuId, input.skuId, input.displayName, input.sortOrder],
         );
-        await this.audit(client, context, organisationId, 'MENU_ITEM_CREATED', 'MenuItem', id, input);
+        await this.audit(
+          client,
+          context,
+          organisationId,
+          'MENU_ITEM_CREATED',
+          'MenuItem',
+          id,
+          input,
+        );
         return result.rows[0]!;
       });
     } catch (error) {
@@ -503,8 +687,13 @@ export class ConfigurationService {
     }
   }
 
-  async updateMenuItem(context: AdminContext, id: string, patch: Partial<{ displayName: string; sortOrder: number; lifecycle: 'ACTIVE' | 'ARCHIVED' }>): Promise<MenuItemRecord> {
-    if (Object.keys(patch).length === 0) throw new BadRequestException('At least one menu item field must be supplied');
+  async updateMenuItem(
+    context: AdminContext,
+    id: string,
+    patch: Partial<{ displayName: string; sortOrder: number; lifecycle: 'ACTIVE' | 'ARCHIVED' }>,
+  ): Promise<MenuItemRecord> {
+    if (Object.keys(patch).length === 0)
+      throw new BadRequestException('At least one menu item field must be supplied');
     return this.database.transaction(async (client) => {
       const current = await client.query<Row>('SELECT * FROM menu_items WHERE id = $1', [id]);
       if (current.rowCount === 0) throw new NotFoundException('Menu item not found');
@@ -519,14 +708,24 @@ export class ConfigurationService {
          RETURNING id, organisation_id AS "organisationId", menu_id AS "menuId", sku_id AS "skuId",
                    display_name AS "displayName", sort_order AS "sortOrder", lifecycle,
                    archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [id, patch.displayName ?? row.display_name, patch.sortOrder ?? row.sort_order, lifecycle, lifecycleArchive(lifecycle)],
+        [
+          id,
+          patch.displayName ?? row.display_name,
+          patch.sortOrder ?? row.sort_order,
+          lifecycle,
+          lifecycleArchive(lifecycle),
+        ],
       );
       await this.audit(client, context, organisationId, 'MENU_ITEM_UPDATED', 'MenuItem', id, patch);
       return result.rows[0]!;
     });
   }
 
-  async setMenuItemPrice(context: AdminContext, menuItemId: string, input: { salesLocationId: string | null; amountMinor: number; currency: string }): Promise<MenuItemPriceRecord> {
+  async setMenuItemPrice(
+    context: AdminContext,
+    menuItemId: string,
+    input: { salesLocationId: string | null; amountMinor: number; currency: string },
+  ): Promise<MenuItemPriceRecord> {
     return this.database.transaction(async (client) => {
       const item = await this.menuItemRow(client, menuItemId);
       const organisationId = String(item.organisation_id);
@@ -534,13 +733,18 @@ export class ConfigurationService {
 
       if (input.salesLocationId) {
         const location = await this.salesLocationRow(client, input.salesLocationId);
-        if (String(location.organisation_id) !== organisationId) throw new ForbiddenException('Cross-organisation price override is not allowed');
-        if (String(location.event_id) !== String(item.event_id)) throw new BadRequestException('Price override location must belong to the menu event');
+        if (String(location.organisation_id) !== organisationId)
+          throw new ForbiddenException('Cross-organisation price override is not allowed');
+        if (String(location.event_id) !== String(item.event_id))
+          throw new BadRequestException('Price override location must belong to the menu event');
         const assignment = await client.query(
           `SELECT 1 FROM menu_assignments WHERE menu_id = $1 AND sales_location_id = $2`,
           [item.menu_id, input.salesLocationId],
         );
-        if (assignment.rowCount === 0) throw new BadRequestException('Price override requires the menu to be assigned to the sales location');
+        if (assignment.rowCount === 0)
+          throw new BadRequestException(
+            'Price override requires the menu to be assigned to the sales location',
+          );
       }
 
       const existing = await client.query<Row>(
@@ -559,25 +763,84 @@ export class ConfigurationService {
                    created_at AS "createdAt", updated_at AS "updatedAt"`,
         [id, organisationId, menuItemId, input.salesLocationId, input.amountMinor, input.currency],
       );
-      await this.audit(client, context, organisationId, 'MENU_ITEM_PRICE_SET', 'MenuItemPrice', result.rows[0]!.id, input);
+      await this.audit(
+        client,
+        context,
+        organisationId,
+        'MENU_ITEM_PRICE_SET',
+        'MenuItemPrice',
+        result.rows[0]!.id,
+        input,
+      );
       return result.rows[0]!;
     });
   }
 
-  async configurationView(context: AdminContext, organisationId: string): Promise<EventConfigurationView> {
+  async configurationView(
+    context: AdminContext,
+    organisationId: string,
+  ): Promise<EventConfigurationView> {
     assertOrganisationAccess(context, organisationId);
     const organisation = await this.getOrganisation(context, organisationId);
-    const [events, salesLocations, inventoryLocations, products, skus, menus, menuAssignments, menuItems, menuItemPrices] = await Promise.all([
-      this.database.query<EventRecord>(`SELECT id, organisation_id AS "organisationId", name, timezone, lifecycle, starts_at AS "startsAt", ends_at AS "endsAt", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM events WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<SalesLocationRecord>(`SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, type, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM sales_locations WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<InventoryLocationRecord>(`SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, type, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM inventory_locations WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<ProductRecord>(`SELECT id, organisation_id AS "organisationId", name, category, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM products WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<SkuRecord>(`SELECT id, organisation_id AS "organisationId", product_id AS "productId", name, code, unit_name AS "unitName", lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM skus WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<MenuRecord>(`SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM menus WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<MenuAssignmentRecord>(`SELECT id, organisation_id AS "organisationId", menu_id AS "menuId", sales_location_id AS "salesLocationId", created_at AS "createdAt" FROM menu_assignments WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<MenuItemRecord>(`SELECT id, organisation_id AS "organisationId", menu_id AS "menuId", sku_id AS "skuId", display_name AS "displayName", sort_order AS "sortOrder", lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM menu_items WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
-      this.database.query<MenuItemPriceRecord>(`SELECT id, organisation_id AS "organisationId", menu_item_id AS "menuItemId", sales_location_id AS "salesLocationId", amount_minor AS "amountMinor", currency, created_at AS "createdAt", updated_at AS "updatedAt" FROM menu_item_prices WHERE organisation_id = $1 ORDER BY created_at`, [organisationId]),
+    const [
+      events,
+      salesLocations,
+      inventoryLocations,
+      products,
+      skus,
+      menus,
+      menuAssignments,
+      menuItems,
+      menuItemPrices,
+    ] = await Promise.all([
+      this.database.query<EventRecord>(
+        `SELECT id, organisation_id AS "organisationId", name, timezone, lifecycle, starts_at AS "startsAt", ends_at AS "endsAt", archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM events WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<SalesLocationRecord>(
+        `SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, type, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM sales_locations WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<InventoryLocationRecord>(
+        `SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, type, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM inventory_locations WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<ProductRecord>(
+        `SELECT id, organisation_id AS "organisationId", name, category, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM products WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<SkuRecord>(
+        `SELECT id, organisation_id AS "organisationId", product_id AS "productId", name, code, unit_name AS "unitName", lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM skus WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<MenuRecord>(
+        `SELECT id, organisation_id AS "organisationId", event_id AS "eventId", name, lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM menus WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<MenuAssignmentRecord>(
+        `SELECT id, organisation_id AS "organisationId", menu_id AS "menuId", sales_location_id AS "salesLocationId", created_at AS "createdAt" FROM menu_assignments WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<MenuItemRecord>(
+        `SELECT id, organisation_id AS "organisationId", menu_id AS "menuId", sku_id AS "skuId", display_name AS "displayName", sort_order AS "sortOrder", lifecycle, archived_at AS "archivedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM menu_items WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
+      this.database.query<MenuItemPriceRecord>(
+        `SELECT id, organisation_id AS "organisationId", menu_item_id AS "menuItemId", sales_location_id AS "salesLocationId", amount_minor AS "amountMinor", currency, created_at AS "createdAt", updated_at AS "updatedAt" FROM menu_item_prices WHERE organisation_id = $1 ORDER BY created_at`,
+        [organisationId],
+      ),
     ]);
-    return { organisation, events, salesLocations, inventoryLocations, products, skus, menus, menuAssignments, menuItems, menuItemPrices };
+    return {
+      organisation,
+      events,
+      salesLocations,
+      inventoryLocations,
+      products,
+      skus,
+      menus,
+      menuAssignments,
+      menuItems,
+      menuItemPrices,
+    };
   }
 }

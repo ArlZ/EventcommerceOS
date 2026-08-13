@@ -36,7 +36,9 @@ async function api<T>(
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={{ border: '1px solid #ddd', borderRadius: 12, padding: 18, background: '#fff' }}>
+    <section
+      style={{ border: '1px solid #ddd', borderRadius: 12, padding: 18, background: '#fff' }}
+    >
       <h2 style={{ marginTop: 0, fontSize: 18 }}>{title}</h2>
       {children}
     </section>
@@ -73,8 +75,14 @@ function ItemActions({
   return (
     <li style={{ marginBottom: 6 }}>
       <strong>{item.name}</strong> {item.lifecycle ? <small>({item.lifecycle})</small> : null}{' '}
-      <button type="button" onClick={onRename}>Rename</button>{' '}
-      {item.lifecycle !== 'ARCHIVED' ? <button type="button" onClick={onArchive}>Archive</button> : null}
+      <button type="button" onClick={onRename}>
+        Rename
+      </button>{' '}
+      {item.lifecycle !== 'ARCHIVED' ? (
+        <button type="button" onClick={onArchive}>
+          Archive
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -191,7 +199,12 @@ export function ConfigurationClient() {
             <ul>
               <ItemActions
                 item={configuration.organisation}
-                onRename={() => void rename(`/organisations/${configuration.organisation.id}`, configuration.organisation)}
+                onRename={() =>
+                  void rename(
+                    `/organisations/${configuration.organisation.id}`,
+                    configuration.organisation,
+                  )
+                }
                 onArchive={() => void archive(`/organisations/${configuration.organisation.id}`)}
               />
             </ul>
@@ -201,7 +214,12 @@ export function ConfigurationClient() {
         <Panel title="2 · Event">
           <form onSubmit={(event) => void submitEvent(event)}>
             <Input name="name" placeholder="Nairobi Live" required disabled={!organisationId} />
-            <Input name="timezone" defaultValue="Africa/Nairobi" required disabled={!organisationId} />
+            <Input
+              name="timezone"
+              defaultValue="Africa/Nairobi"
+              required
+              disabled={!organisationId}
+            />
             <Input
               name="startsAt"
               placeholder="2026-09-01T18:00:00+03:00"
@@ -214,7 +232,9 @@ export function ConfigurationClient() {
               required
               disabled={!organisationId}
             />
-            <Button type="submit" disabled={!organisationId}>Create event</Button>
+            <Button type="submit" disabled={!organisationId}>
+              Create event
+            </Button>
           </form>
           <select
             value={eventId}
@@ -222,7 +242,11 @@ export function ConfigurationClient() {
             style={{ width: '100%', padding: 9, marginBottom: 8 }}
           >
             <option value="">Select event</option>
-            {configuration?.events.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {configuration?.events.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
           <ul>
             {configuration?.events.map((item) => (
@@ -250,7 +274,9 @@ export function ConfigurationClient() {
             }}
           >
             <Input name="name" placeholder="Main Stage Bar" required disabled={!eventId} />
-            <Button type="submit" disabled={!eventId}>Add bar</Button>
+            <Button type="submit" disabled={!eventId}>
+              Add bar
+            </Button>
           </form>
           <ul>
             {configuration?.salesLocations.map((item) => (
@@ -270,19 +296,31 @@ export function ConfigurationClient() {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                await api(`/events/${eventId}/inventory-locations`, 'POST', actorId, organisationId, {
-                  name: form.get('name'),
-                  type: form.get('type'),
-                });
+                await api(
+                  `/events/${eventId}/inventory-locations`,
+                  'POST',
+                  actorId,
+                  organisationId,
+                  {
+                    name: form.get('name'),
+                    type: form.get('type'),
+                  },
+                );
               });
             }}
           >
             <Input name="name" placeholder="Central Warehouse" required disabled={!eventId} />
-            <select name="type" disabled={!eventId} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+            <select
+              name="type"
+              disabled={!eventId}
+              style={{ width: '100%', padding: 9, marginBottom: 8 }}
+            >
               <option value="WAREHOUSE">Warehouse</option>
               <option value="BAR_STORAGE">Bar storage</option>
             </select>
-            <Button type="submit" disabled={!eventId}>Add inventory location</Button>
+            <Button type="submit" disabled={!eventId}>
+              Add inventory location
+            </Button>
           </form>
           <ul>
             {configuration?.inventoryLocations.map((item) => (
@@ -302,33 +340,55 @@ export function ConfigurationClient() {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                const created = await api<{ id: string }>('/products', 'POST', actorId, organisationId, {
+                const created = await api<{ id: string }>(
+                  '/products',
+                  'POST',
+                  actorId,
                   organisationId,
-                  name: form.get('name'),
-                  category: form.get('category'),
-                });
+                  {
+                    organisationId,
+                    name: form.get('name'),
+                    category: form.get('category'),
+                  },
+                );
                 setProductId(created.id);
               });
             }}
           >
             <Input name="name" placeholder="Tusker" required disabled={!organisationId} />
             <Input name="category" placeholder="Beer" disabled={!organisationId} />
-            <Button type="submit" disabled={!organisationId}>Create product</Button>
+            <Button type="submit" disabled={!organisationId}>
+              Create product
+            </Button>
           </form>
-          <select value={productId} onChange={(event) => setProductId(event.target.value)} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+          <select
+            value={productId}
+            onChange={(event) => setProductId(event.target.value)}
+            style={{ width: '100%', padding: 9, marginBottom: 8 }}
+          >
             <option value="">Select product</option>
-            {configuration?.products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {configuration?.products.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
           <form
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                const created = await api<{ id: string }>(`/products/${productId}/skus`, 'POST', actorId, organisationId, {
-                  name: form.get('name'),
-                  code: form.get('code'),
-                  unitName: form.get('unitName'),
-                });
+                const created = await api<{ id: string }>(
+                  `/products/${productId}/skus`,
+                  'POST',
+                  actorId,
+                  organisationId,
+                  {
+                    name: form.get('name'),
+                    code: form.get('code'),
+                    unitName: form.get('unitName'),
+                  },
+                );
                 setSkuId(created.id);
               });
             }}
@@ -336,14 +396,26 @@ export function ConfigurationClient() {
             <Input name="name" placeholder="Tusker 500ml" required disabled={!productId} />
             <Input name="code" placeholder="TUSKER-500" required disabled={!productId} />
             <Input name="unitName" placeholder="500ml bottle" required disabled={!productId} />
-            <Button type="submit" disabled={!productId}>Create SKU</Button>
+            <Button type="submit" disabled={!productId}>
+              Create SKU
+            </Button>
           </form>
           <ul>
             {configuration?.products.map((item) => (
-              <ItemActions key={item.id} item={item} onRename={() => void rename(`/products/${item.id}`, item)} onArchive={() => void archive(`/products/${item.id}`)} />
+              <ItemActions
+                key={item.id}
+                item={item}
+                onRename={() => void rename(`/products/${item.id}`, item)}
+                onArchive={() => void archive(`/products/${item.id}`)}
+              />
             ))}
             {configuration?.skus.map((item) => (
-              <ItemActions key={item.id} item={item} onRename={() => void rename(`/skus/${item.id}`, item)} onArchive={() => void archive(`/skus/${item.id}`)} />
+              <ItemActions
+                key={item.id}
+                item={item}
+                onRename={() => void rename(`/skus/${item.id}`, item)}
+                onArchive={() => void archive(`/skus/${item.id}`)}
+              />
             ))}
           </ul>
         </Panel>
@@ -354,64 +426,128 @@ export function ConfigurationClient() {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                const created = await api<{ id: string }>(`/events/${eventId}/menus`, 'POST', actorId, organisationId, { name: form.get('name') });
+                const created = await api<{ id: string }>(
+                  `/events/${eventId}/menus`,
+                  'POST',
+                  actorId,
+                  organisationId,
+                  { name: form.get('name') },
+                );
                 setMenuId(created.id);
               });
             }}
           >
             <Input name="name" placeholder="Event Menu" required disabled={!eventId} />
-            <Button type="submit" disabled={!eventId}>Create menu</Button>
+            <Button type="submit" disabled={!eventId}>
+              Create menu
+            </Button>
           </form>
-          <select value={menuId} onChange={(event) => setMenuId(event.target.value)} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+          <select
+            value={menuId}
+            onChange={(event) => setMenuId(event.target.value)}
+            style={{ width: '100%', padding: 9, marginBottom: 8 }}
+          >
             <option value="">Select menu</option>
-            {currentEventMenus.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {currentEventMenus.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
           <form
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                await api(`/menus/${menuId}/assignments`, 'POST', actorId, organisationId, { salesLocationId: form.get('salesLocationId') });
+                await api(`/menus/${menuId}/assignments`, 'POST', actorId, organisationId, {
+                  salesLocationId: form.get('salesLocationId'),
+                });
               });
             }}
           >
-            <select name="salesLocationId" disabled={!menuId} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
-              {currentEventLocations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            <select
+              name="salesLocationId"
+              disabled={!menuId}
+              style={{ width: '100%', padding: 9, marginBottom: 8 }}
+            >
+              {currentEventLocations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
             </select>
-            <Button type="submit" disabled={!menuId}>Assign menu to location</Button>
+            <Button type="submit" disabled={!menuId}>
+              Assign menu to location
+            </Button>
           </form>
           <ul>
             {configuration?.menus.map((item) => (
-              <ItemActions key={item.id} item={item} onRename={() => void rename(`/menus/${item.id}`, item)} onArchive={() => void archive(`/menus/${item.id}`)} />
+              <ItemActions
+                key={item.id}
+                item={item}
+                onRename={() => void rename(`/menus/${item.id}`, item)}
+                onArchive={() => void archive(`/menus/${item.id}`)}
+              />
             ))}
           </ul>
         </Panel>
 
         <Panel title="7 · Menu item & price">
-          <select value={skuId} onChange={(event) => setSkuId(event.target.value)} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+          <select
+            value={skuId}
+            onChange={(event) => setSkuId(event.target.value)}
+            style={{ width: '100%', padding: 9, marginBottom: 8 }}
+          >
             <option value="">Select SKU</option>
-            {configuration?.skus.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {configuration?.skus.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
           </select>
           <form
             onSubmit={(event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
               void run(async () => {
-                const created = await api<{ id: string }>(`/menus/${menuId}/items`, 'POST', actorId, organisationId, {
-                  skuId,
-                  displayName: form.get('displayName'),
-                  sortOrder: 10,
-                });
+                const created = await api<{ id: string }>(
+                  `/menus/${menuId}/items`,
+                  'POST',
+                  actorId,
+                  organisationId,
+                  {
+                    skuId,
+                    displayName: form.get('displayName'),
+                    sortOrder: 10,
+                  },
+                );
                 setMenuItemId(created.id);
               });
             }}
           >
-            <Input name="displayName" placeholder="Tusker 500ml" required disabled={!menuId || !skuId} />
-            <Button type="submit" disabled={!menuId || !skuId}>Add menu item</Button>
+            <Input
+              name="displayName"
+              placeholder="Tusker 500ml"
+              required
+              disabled={!menuId || !skuId}
+            />
+            <Button type="submit" disabled={!menuId || !skuId}>
+              Add menu item
+            </Button>
           </form>
-          <select value={menuItemId} onChange={(event) => setMenuItemId(event.target.value)} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+          <select
+            value={menuItemId}
+            onChange={(event) => setMenuItemId(event.target.value)}
+            style={{ width: '100%', padding: 9, marginBottom: 8 }}
+          >
             <option value="">Select menu item</option>
-            {configuration?.menuItems.filter((item) => !menuId || item.menuId === menuId).map((item) => <option key={item.id} value={item.id}>{item.displayName}</option>)}
+            {configuration?.menuItems
+              .filter((item) => !menuId || item.menuId === menuId)
+              .map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.displayName}
+                </option>
+              ))}
           </select>
           <form
             onSubmit={(event) => {
@@ -427,17 +563,52 @@ export function ConfigurationClient() {
               });
             }}
           >
-            <Input name="amountMinor" type="number" step="1" min="0" placeholder="25000" required disabled={!menuItemId} />
-            <Input name="currency" defaultValue="KES" maxLength={3} required disabled={!menuItemId} />
-            <select name="salesLocationId" disabled={!menuItemId} style={{ width: '100%', padding: 9, marginBottom: 8 }}>
+            <Input
+              name="amountMinor"
+              type="number"
+              step="1"
+              min="0"
+              placeholder="25000"
+              required
+              disabled={!menuItemId}
+            />
+            <Input
+              name="currency"
+              defaultValue="KES"
+              maxLength={3}
+              required
+              disabled={!menuItemId}
+            />
+            <select
+              name="salesLocationId"
+              disabled={!menuItemId}
+              style={{ width: '100%', padding: 9, marginBottom: 8 }}
+            >
               <option value="">Default menu price</option>
-              {currentEventLocations.map((item) => <option key={item.id} value={item.id}>{item.name} override</option>)}
+              {currentEventLocations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} override
+                </option>
+              ))}
             </select>
-            <Button type="submit" disabled={!menuItemId}>Set price</Button>
+            <Button type="submit" disabled={!menuItemId}>
+              Set price
+            </Button>
           </form>
           <ul>
             {configuration?.menuItems.map((item) => (
-              <ItemActions key={item.id} item={{ id: item.id, name: item.displayName, lifecycle: item.lifecycle }} onRename={() => void rename(`/menu-items/${item.id}`, { id: item.id, name: item.displayName, lifecycle: item.lifecycle })} onArchive={() => void archive(`/menu-items/${item.id}`)} />
+              <ItemActions
+                key={item.id}
+                item={{ id: item.id, name: item.displayName, lifecycle: item.lifecycle }}
+                onRename={() =>
+                  void rename(`/menu-items/${item.id}`, {
+                    id: item.id,
+                    name: item.displayName,
+                    lifecycle: item.lifecycle,
+                  })
+                }
+                onArchive={() => void archive(`/menu-items/${item.id}`)}
+              />
             ))}
           </ul>
         </Panel>
@@ -447,11 +618,20 @@ export function ConfigurationClient() {
         <section style={{ marginTop: 24 }}>
           <h2>Current configuration</h2>
           <p>
-            {configuration.events.length} events · {configuration.salesLocations.length} sales locations ·{' '}
-            {configuration.inventoryLocations.length} inventory locations · {configuration.skus.length} SKUs ·{' '}
-            {configuration.menus.length} menus
+            {configuration.events.length} events · {configuration.salesLocations.length} sales
+            locations · {configuration.inventoryLocations.length} inventory locations ·{' '}
+            {configuration.skus.length} SKUs · {configuration.menus.length} menus
           </p>
-          <pre style={{ background: '#111', color: '#eee', padding: 16, borderRadius: 10, overflowX: 'auto', fontSize: 12 }}>
+          <pre
+            style={{
+              background: '#111',
+              color: '#eee',
+              padding: 16,
+              borderRadius: 10,
+              overflowX: 'auto',
+              fontSize: 12,
+            }}
+          >
             {JSON.stringify(configuration, null, 2)}
           </pre>
         </section>

@@ -55,7 +55,8 @@ export function isoTimestamp(value: string, label: string): string {
 }
 
 export function eventLifecycle(value: unknown): 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED' {
-  if (value === 'DRAFT' || value === 'ACTIVE' || value === 'CLOSED' || value === 'ARCHIVED') return value;
+  if (value === 'DRAFT' || value === 'ACTIVE' || value === 'CLOSED' || value === 'ARCHIVED')
+    return value;
   throw new BadRequestException('lifecycle must be DRAFT, ACTIVE, CLOSED or ARCHIVED');
 }
 

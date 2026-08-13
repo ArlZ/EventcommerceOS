@@ -41,10 +41,9 @@ try {
     .sort();
 
   for (const filename of files) {
-    const applied = await client.query(
-      'SELECT 1 FROM schema_migrations WHERE filename = $1',
-      [filename],
-    );
+    const applied = await client.query('SELECT 1 FROM schema_migrations WHERE filename = $1', [
+      filename,
+    ]);
     if (applied.rowCount > 0) continue;
 
     const sql = await readFile(join(migrationsDirectory, filename), 'utf8');
