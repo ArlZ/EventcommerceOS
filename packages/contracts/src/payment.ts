@@ -6,6 +6,13 @@ export type PaymentAttemptStatus =
   | 'FAILED'
   | 'UNKNOWN';
 
+export type PaymentAdjustmentStatus =
+  | 'REQUESTED'
+  | 'PENDING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'UNKNOWN';
+
 export interface PaymentAttemptEventPayload {
   eventId: string;
   paymentId: string;
@@ -49,6 +56,51 @@ export interface PaymentAttemptView {
   reconciliationRequired: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RefundPaymentRequest {
+  refundId: string;
+  paymentId: string;
+  amountMinor: number;
+  currency: string;
+  reason: string;
+  requestingActorId: string;
+  approvingActorId?: string;
+  idempotencyKey: string;
+}
+
+export interface ReversePaymentRequest {
+  reversalId: string;
+  paymentId: string;
+  amountMinor: number;
+  currency: string;
+  reason: string;
+  requestingActorId: string;
+  idempotencyKey: string;
+}
+
+export interface PaymentAdjustmentView {
+  kind: 'REFUND' | 'REVERSAL';
+  id: string;
+  paymentId: string;
+  providerId: string;
+  amountMinor: number;
+  currency: string;
+  reason: string;
+  requestingActorId: string;
+  approvingActorId: string | null;
+  idempotencyKey: string;
+  status: PaymentAdjustmentStatus;
+  providerReference: string | null;
+  failureCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentFinancialHistoryView {
+  paymentId: string;
+  refunds: PaymentAdjustmentView[];
+  reversals: PaymentAdjustmentView[];
 }
 
 export interface PaymentProviderHealthView {
