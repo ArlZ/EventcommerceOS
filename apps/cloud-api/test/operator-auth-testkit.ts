@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { afterAll } from 'vitest';
-import { OperatorAuthService, type OperatorRole } from '../src/auth/operator-auth.service';
-import { DatabaseService } from '../src/database/database.service';
+import type { OperatorAuthService, OperatorRole } from '../src/auth/operator-auth.service';
+import type { DatabaseService } from '../src/database/database.service';
 
 const TEST_OPERATOR_KEY_PAIR = generateKeyPairSync('ed25519');
 export const TEST_OPERATOR_SIGNING_PRIVATE_KEY = TEST_OPERATOR_KEY_PAIR.privateKey
