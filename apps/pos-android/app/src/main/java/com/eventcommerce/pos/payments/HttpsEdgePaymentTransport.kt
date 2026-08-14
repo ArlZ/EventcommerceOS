@@ -1,5 +1,6 @@
 package com.eventcommerce.pos.payments
 
+import com.eventcommerce.pos.data.DeviceCredentialStore
 import com.eventcommerce.pos.data.LocalPaymentAttempt
 import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.net.HttpURLConnection
@@ -9,9 +10,13 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransport {
+class HttpsEdgePaymentTransport(
+  private val baseUrl: String,
+  private val deviceCredential: String,
+) : EdgePaymentTransport {
   init {
     require(baseUrl.startsWith("https://")) { "POS payment endpoint must use HTTPS" }
+    DeviceCredentialStore.requireValidToken(deviceCredential)
   }
 
   override suspend fun initiate(
@@ -52,6 +57,7 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
         connection.connectTimeout = 5_000
         connection.readTimeout = 5_000
         connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty("Authorization", "Device $deviceCredential")
         val code = connection.responseCode
         if (code !in 200..299) throw IllegalStateException("Edge payment rail health returned HTTP $code")
         val response = JSONArray(
@@ -86,6 +92,7 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
       connection.readTimeout = 10_000
       connection.doOutput = true
       connection.setRequestProperty("Content-Type", "application/json")
+      connection.setRequestProperty("Authorization", "Device $deviceCredential")
       connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body.toString()) }
       val code = connection.responseCode
       if (code !in 200..299) throw IllegalStateException("Edge payment returned HTTP $code")
