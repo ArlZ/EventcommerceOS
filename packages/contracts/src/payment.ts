@@ -6,12 +6,7 @@ export type PaymentAttemptStatus =
   | 'FAILED'
   | 'UNKNOWN';
 
-export type PaymentAdjustmentStatus =
-  | 'REQUESTED'
-  | 'PENDING'
-  | 'SUCCEEDED'
-  | 'FAILED'
-  | 'UNKNOWN';
+export type PaymentAdjustmentStatus = 'REQUESTED' | 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
 
 export interface PaymentAttemptEventPayload {
   eventId: string;
