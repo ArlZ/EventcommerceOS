@@ -6,9 +6,11 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const eventId = '22222222-2222-4222-8222-222222222222';
+const edgeId = 'edge-close-attribution';
 
 function orderEvent(
   orderId: string,
@@ -43,12 +45,13 @@ function orderEvent(
 }
 
 function batch(events: SyncEventEnvelope[]): EdgeCloudBatch {
-  return { edgeId: 'edge-close-attribution', events, deviceStatuses: [] };
+  return { edgeId, events, deviceStatuses: [] };
 }
 
 describeIntegration('event close order attribution', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let authHeaders: Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
@@ -62,6 +65,7 @@ describeIntegration('event close order attribution', () => {
     await database.query(
       'TRUNCATE sync_processed_events, sync_order_state, sync_device_state, sync_reconciliation_exceptions',
     );
+    authHeaders = (await provisionSyncEdge(database, { edgeId, eventIds: [eventId] })).headers;
   });
 
   afterAll(async () => {
@@ -77,7 +81,11 @@ describeIntegration('event close order attribution', () => {
       orderEvent('order-provider', 'device-provider', 2, 'ORDER_CLOSED_PROVIDER', 'CLOSED'),
     ];
 
-    await request(app.getHttpServer()).post('/sync/edge-events').send(batch(events)).expect(201);
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(authHeaders)
+      .send(batch(events))
+      .expect(201);
 
     const rows = await database.query<{
       order_id: string;
