@@ -28,6 +28,10 @@ CREATE TABLE IF NOT EXISTS payment_attempts (
   UNIQUE (provider, provider_request_id)
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS payment_attempts_provider_receipt_unique
+  ON payment_attempts(provider, provider_receipt_reference)
+  WHERE provider_receipt_reference IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS payment_attempt_state (
   attempt_id text PRIMARY KEY REFERENCES payment_attempts(id),
   state text NOT NULL CHECK (
@@ -36,6 +40,8 @@ CREATE TABLE IF NOT EXISTS payment_attempt_state (
   reconciliation_required boolean NOT NULL DEFAULT false,
   next_query_at timestamptz,
   query_attempts integer NOT NULL DEFAULT 0 CHECK (query_attempts >= 0),
+  reconciliation_claimed_until timestamptz,
+  reconciliation_claimed_by text,
   last_provider_error_code text,
   terminal_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
