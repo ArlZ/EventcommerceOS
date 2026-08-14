@@ -59,7 +59,12 @@ class FakePaymentProvider implements PaymentProvider {
       await new Promise((resolve) => setTimeout(resolve, this.queryDelayMs));
     }
     return {
-      outcome: this.queryMode === 'SUCCESS' ? 'SUCCESS' : this.queryMode,
+      outcome:
+        this.queryMode === 'SUCCESS'
+          ? 'SUCCESS'
+          : this.queryMode === 'PENDING'
+            ? 'ACCEPTED_FOR_PROCESSING'
+            : 'FAILED',
       providerRequestId: input.providerRequestId,
       providerReceiptReference: this.queryMode === 'SUCCESS' ? this.queryReceipt : null,
       reasonCode: this.queryMode === 'SUCCESS' ? '0' : 'TEST',
