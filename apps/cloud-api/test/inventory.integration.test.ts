@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { InventoryEdgeEvent } from '@event-commerce/contracts';
 import { AppModule } from '../src/app.module';
@@ -11,11 +11,10 @@ const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 describeIntegration('Cloud inventory consolidation', () => {
   let database: DatabaseService;
   let inventory: InventoryService;
-  let moduleRef: Awaited<ReturnType<typeof Test.createTestingModule>> extends never ? never : any;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
-    const builder = Test.createTestingModule({ imports: [AppModule] });
-    moduleRef = await builder.compile();
+    moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     database = moduleRef.get(DatabaseService);
     inventory = moduleRef.get(InventoryService);
   });
