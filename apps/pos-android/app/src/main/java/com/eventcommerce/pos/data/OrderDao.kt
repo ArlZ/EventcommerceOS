@@ -14,6 +14,9 @@ interface OrderDao {
   @Query("SELECT * FROM pos_orders WHERE id = :orderId LIMIT 1")
   suspend fun order(orderId: String): OrderEntity?
 
+  @Query("SELECT * FROM pos_orders WHERE state = 'PAYMENT_PENDING' ORDER BY updatedAtEpochMs ASC")
+  suspend fun paymentPendingOrders(): List<OrderEntity>
+
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun insertOrder(value: OrderEntity)
 
