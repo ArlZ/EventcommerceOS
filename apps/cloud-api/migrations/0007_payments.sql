@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS payments (
   amount_minor bigint NOT NULL CHECK (amount_minor >= 0),
   currency text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  UNIQUE (event_id, order_id, id)
+  UNIQUE (event_id, order_id)
 );
 
 CREATE INDEX IF NOT EXISTS payments_event_order_idx
