@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { requireTransferTransition, type StockTransferState } from '@event-commerce/domain';
@@ -40,9 +40,10 @@ interface ReceiptRow extends QueryResultRow {
 @Injectable()
 export class InventoryTransferService {
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryAuthorizationService)
     private readonly authorization: InventoryAuthorizationService,
-    private readonly ledger: InventoryLedgerService,
+    @Inject(InventoryLedgerService) private readonly ledger: InventoryLedgerService,
   ) {}
 
   async create(input: CreateTransferInput): Promise<TransferRow> {
@@ -104,7 +105,8 @@ export class InventoryTransferService {
   }
 
   async assign(transferId: string, input: TransferTransitionInput): Promise<TransferRow> {
-    if (!input.assignedActorId) throw new Error('assignedActorId is required when assigning a transfer');
+    if (!input.assignedActorId)
+      throw new Error('assignedActorId is required when assigning a transfer');
     return this.simpleTransition(transferId, input, 'ASSIGNED');
   }
 
@@ -123,9 +125,14 @@ export class InventoryTransferService {
       await this.authorization.require(client, transfer.event_id, input.actorId, 'TRANSFER_MANAGE');
       requireTransferTransition(transfer.state, 'IN_TRANSIT');
       const lines = await this.lines(client, transferId);
-      const requested = new Map(lines.map((line) => [line.sku_id, BigInt(line.requested_quantity)]));
-      const supplied = new Map(input.quantities.map((line) => [line.skuId, BigInt(line.quantityBase)]));
-      if (requested.size !== supplied.size) throw new Error('dispatch must include every requested transfer line');
+      const requested = new Map(
+        lines.map((line) => [line.sku_id, BigInt(line.requested_quantity)]),
+      );
+      const supplied = new Map(
+        input.quantities.map((line) => [line.skuId, BigInt(line.quantityBase)]),
+      );
+      if (requested.size !== supplied.size)
+        throw new Error('dispatch must include every requested transfer line');
 
       const orderedSkus = [...requested.keys()].sort((a, b) => a.localeCompare(b));
       for (const skuId of orderedSkus) {
@@ -134,7 +141,9 @@ export class InventoryTransferService {
       for (const skuId of orderedSkus) {
         const quantity = requested.get(skuId)!;
         if (supplied.get(skuId) !== quantity) {
-          throw new Error('MVP dispatch quantity must exactly match the requested transfer quantity');
+          throw new Error(
+            'MVP dispatch quantity must exactly match the requested transfer quantity',
+          );
         }
         const onHand = await this.ledger.onHand(
           client,
@@ -209,7 +218,9 @@ export class InventoryTransferService {
       );
       if (existingReceipt.rowCount === 1) {
         if (!existingReceipt.rows[0]!.same_payload) {
-          throw new ConflictException('transfer receipt idempotency key was reused with different content');
+          throw new ConflictException(
+            'transfer receipt idempotency key was reused with different content',
+          );
         }
         return this.map(transfer);
       }
@@ -222,7 +233,9 @@ export class InventoryTransferService {
         const quantity = BigInt(receipt.quantityBase);
         const outstanding = BigInt(line.dispatched_quantity) - BigInt(line.received_quantity);
         if (quantity > outstanding) {
-          throw new ConflictException(`receipt exceeds outstanding quantity for SKU ${receipt.skuId}`);
+          throw new ConflictException(
+            `receipt exceeds outstanding quantity for SKU ${receipt.skuId}`,
+          );
         }
       }
 

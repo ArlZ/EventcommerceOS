@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { SyncEventEnvelope } from '@event-commerce/contracts';
@@ -41,8 +41,8 @@ interface SaleMovement {
 @Injectable()
 export class InventorySaleConsumerService {
   constructor(
-    private readonly database: EdgeDatabaseService,
-    private readonly ledger: InventoryLedgerService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryLedgerService) private readonly ledger: InventoryLedgerService,
   ) {}
 
   async consume(events: readonly SyncEventEnvelope[]): Promise<string[]> {

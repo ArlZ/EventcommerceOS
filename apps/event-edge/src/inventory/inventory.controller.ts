@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Inject, Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { InventoryAlertService } from './inventory-alert.service';
 import { InventoryConfigurationService } from './inventory-configuration.service';
 import { InventoryCountService } from './inventory-count.service';
@@ -20,11 +20,13 @@ import {
 @Controller('inventory')
 export class InventoryController {
   constructor(
+    @Inject(InventoryConfigurationService)
     private readonly configuration: InventoryConfigurationService,
-    private readonly ledger: InventoryLedgerService,
-    private readonly transfers: InventoryTransferService,
-    private readonly counts: InventoryCountService,
-    private readonly alerts: InventoryAlertService,
+    @Inject(InventoryLedgerService) private readonly ledger: InventoryLedgerService,
+    @Inject(InventoryTransferService) private readonly transfers: InventoryTransferService,
+    @Inject(InventoryCountService) private readonly counts: InventoryCountService,
+    @Inject(InventoryAlertService) private readonly alerts: InventoryAlertService,
+    @Inject(InventoryNotificationService)
     private readonly notifications: InventoryNotificationService,
   ) {}
 

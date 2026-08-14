@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
 import { InventoryNotificationTransport } from './inventory-notification.transport';
@@ -14,7 +14,8 @@ interface NotificationRow extends QueryResultRow {
 @Injectable()
 export class InventoryNotificationService {
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryNotificationTransport)
     private readonly transport: InventoryNotificationTransport,
   ) {}
 

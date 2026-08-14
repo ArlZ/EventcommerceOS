@@ -26,7 +26,7 @@ export class InventoryCloudForwarderService implements OnModuleInit, OnModuleDes
   private running = false;
 
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
     @Inject(InventoryCloudTransport) private readonly transport: InventoryCloudTransport,
   ) {}
 

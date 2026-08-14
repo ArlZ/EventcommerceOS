@@ -9,8 +9,9 @@ import { parseDeviceBatch } from './sync-validation';
 export class DeviceSyncController {
   constructor(
     @Inject(DeviceSyncService) private readonly sync: DeviceSyncService,
+    @Inject(InventorySaleConsumerService)
     private readonly inventorySales: InventorySaleConsumerService,
-    private readonly inventoryAlerts: InventoryAlertService,
+    @Inject(InventoryAlertService) private readonly inventoryAlerts: InventoryAlertService,
   ) {}
 
   @Post('device-events')

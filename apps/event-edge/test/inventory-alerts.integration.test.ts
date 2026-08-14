@@ -8,9 +8,11 @@ import { InventoryAlertService } from '../src/inventory/inventory-alert.service'
 import { InventoryConfigurationService } from '../src/inventory/inventory-configuration.service';
 import { InventoryLedgerService } from '../src/inventory/inventory-ledger.service';
 import { InventoryNotificationService } from '../src/inventory/inventory-notification.service';
+import { InventorySaleConsumerService } from '../src/inventory/inventory-sale-consumer.service';
 import { InventoryTransferService } from '../src/inventory/inventory-transfer.service';
 import {
   beerSkuId,
+  closedSale,
   escalationActorId,
   installInventoryFixture,
   inventoryEventId,
@@ -28,6 +30,7 @@ describeIntegration('inventory alerts and replenishment operations', () => {
   let database: EdgeDatabaseService;
   let configuration: InventoryConfigurationService;
   let ledger: InventoryLedgerService;
+  let sales: InventorySaleConsumerService;
   let alerts: InventoryAlertService;
   let notifications: InventoryNotificationService;
   let transfers: InventoryTransferService;
@@ -39,6 +42,7 @@ describeIntegration('inventory alerts and replenishment operations', () => {
     database = moduleRef.get(EdgeDatabaseService);
     configuration = moduleRef.get(InventoryConfigurationService);
     ledger = moduleRef.get(InventoryLedgerService);
+    sales = moduleRef.get(InventorySaleConsumerService);
     alerts = moduleRef.get(InventoryAlertService);
     notifications = moduleRef.get(InventoryNotificationService);
     transfers = moduleRef.get(InventoryTransferService);
@@ -58,21 +62,18 @@ describeIntegration('inventory alerts and replenishment operations', () => {
   it('distinguishes local risk from event-wide shortage and recommends only source-safe replenishment', async () => {
     await receipt(ledger, mainLocationId, beerSkuId, 50n, 'alert-main');
     await receipt(ledger, warehouseLocationId, beerSkuId, 300n, 'alert-warehouse');
-    await ledger.postManual({
-      id: 'alert-sale-history',
-      eventId: inventoryEventId,
-      inventoryLocationId: mainLocationId,
-      skuId: beerSkuId,
-      movementType: 'SALE',
-      quantityDeltaBase: '-30',
-      actorId: operatorActorId,
-      reason: 'recent sales velocity',
-      occurredAt: '2026-08-14T07:55:00.000Z',
-      idempotencyKey: 'alert-sale-history',
-    });
+    await sales.consume([
+      closedSale({
+        eventInstanceId: 'alert-sale-101',
+        occurredAt: '2026-08-14T07:55:00.000Z',
+        lines: [{ skuId: beerSkuId, quantity: 30 }],
+      }),
+    ]);
 
     await alerts.evaluateEvent(inventoryEventId, new Date('2026-08-14T08:00:00.000Z'));
-    let active = (await alerts.list(inventoryEventId)).filter((alert) => alert.state !== 'RESOLVED');
+    let active = (await alerts.list(inventoryEventId)).filter(
+      (alert) => alert.state !== 'RESOLVED',
+    );
     const local = active.find(
       (alert) =>
         alert.inventoryLocationId === mainLocationId && alert.alertType === 'STOCKOUT_RISK',
@@ -139,21 +140,18 @@ describeIntegration('inventory alerts and replenishment operations', () => {
 
   it('audits alert workflow, escalates overdue ownership and isolates notification failure', async () => {
     await receipt(ledger, mainLocationId, beerSkuId, 30n, 'workflow-main');
-    await ledger.postManual({
-      id: 'workflow-sale',
-      eventId: inventoryEventId,
-      inventoryLocationId: mainLocationId,
-      skuId: beerSkuId,
-      movementType: 'SALE',
-      quantityDeltaBase: '-20',
-      actorId: operatorActorId,
-      reason: 'create risk',
-      occurredAt: '2026-08-14T07:55:00.000Z',
-      idempotencyKey: 'workflow-sale',
-    });
+    await sales.consume([
+      closedSale({
+        eventInstanceId: 'workflow-sale-102',
+        occurredAt: '2026-08-14T07:55:00.000Z',
+        lines: [{ skuId: beerSkuId, quantity: 20 }],
+      }),
+    ]);
     await alerts.evaluateEvent(inventoryEventId, new Date('2026-08-14T08:00:00.000Z'));
 
-    const active = (await alerts.list(inventoryEventId)).filter((alert) => alert.state !== 'RESOLVED');
+    const active = (await alerts.list(inventoryEventId)).filter(
+      (alert) => alert.state !== 'RESOLVED',
+    );
     const local = active.find((alert) => alert.inventoryLocationId === mainLocationId)!;
     const eventWide = active.find((alert) => alert.alertType === 'EVENT_WIDE_STOCKOUT_RISK')!;
     expect(local).toBeDefined();

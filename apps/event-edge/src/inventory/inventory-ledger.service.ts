@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Inject, ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { requireInventoryDelta, type InventoryMovementType } from '@event-commerce/domain';
@@ -53,7 +53,8 @@ interface ProjectionDbRow extends QueryResultRow {
 @Injectable()
 export class InventoryLedgerService {
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryAuthorizationService)
     private readonly authorization: InventoryAuthorizationService,
   ) {}
 
@@ -131,7 +132,9 @@ export class InventoryLedgerService {
     );
     const row = existing.rows[0];
     if (!row || !this.sameMovement(row, input)) {
-      throw new ConflictException('inventory idempotency key was reused with different movement content');
+      throw new ConflictException(
+        'inventory idempotency key was reused with different movement content',
+      );
     }
     return row;
   }

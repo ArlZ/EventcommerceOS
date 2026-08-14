@@ -6,7 +6,9 @@ function endpoint(): URL {
   const base = new URL(process.env.CLOUD_API_URL ?? 'http://127.0.0.1:3000');
   const loopback = ['127.0.0.1', 'localhost', '::1'].includes(base.hostname);
   if (base.protocol !== 'https:' && !loopback) {
-    throw new Error('inventory Edge-to-Cloud transport requires HTTPS outside loopback development');
+    throw new Error(
+      'inventory Edge-to-Cloud transport requires HTTPS outside loopback development',
+    );
   }
   return new URL('/inventory/edge-events', base);
 }

@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { EdgeDatabaseService } from '../database/database.service';
 import type { InventoryConfigurationSnapshot } from './inventory.types';
 
 @Injectable()
 export class InventoryConfigurationService {
-  constructor(private readonly database: EdgeDatabaseService) {}
+  constructor(@Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService) {}
 
   async install(snapshot: InventoryConfigurationSnapshot): Promise<void> {
     await this.database.transaction(async (client) => {
@@ -13,8 +13,10 @@ export class InventoryConfigurationService {
       const mediumWindow = snapshot.mediumWindowMinutes ?? 30;
       const shortWeight = snapshot.shortWeightBasisPoints ?? 6000;
       const escalation = snapshot.escalationMinutes ?? 5;
-      if (mediumWindow < shortWindow) throw new Error('medium inventory window must not be shorter than short window');
-      if (shortWeight < 0 || shortWeight > 10_000) throw new Error('short inventory weight must be between 0 and 10000 basis points');
+      if (mediumWindow < shortWindow)
+        throw new Error('medium inventory window must not be shorter than short window');
+      if (shortWeight < 0 || shortWeight > 10_000)
+        throw new Error('short inventory weight must be between 0 and 10000 basis points');
 
       await client.query(
         `INSERT INTO edge_inventory_event_config(
@@ -51,7 +53,9 @@ export class InventoryConfigurationService {
         );
       }
 
-      await client.query('DELETE FROM edge_sales_inventory_mapping WHERE event_id = $1', [snapshot.eventId]);
+      await client.query('DELETE FROM edge_sales_inventory_mapping WHERE event_id = $1', [
+        snapshot.eventId,
+      ]);
       for (const mapping of snapshot.salesMappings) {
         await client.query(
           `INSERT INTO edge_sales_inventory_mapping(event_id, sales_location_id, inventory_location_id)
@@ -60,7 +64,9 @@ export class InventoryConfigurationService {
         );
       }
 
-      await client.query('DELETE FROM edge_inventory_recipes WHERE event_id = $1', [snapshot.eventId]);
+      await client.query('DELETE FROM edge_inventory_recipes WHERE event_id = $1', [
+        snapshot.eventId,
+      ]);
       for (const recipe of snapshot.recipes) {
         await client.query(
           `INSERT INTO edge_inventory_recipes(event_id, sold_sku_id, component_sku_id, quantity_per_sold_unit)
@@ -69,7 +75,9 @@ export class InventoryConfigurationService {
         );
       }
 
-      await client.query('DELETE FROM edge_inventory_alert_config WHERE event_id = $1', [snapshot.eventId]);
+      await client.query('DELETE FROM edge_inventory_alert_config WHERE event_id = $1', [
+        snapshot.eventId,
+      ]);
       for (const config of snapshot.alertConfigs) {
         await client.query(
           `INSERT INTO edge_inventory_alert_config(
@@ -92,7 +100,9 @@ export class InventoryConfigurationService {
         );
       }
 
-      await client.query('DELETE FROM edge_inventory_responsibilities WHERE event_id = $1', [snapshot.eventId]);
+      await client.query('DELETE FROM edge_inventory_responsibilities WHERE event_id = $1', [
+        snapshot.eventId,
+      ]);
       for (const responsibility of snapshot.responsibilities) {
         await client.query(
           `INSERT INTO edge_inventory_responsibilities(
@@ -111,7 +121,9 @@ export class InventoryConfigurationService {
         );
       }
 
-      await client.query('DELETE FROM edge_inventory_actor_permissions WHERE event_id = $1', [snapshot.eventId]);
+      await client.query('DELETE FROM edge_inventory_actor_permissions WHERE event_id = $1', [
+        snapshot.eventId,
+      ]);
       for (const permission of snapshot.permissions) {
         await client.query(
           `INSERT INTO edge_inventory_actor_permissions(event_id, actor_id, permission)

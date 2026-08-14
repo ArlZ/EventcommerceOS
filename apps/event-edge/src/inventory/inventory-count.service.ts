@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
@@ -41,17 +41,19 @@ export interface StockCountResult {
 @Injectable()
 export class InventoryCountService {
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryAuthorizationService)
     private readonly authorization: InventoryAuthorizationService,
-    private readonly ledger: InventoryLedgerService,
+    @Inject(InventoryLedgerService) private readonly ledger: InventoryLedgerService,
   ) {}
 
   async create(input: CreateStockCountInput): Promise<StockCountResult> {
     return this.database.transaction(async (client) => {
       await this.authorization.require(client, input.eventId, input.actorId, 'COUNT_MANAGE');
-      const existing = await client.query<CountRow>('SELECT * FROM edge_stock_counts WHERE id = $1', [
-        input.id,
-      ]);
+      const existing = await client.query<CountRow>(
+        'SELECT * FROM edge_stock_counts WHERE id = $1',
+        [input.id],
+      );
       if (existing.rowCount === 1) {
         const row = existing.rows[0]!;
         if (

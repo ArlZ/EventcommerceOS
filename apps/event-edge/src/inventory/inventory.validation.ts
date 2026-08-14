@@ -75,7 +75,8 @@ function positiveIntegerString(value: unknown, label: string): string {
 
 function timestamp(value: unknown, label: string): string {
   const parsed = text(value, label);
-  if (Number.isNaN(Date.parse(parsed))) throw new BadRequestException(`${label} must be an RFC3339 timestamp`);
+  if (Number.isNaN(Date.parse(parsed)))
+    throw new BadRequestException(`${label} must be an RFC3339 timestamp`);
   return new Date(parsed).toISOString();
 }
 
@@ -97,7 +98,11 @@ export function parseInventoryConfiguration(value: unknown): InventoryConfigurat
     sourceActorId: text(input.sourceActorId, 'sourceActorId'),
     locations: array(input.locations, 'locations').map((item, index) => {
       const row = object(item, `locations[${index}]`);
-      return { id: text(row.id, 'location.id'), name: text(row.name, 'location.name'), type: text(row.type, 'location.type') };
+      return {
+        id: text(row.id, 'location.id'),
+        name: text(row.name, 'location.name'),
+        type: text(row.type, 'location.type'),
+      };
     }),
     skus: array(input.skus, 'skus').map((item, index) => {
       const row = object(item, `skus[${index}]`);
@@ -120,20 +125,38 @@ export function parseInventoryConfiguration(value: unknown): InventoryConfigurat
       return {
         soldSkuId: text(row.soldSkuId, 'recipe.soldSkuId'),
         componentSkuId: text(row.componentSkuId, 'recipe.componentSkuId'),
-        quantityPerSoldUnit: positiveIntegerString(row.quantityPerSoldUnit, 'recipe.quantityPerSoldUnit'),
+        quantityPerSoldUnit: positiveIntegerString(
+          row.quantityPerSoldUnit,
+          'recipe.quantityPerSoldUnit',
+        ),
       };
     }),
     alertConfigs: array(input.alertConfigs, 'alertConfigs').map((item, index) => {
       const row = object(item, `alertConfigs[${index}]`);
       return {
         id: text(row.id, 'alertConfig.id'),
-        inventoryLocationId: optionalText(row.inventoryLocationId, 'alertConfig.inventoryLocationId'),
+        inventoryLocationId: optionalText(
+          row.inventoryLocationId,
+          'alertConfig.inventoryLocationId',
+        ),
         skuId: text(row.skuId, 'alertConfig.skuId'),
-        absoluteMinimum: nonNegativeIntegerString(row.absoluteMinimum, 'alertConfig.absoluteMinimum'),
-        minutesCoverThreshold: number(row.minutesCoverThreshold, 'alertConfig.minutesCoverThreshold'),
+        absoluteMinimum: nonNegativeIntegerString(
+          row.absoluteMinimum,
+          'alertConfig.absoluteMinimum',
+        ),
+        minutesCoverThreshold: number(
+          row.minutesCoverThreshold,
+          'alertConfig.minutesCoverThreshold',
+        ),
         targetCoverMinutes: number(row.targetCoverMinutes, 'alertConfig.targetCoverMinutes'),
-        sourceSafetyStock: nonNegativeIntegerString(row.sourceSafetyStock, 'alertConfig.sourceSafetyStock'),
-        eventWideSafetyStock: nonNegativeIntegerString(row.eventWideSafetyStock, 'alertConfig.eventWideSafetyStock'),
+        sourceSafetyStock: nonNegativeIntegerString(
+          row.sourceSafetyStock,
+          'alertConfig.sourceSafetyStock',
+        ),
+        eventWideSafetyStock: nonNegativeIntegerString(
+          row.eventWideSafetyStock,
+          'alertConfig.eventWideSafetyStock',
+        ),
         imbalanceRatio: optionalNumber(row.imbalanceRatio, 'alertConfig.imbalanceRatio'),
       };
     }),
@@ -141,21 +164,36 @@ export function parseInventoryConfiguration(value: unknown): InventoryConfigurat
       const row = object(item, `responsibilities[${index}]`);
       return {
         id: text(row.id, 'responsibility.id'),
-        inventoryLocationId: optionalText(row.inventoryLocationId, 'responsibility.inventoryLocationId'),
+        inventoryLocationId: optionalText(
+          row.inventoryLocationId,
+          'responsibility.inventoryLocationId',
+        ),
         category: optionalText(row.category, 'responsibility.category'),
         responsibleActorId: text(row.responsibleActorId, 'responsibility.responsibleActorId'),
         escalationActorId: optionalText(row.escalationActorId, 'responsibility.escalationActorId'),
-        priority: row.priority === undefined ? undefined : positiveInteger(row.priority, 'responsibility.priority'),
+        priority:
+          row.priority === undefined
+            ? undefined
+            : positiveInteger(row.priority, 'responsibility.priority'),
       };
     }),
     permissions: array(input.permissions, 'permissions').map((item, index) => {
       const row = object(item, `permissions[${index}]`);
       const permission = text(row.permission, 'permission.permission');
-      const allowed = ['INVENTORY_MOVE', 'TRANSFER_MANAGE', 'COUNT_MANAGE', 'ALERT_MANAGE', 'INVENTORY_CONFIGURE'] as const;
+      const allowed = [
+        'INVENTORY_MOVE',
+        'TRANSFER_MANAGE',
+        'COUNT_MANAGE',
+        'ALERT_MANAGE',
+        'INVENTORY_CONFIGURE',
+      ] as const;
       if (!allowed.includes(permission as (typeof allowed)[number])) {
         throw new BadRequestException(`permissions[${index}].permission is invalid`);
       }
-      return { actorId: text(row.actorId, 'permission.actorId'), permission: permission as (typeof allowed)[number] };
+      return {
+        actorId: text(row.actorId, 'permission.actorId'),
+        permission: permission as (typeof allowed)[number],
+      };
     }),
   };
 }
@@ -163,7 +201,9 @@ export function parseInventoryConfiguration(value: unknown): InventoryConfigurat
 export function parseManualMovement(value: unknown): ManualMovementInput {
   const input = object(value, 'movement');
   const movementType = text(input.movementType, 'movementType');
-  if (!INVENTORY_MOVEMENT_TYPES.includes(movementType as (typeof INVENTORY_MOVEMENT_TYPES)[number])) {
+  if (
+    !INVENTORY_MOVEMENT_TYPES.includes(movementType as (typeof INVENTORY_MOVEMENT_TYPES)[number])
+  ) {
     throw new BadRequestException('movementType is invalid');
   }
   return {
@@ -185,20 +225,36 @@ export function parseCreateTransfer(value: unknown): CreateTransferInput {
   const input = object(value, 'transfer');
   const lines = array(input.lines, 'lines').map((item, index) => {
     const row = object(item, `lines[${index}]`);
-    return { skuId: text(row.skuId, 'line.skuId'), requestedQuantityBase: positiveIntegerString(row.requestedQuantityBase, 'line.requestedQuantityBase') };
+    return {
+      skuId: text(row.skuId, 'line.skuId'),
+      requestedQuantityBase: positiveIntegerString(
+        row.requestedQuantityBase,
+        'line.requestedQuantityBase',
+      ),
+    };
   });
   if (lines.length === 0) throw new BadRequestException('transfer lines must not be empty');
   return {
-    id: text(input.id, 'id'), eventId: text(input.eventId, 'eventId'),
-    sourceLocationId: text(input.sourceLocationId, 'sourceLocationId'), destinationLocationId: text(input.destinationLocationId, 'destinationLocationId'),
-    actorId: text(input.actorId, 'actorId'), reason: text(input.reason, 'reason'), requestedAt: timestamp(input.requestedAt, 'requestedAt'),
-    idempotencyKey: text(input.idempotencyKey, 'idempotencyKey'), lines,
+    id: text(input.id, 'id'),
+    eventId: text(input.eventId, 'eventId'),
+    sourceLocationId: text(input.sourceLocationId, 'sourceLocationId'),
+    destinationLocationId: text(input.destinationLocationId, 'destinationLocationId'),
+    actorId: text(input.actorId, 'actorId'),
+    reason: text(input.reason, 'reason'),
+    requestedAt: timestamp(input.requestedAt, 'requestedAt'),
+    idempotencyKey: text(input.idempotencyKey, 'idempotencyKey'),
+    lines,
   };
 }
 
 export function parseTransferTransition(value: unknown): TransferTransitionInput {
   const input = object(value, 'transfer transition');
-  return { actorId: text(input.actorId, 'actorId'), reason: optionalText(input.reason, 'reason'), assignedActorId: optionalText(input.assignedActorId, 'assignedActorId'), occurredAt: timestamp(input.occurredAt, 'occurredAt') };
+  return {
+    actorId: text(input.actorId, 'actorId'),
+    reason: optionalText(input.reason, 'reason'),
+    assignedActorId: optionalText(input.assignedActorId, 'assignedActorId'),
+    occurredAt: timestamp(input.occurredAt, 'occurredAt'),
+  };
 }
 
 export function parseTransferDispatch(value: unknown): TransferDispatchInput {
@@ -206,9 +262,13 @@ export function parseTransferDispatch(value: unknown): TransferDispatchInput {
   const base = parseTransferTransition(value);
   const quantities = array(input.quantities, 'quantities').map((item, index) => {
     const row = object(item, `quantities[${index}]`);
-    return { skuId: text(row.skuId, 'quantity.skuId'), quantityBase: positiveIntegerString(row.quantityBase, 'quantity.quantityBase') };
+    return {
+      skuId: text(row.skuId, 'quantity.skuId'),
+      quantityBase: positiveIntegerString(row.quantityBase, 'quantity.quantityBase'),
+    };
   });
-  if (quantities.length === 0) throw new BadRequestException('dispatch quantities must not be empty');
+  if (quantities.length === 0)
+    throw new BadRequestException('dispatch quantities must not be empty');
   return { ...base, quantities };
 }
 
@@ -216,12 +276,19 @@ export function parseTransferReceipt(value: unknown): TransferReceiptInput {
   const input = object(value, 'transfer receipt');
   const quantities = array(input.quantities, 'quantities').map((item, index) => {
     const row = object(item, `quantities[${index}]`);
-    return { skuId: text(row.skuId, 'quantity.skuId'), quantityBase: positiveIntegerString(row.quantityBase, 'quantity.quantityBase') };
+    return {
+      skuId: text(row.skuId, 'quantity.skuId'),
+      quantityBase: positiveIntegerString(row.quantityBase, 'quantity.quantityBase'),
+    };
   });
-  if (quantities.length === 0) throw new BadRequestException('receipt quantities must not be empty');
+  if (quantities.length === 0)
+    throw new BadRequestException('receipt quantities must not be empty');
   return {
-    actorId: text(input.actorId, 'actorId'), reason: optionalText(input.reason, 'reason'), receivedAt: timestamp(input.receivedAt, 'receivedAt'),
-    idempotencyKey: text(input.idempotencyKey, 'idempotencyKey'), quantities,
+    actorId: text(input.actorId, 'actorId'),
+    reason: optionalText(input.reason, 'reason'),
+    receivedAt: timestamp(input.receivedAt, 'receivedAt'),
+    idempotencyKey: text(input.idempotencyKey, 'idempotencyKey'),
+    quantities,
   };
 }
 
@@ -229,20 +296,45 @@ export function parseCreateStockCount(value: unknown): CreateStockCountInput {
   const input = object(value, 'stock count');
   const lines = array(input.lines, 'lines').map((item, index) => {
     const row = object(item, `lines[${index}]`);
-    return { skuId: text(row.skuId, 'line.skuId'), countedQuantityBase: nonNegativeIntegerString(row.countedQuantityBase, 'line.countedQuantityBase') };
+    return {
+      skuId: text(row.skuId, 'line.skuId'),
+      countedQuantityBase: nonNegativeIntegerString(
+        row.countedQuantityBase,
+        'line.countedQuantityBase',
+      ),
+    };
   });
   if (lines.length === 0) throw new BadRequestException('count lines must not be empty');
-  return { id: text(input.id, 'id'), eventId: text(input.eventId, 'eventId'), inventoryLocationId: text(input.inventoryLocationId, 'inventoryLocationId'), actorId: text(input.actorId, 'actorId'), reason: text(input.reason, 'reason'), openedAt: timestamp(input.openedAt, 'openedAt'), lines };
+  return {
+    id: text(input.id, 'id'),
+    eventId: text(input.eventId, 'eventId'),
+    inventoryLocationId: text(input.inventoryLocationId, 'inventoryLocationId'),
+    actorId: text(input.actorId, 'actorId'),
+    reason: text(input.reason, 'reason'),
+    openedAt: timestamp(input.openedAt, 'openedAt'),
+    lines,
+  };
 }
 
 export function parseCloseStockCount(value: unknown): CloseStockCountInput {
   const input = object(value, 'stock count close');
-  return { actorId: text(input.actorId, 'actorId'), reason: text(input.reason, 'reason'), closedAt: timestamp(input.closedAt, 'closedAt') };
+  return {
+    actorId: text(input.actorId, 'actorId'),
+    reason: text(input.reason, 'reason'),
+    closedAt: timestamp(input.closedAt, 'closedAt'),
+  };
 }
 
 export function parseAlertTransition(value: unknown): AlertTransitionInput {
   const input = object(value, 'alert transition');
   const toState = text(input.toState, 'toState');
-  if (!ALERT_STATES.includes(toState as (typeof ALERT_STATES)[number])) throw new BadRequestException('toState is invalid');
-  return { actorId: text(input.actorId, 'actorId'), toState: toState as AlertTransitionInput['toState'], assignedActorId: optionalText(input.assignedActorId, 'assignedActorId'), reason: optionalText(input.reason, 'reason'), occurredAt: timestamp(input.occurredAt, 'occurredAt') };
+  if (!ALERT_STATES.includes(toState as (typeof ALERT_STATES)[number]))
+    throw new BadRequestException('toState is invalid');
+  return {
+    actorId: text(input.actorId, 'actorId'),
+    toState: toState as AlertTransitionInput['toState'],
+    assignedActorId: optionalText(input.assignedActorId, 'assignedActorId'),
+    reason: optionalText(input.reason, 'reason'),
+    occurredAt: timestamp(input.occurredAt, 'occurredAt'),
+  };
 }

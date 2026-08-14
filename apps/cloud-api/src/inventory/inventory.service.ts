@@ -119,7 +119,14 @@ export class InventoryService {
         row.aggregate_type === event.aggregateType &&
         row.aggregate_id === event.aggregateId &&
         row.same_payload;
-      if (same) return 'DUPLICATE';
+      if (same) {
+        const unresolved = await client.query(
+          `SELECT 1 FROM inventory_reconciliation_exceptions
+           WHERE edge_event_id = $1 AND resolved_at IS NULL LIMIT 1`,
+          [event.id],
+        );
+        return unresolved.rowCount === 1 ? 'CONFLICT' : 'DUPLICATE';
+      }
       await this.exception(client, 'INVENTORY_EDGE_EVENT_REUSE', event.id, {
         aggregateId: event.aggregateId,
       });
@@ -197,6 +204,31 @@ export class InventoryService {
       }
       return;
     }
+
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `inventory-ledger-idempotency:${values.idempotencyKey}`,
+    ]);
+    const idempotencyExisting = await client.query<LedgerRow>(
+      `SELECT id, event_id, inventory_location_id, sku_id, movement_type,
+              quantity_delta::text, idempotency_key
+       FROM inventory_ledger WHERE idempotency_key = $1`,
+      [values.idempotencyKey],
+    );
+    if (idempotencyExisting.rowCount === 1) {
+      const row = idempotencyExisting.rows[0]!;
+      if (
+        row.id !== id ||
+        row.event_id !== values.eventId ||
+        row.inventory_location_id !== values.inventoryLocationId ||
+        row.sku_id !== values.skuId ||
+        row.movement_type !== values.movementType ||
+        row.quantity_delta !== values.quantityDeltaBase
+      ) {
+        throw new Error('ledger idempotency key reused with different content');
+      }
+      return;
+    }
+
     await client.query(
       `INSERT INTO inventory_ledger(
          id, event_id, inventory_location_id, sku_id, movement_type, quantity_delta,

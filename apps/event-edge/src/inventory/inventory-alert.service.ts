@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import {
@@ -77,7 +77,8 @@ interface AlertDbRow extends QueryResultRow {
 @Injectable()
 export class InventoryAlertService {
   constructor(
-    private readonly database: EdgeDatabaseService,
+    @Inject(EdgeDatabaseService) private readonly database: EdgeDatabaseService,
+    @Inject(InventoryAuthorizationService)
     private readonly authorization: InventoryAuthorizationService,
   ) {}
 
@@ -104,9 +105,11 @@ export class InventoryAlertService {
       }
       if (!eventWideDone.has(config.sku_id)) {
         eventWideDone.add(config.sku_id);
-        const eventWideConfig = alertConfigs.find(
-          (candidate) => candidate.sku_id === config.sku_id && candidate.inventory_location_id === null,
-        ) ?? config;
+        const eventWideConfig =
+          alertConfigs.find(
+            (candidate) =>
+              candidate.sku_id === config.sku_id && candidate.inventory_location_id === null,
+          ) ?? config;
         await this.evaluateEventWide(eventWideConfig, eventConfig, now);
       }
     }
@@ -131,7 +134,15 @@ export class InventoryAlertService {
          WHERE id = $1`,
         [alert.id, input.toState, input.occurredAt, input.assignedActorId ?? null],
       );
-      await this.history(client, alert.id, alert.state, input.toState, input.actorId, input.reason, input.occurredAt);
+      await this.history(
+        client,
+        alert.id,
+        alert.state,
+        input.toState,
+        input.actorId,
+        input.reason,
+        input.occurredAt,
+      );
       const updated = await this.alert(client, alert.id, false);
       await this.queueCloud(client, updated);
       return this.map(updated);
@@ -160,7 +171,12 @@ export class InventoryAlertService {
           alert.sku_id,
         );
         if (!responsibility?.escalation_actor_id) continue;
-        await this.enqueueNotification(client, alert, responsibility.escalation_actor_id, 'escalation');
+        await this.enqueueNotification(
+          client,
+          alert,
+          responsibility.escalation_actor_id,
+          'escalation',
+        );
         await client.query(
           `UPDATE edge_inventory_alerts
            SET escalate_at = $2::timestamptz + ($3 || ' minutes')::interval, updated_at = now()
@@ -202,8 +218,17 @@ export class InventoryAlertService {
        WHERE t.event_id = $1 AND t.destination_location_id = $2 AND l.sku_id = $3 AND t.state = 'IN_TRANSIT'`,
       [config.event_id, locationId, config.sku_id],
     );
-    const velocity = await this.velocity(config.event_id, locationId, config.sku_id, eventConfig, now);
-    const remainingMinutes = Math.max(0, (eventConfig.event_end_at.getTime() - now.getTime()) / 60_000);
+    const velocity = await this.velocity(
+      config.event_id,
+      locationId,
+      config.sku_id,
+      eventConfig,
+      now,
+    );
+    const remainingMinutes = Math.max(
+      0,
+      (eventConfig.event_end_at.getTime() - now.getTime()) / 60_000,
+    );
     const risk = evaluateStockRisk({
       availableBase: onHand,
       absoluteMinimumBase: BigInt(config.absolute_minimum),
@@ -214,7 +239,11 @@ export class InventoryAlertService {
 
     let localType: 'LOW_STOCK' | 'STOCKOUT_RISK' | 'CRITICAL_STOCKOUT_RISK' | null = null;
     let severity: 'LOW' | 'URGENT' | 'CRITICAL' = 'LOW';
-    if (onHand <= 0n || (risk.minutesOfCover !== null && risk.minutesOfCover <= Math.max(5, Number(config.minutes_cover_threshold) / 2))) {
+    if (
+      onHand <= 0n ||
+      (risk.minutesOfCover !== null &&
+        risk.minutesOfCover <= Math.max(5, Number(config.minutes_cover_threshold) / 2))
+    ) {
       localType = 'CRITICAL_STOCKOUT_RISK';
       severity = 'CRITICAL';
     } else if (risk.belowCoverThreshold || risk.projectedStockoutBeforeEventEnd) {
@@ -249,13 +278,23 @@ export class InventoryAlertService {
         category: config.category,
         available: onHand,
         cover: risk.minutesOfCover,
-        sourceLocationId: suggested > 0n ? source?.inventory_location_id ?? null : null,
+        sourceLocationId: suggested > 0n ? (source?.inventory_location_id ?? null) : null,
         suggestedQuantity: suggested,
         eventConfig,
         now,
-        details: { inboundBase: inbound.toString(), velocityPerMinute: velocity, eventMinutesRemaining: remainingMinutes },
+        details: {
+          inboundBase: inbound.toString(),
+          velocityPerMinute: velocity,
+          eventMinutesRemaining: remainingMinutes,
+        },
       });
-      await this.resolveOtherLocalRisk(config.event_id, locationId, config.sku_id, localTypes.filter((type) => type !== localType), now);
+      await this.resolveOtherLocalRisk(
+        config.event_id,
+        locationId,
+        config.sku_id,
+        localTypes.filter((type) => type !== localType),
+        now,
+      );
     } else {
       await this.resolveOtherLocalRisk(config.event_id, locationId, config.sku_id, localTypes, now);
     }
@@ -278,7 +317,10 @@ export class InventoryAlertService {
         details: { inboundBase: inbound.toString(), sourceAvailableBase: source?.available ?? '0' },
       });
     } else {
-      await this.resolveByDedupe(`STOCK_IMBALANCE:${config.event_id}:${locationId}:${config.sku_id}`, now);
+      await this.resolveByDedupe(
+        `STOCK_IMBALANCE:${config.event_id}:${locationId}:${config.sku_id}`,
+        now,
+      );
     }
   }
 
@@ -299,7 +341,10 @@ export class InventoryAlertService {
       [config.event_id, config.sku_id],
     );
     const velocity = await this.velocity(config.event_id, null, config.sku_id, eventConfig, now);
-    const remainingMinutes = Math.max(0, (eventConfig.event_end_at.getTime() - now.getTime()) / 60_000);
+    const remainingMinutes = Math.max(
+      0,
+      (eventConfig.event_end_at.getTime() - now.getTime()) / 60_000,
+    );
     const effective = onHand + inTransit;
     const cover = minutesOfCover(effective, velocity);
     const projectedDemand = BigInt(Math.ceil(velocity * remainingMinutes));
@@ -321,7 +366,13 @@ export class InventoryAlertService {
         suggestedQuantity: 0n,
         eventConfig,
         now,
-        details: { onHandBase: onHand.toString(), inTransitBase: inTransit.toString(), projectedDemandBase: projectedDemand.toString(), safetyStockBase: safety.toString(), velocityPerMinute: velocity },
+        details: {
+          onHandBase: onHand.toString(),
+          inTransitBase: inTransit.toString(),
+          projectedDemandBase: projectedDemand.toString(),
+          safetyStockBase: safety.toString(),
+          velocityPerMinute: velocity,
+        },
       });
     } else {
       await this.resolveByDedupe(dedupe, now);
@@ -348,7 +399,10 @@ export class InventoryAlertService {
       values,
     );
     return blendedVelocityPerMinute(
-      rows.map((row) => ({ occurredAtEpochMs: row.occurred_at.getTime(), quantityBase: BigInt(row.quantity) })),
+      rows.map((row) => ({
+        occurredAtEpochMs: row.occurred_at.getTime(),
+        quantityBase: BigInt(row.quantity),
+      })),
       now.getTime(),
       {
         shortWindowMinutes: config.short_window_minutes,
@@ -358,7 +412,11 @@ export class InventoryAlertService {
     );
   }
 
-  private async bestSource(eventId: string, destinationId: string, skuId: string): Promise<SourceRow | null> {
+  private async bestSource(
+    eventId: string,
+    destinationId: string,
+    skuId: string,
+  ): Promise<SourceRow | null> {
     const rows = await this.database.query<SourceRow>(
       `SELECT p.inventory_location_id,
               p.on_hand::text AS available,
@@ -410,7 +468,16 @@ export class InventoryAlertService {
              suggested_transfer_quantity = $6, responsible_actor_id = $7,
              details = $8::jsonb, updated_at = now()
            WHERE id = $1`,
-          [existing.rows[0]!.id, input.severity, input.available.toString(), input.cover, input.sourceLocationId, input.suggestedQuantity.toString(), responsibility?.responsible_actor_id ?? null, JSON.stringify(input.details)],
+          [
+            existing.rows[0]!.id,
+            input.severity,
+            input.available.toString(),
+            input.cover,
+            input.sourceLocationId,
+            input.suggestedQuantity.toString(),
+            responsibility?.responsible_actor_id ?? null,
+            JSON.stringify(input.details),
+          ],
         );
         return;
       }
@@ -422,19 +489,55 @@ export class InventoryAlertService {
            suggested_transfer_quantity, responsible_actor_id, opened_at, escalate_at, details
          ) VALUES ($1,$2,$3,$4,'OPEN',$5,$6,$7,$8,$9,$10,$11,$12,$13,
                    $13::timestamptz + ($14 || ' minutes')::interval,$15::jsonb)`,
-        [id, input.dedupeKey, input.type, input.severity, input.eventId, input.inventoryLocationId, input.skuId, input.available.toString(), input.cover, input.sourceLocationId, input.suggestedQuantity.toString(), responsibility?.responsible_actor_id ?? null, input.now.toISOString(), input.eventConfig.escalation_minutes, JSON.stringify(input.details)],
+        [
+          id,
+          input.dedupeKey,
+          input.type,
+          input.severity,
+          input.eventId,
+          input.inventoryLocationId,
+          input.skuId,
+          input.available.toString(),
+          input.cover,
+          input.sourceLocationId,
+          input.suggestedQuantity.toString(),
+          responsibility?.responsible_actor_id ?? null,
+          input.now.toISOString(),
+          input.eventConfig.escalation_minutes,
+          JSON.stringify(input.details),
+        ],
       );
-      await this.history(client, id, null, 'OPEN', null, 'inventory risk detected', input.now.toISOString());
+      await this.history(
+        client,
+        id,
+        null,
+        'OPEN',
+        null,
+        'inventory risk detected',
+        input.now.toISOString(),
+      );
       const alert = await this.alert(client, id, false);
       if (responsibility?.responsible_actor_id) {
-        await this.enqueueNotification(client, alert, responsibility.responsible_actor_id, 'opened');
+        await this.enqueueNotification(
+          client,
+          alert,
+          responsibility.responsible_actor_id,
+          'opened',
+        );
       }
       await this.queueCloud(client, alert);
     });
   }
 
-  private async resolveOtherLocalRisk(eventId: string, locationId: string, skuId: string, types: string[], now: Date): Promise<void> {
-    for (const type of types) await this.resolveByDedupe(`${type}:${eventId}:${locationId}:${skuId}`, now);
+  private async resolveOtherLocalRisk(
+    eventId: string,
+    locationId: string,
+    skuId: string,
+    types: string[],
+    now: Date,
+  ): Promise<void> {
+    for (const type of types)
+      await this.resolveByDedupe(`${type}:${eventId}:${locationId}:${skuId}`, now);
   }
 
   private async resolveByDedupe(dedupeKey: string, now: Date): Promise<void> {
@@ -449,12 +552,25 @@ export class InventoryAlertService {
         `UPDATE edge_inventory_alerts SET state = 'RESOLVED', resolved_at = $2, updated_at = now() WHERE id = $1`,
         [alert.id, now.toISOString()],
       );
-      await this.history(client, alert.id, alert.state, 'RESOLVED', null, 'inventory risk cleared', now.toISOString());
+      await this.history(
+        client,
+        alert.id,
+        alert.state,
+        'RESOLVED',
+        null,
+        'inventory risk cleared',
+        now.toISOString(),
+      );
       await this.queueCloud(client, await this.alert(client, alert.id, false));
     });
   }
 
-  private async responsibility(client: PoolClient, eventId: string, locationId: string | null, skuId: string): Promise<ResponsibilityRow | null> {
+  private async responsibility(
+    client: PoolClient,
+    eventId: string,
+    locationId: string | null,
+    skuId: string,
+  ): Promise<ResponsibilityRow | null> {
     const rows = await client.query<ResponsibilityRow>(
       `SELECT r.responsible_actor_id, r.escalation_actor_id
        FROM edge_inventory_responsibilities r
@@ -471,15 +587,38 @@ export class InventoryAlertService {
     return rows.rows[0] ?? null;
   }
 
-  private async enqueueNotification(client: PoolClient, alert: AlertDbRow, recipient: string, reason: string): Promise<void> {
+  private async enqueueNotification(
+    client: PoolClient,
+    alert: AlertDbRow,
+    recipient: string,
+    reason: string,
+  ): Promise<void> {
     await client.query(
       `INSERT INTO edge_inventory_notification_outbox(id, alert_id, channel, recipient_actor_id, payload)
        VALUES ($1,$2,'IN_APP',$3,$4::jsonb)`,
-      [randomUUID(), alert.id, recipient, JSON.stringify({ alertId: alert.id, type: alert.alert_type, severity: alert.severity, reason })],
+      [
+        randomUUID(),
+        alert.id,
+        recipient,
+        JSON.stringify({
+          alertId: alert.id,
+          type: alert.alert_type,
+          severity: alert.severity,
+          reason,
+        }),
+      ],
     );
   }
 
-  private async history(client: PoolClient, alertId: string, from: string | null, to: string, actorId: string | null, reason: string | undefined, occurredAt: string): Promise<void> {
+  private async history(
+    client: PoolClient,
+    alertId: string,
+    from: string | null,
+    to: string,
+    actorId: string | null,
+    reason: string | undefined,
+    occurredAt: string,
+  ): Promise<void> {
     await client.query(
       `INSERT INTO edge_inventory_alert_history(id, alert_id, from_state, to_state, actor_id, reason, occurred_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
