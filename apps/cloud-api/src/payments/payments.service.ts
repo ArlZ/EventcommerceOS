@@ -125,7 +125,13 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
          VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (id) DO NOTHING`,
-        [request.paymentId, request.eventId, request.orderId, request.amountMinor, request.currency],
+        [
+          request.paymentId,
+          request.eventId,
+          request.orderId,
+          request.amountMinor,
+          request.currency,
+        ],
       );
 
       const payment = await client.query<PaymentRow>(
@@ -399,7 +405,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
              resolved_at=CASE WHEN $2 IN ('SUCCEEDED','FAILED') THEN now() ELSE resolved_at END,
              updated_at=now()
          WHERE id=$1`,
-        [paymentAttemptId, result.status, result.providerReference ?? null, result.failureCode ?? null],
+        [
+          paymentAttemptId,
+          result.status,
+          result.providerReference ?? null,
+          result.failureCode ?? null,
+        ],
       );
 
       if (['INITIATED', 'PENDING', 'UNKNOWN'].includes(result.status)) {
