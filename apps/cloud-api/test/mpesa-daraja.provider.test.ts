@@ -118,6 +118,21 @@ describe('MpesaDarajaProvider', () => {
     expect(calls).toBe(2);
   });
 
+  it('treats an HTTP 408 after STK dispatch as ambiguous rather than FAILED', async () => {
+    let calls = 0;
+    const http: typeof fetch = async (url) => {
+      calls += 1;
+      if (String(url).includes('/oauth/')) {
+        return jsonResponse({ access_token: 'access-token', expires_in: '3599' });
+      }
+      return jsonResponse({ errorCode: 'REQUEST_TIMEOUT' }, 408);
+    };
+    const provider = new MpesaDarajaProvider(environment, http);
+
+    await expect(provider.initiate(input())).rejects.toThrow(/ambiguous M-PESA gateway failure/);
+    expect(calls).toBe(2);
+  });
+
   it('queries by CheckoutRequestID and resolves authenticated success', async () => {
     const calls: RecordedRequest[] = [];
     const http: typeof fetch = async (url, init) => {
