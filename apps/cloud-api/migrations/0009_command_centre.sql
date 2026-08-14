@@ -4,24 +4,19 @@ ALTER TABLE sync_order_state
   ADD COLUMN IF NOT EXISTS lines jsonb,
   ADD COLUMN IF NOT EXISTS occurred_at timestamptz;
 
-WITH latest_order_event AS (
-  SELECT DISTINCT ON (aggregate_id)
-         aggregate_id,
-         COALESCE(NULLIF(payload->>'eventId', ''), 'legacy:' || device_id) AS business_event_id,
-         NULLIF(payload->>'salesLocationId', '') AS sales_location_id,
-         CASE WHEN jsonb_typeof(payload->'lines') = 'array' THEN payload->'lines' ELSE '[]'::jsonb END AS lines,
-         occurred_at
-  FROM sync_processed_events
-  WHERE aggregate_type = 'ORDER'
-  ORDER BY aggregate_id, sequence DESC
-)
 UPDATE sync_order_state state
-SET event_id = latest.business_event_id,
-    sales_location_id = latest.sales_location_id,
-    lines = latest.lines,
-    occurred_at = latest.occurred_at
-FROM latest_order_event latest
-WHERE state.order_id = latest.aggregate_id
+SET event_id = COALESCE(NULLIF(source.payload->>'eventId', ''), 'legacy:' || source.device_id),
+    sales_location_id = NULLIF(source.payload->>'salesLocationId', ''),
+    lines = CASE
+      WHEN jsonb_typeof(source.payload->'lines') = 'array' THEN source.payload->'lines'
+      ELSE '[]'::jsonb
+    END,
+    occurred_at = source.occurred_at
+FROM sync_processed_events source
+WHERE source.aggregate_type = 'ORDER'
+  AND source.aggregate_id = state.order_id
+  AND source.device_id = state.device_id
+  AND source.sequence = state.last_sequence
   AND (state.event_id IS NULL OR state.lines IS NULL OR state.occurred_at IS NULL);
 
 ALTER TABLE sync_order_state
