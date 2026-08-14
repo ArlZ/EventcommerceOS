@@ -80,6 +80,33 @@ describe('event simulation release evidence', () => {
     const result = new EventSimulation(config!).run();
     expect(result.metrics.unknownPaymentsCreated).toBeGreaterThan(0);
     expect(result.metrics.unknownPaymentsAtEnd).toBe(0);
+    expect(result.metrics.completedPayments).toBe(result.metrics.committedOrders);
+  });
+
+  it('keeps operational notification outage independent from payment truth', () => {
+    const config = requiredScenarios().find(
+      (scenario) => scenario.name === 'notification-provider-outage',
+    );
+    expect(config).toBeDefined();
+    const result = new EventSimulation(config!).run();
+    expect(result.metrics.notificationDeliveryFailures).toBeGreaterThan(0);
+    expect(result.metrics.unknownPaymentsCreated).toBe(0);
+    expect(result.metrics.unknownPaymentsAtEnd).toBe(0);
+    expect(result.metrics.lostCommittedOrders).toBe(0);
+  });
+
+  it('exercises a combined topology materially above the controlled pilot scale', () => {
+    const config = requiredScenarios().find(
+      (scenario) => scenario.name === 'combined-peak-above-pilot-target',
+    );
+    expect(config).toBeDefined();
+    const result = new EventSimulation(config!).run();
+    expect(config!.bars * config!.registersPerBar).toBeGreaterThanOrEqual(50);
+    expect(result.metrics.committedOrders).toBeGreaterThan(4_000);
+    expect(result.metrics.maxSyncBacklog).toBeGreaterThan(1_000);
+    expect(result.metrics.duplicateSyncDeliveries).toBeGreaterThan(0);
+    expect(result.metrics.duplicateProviderSignals).toBeGreaterThan(0);
+    expect(result.metrics.edgeCloudConverged).toBe(true);
   });
 
   it('passes invariant assertions for the required modeled suite', () => {
