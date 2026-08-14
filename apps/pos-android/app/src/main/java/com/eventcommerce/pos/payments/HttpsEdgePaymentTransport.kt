@@ -15,9 +15,11 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
 
   override suspend fun initiate(
     attempt: LocalPaymentAttempt,
-    customerPhone: String,
+    customerPhone: String?,
   ): EdgePaymentState = withContext(Dispatchers.IO) {
-    require(customerPhone.isNotBlank()) { "customer phone must not be blank" }
+    if (attempt.providerId == "mpesa") {
+      require(!customerPhone.isNullOrBlank()) { "M-PESA customer phone must not be blank" }
+    }
     val payload = JSONObject()
       .put("eventId", attempt.eventId)
       .put("paymentId", attempt.paymentId)
@@ -27,9 +29,9 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
       .put("idempotencyKey", attempt.idempotencyKey)
       .put("amountMinor", attempt.amountMinor)
       .put("currency", attempt.currency)
-      .put("customerPhone", customerPhone.trim())
-      .put("accountReference", attempt.orderId)
+      .put("accountReference", attempt.id)
       .put("description", "Event purchase")
+    customerPhone?.trim()?.takeIf { it.isNotEmpty() }?.let { payload.put("customerPhone", it) }
     post("$baseUrl/payments/initiate", payload)
   }
 
