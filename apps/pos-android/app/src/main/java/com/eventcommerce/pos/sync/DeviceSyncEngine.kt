@@ -47,6 +47,9 @@ class DeviceSyncEngine(
         acknowledgement.edgeBacklogCount,
         clock(),
       )
+      if (acknowledgement.hasConflict) {
+        throw IllegalStateException("Edge reconciliation required before sync can advance")
+      }
       DeviceSyncResult(
         attempted = pending.size,
         remaining = queue.countAfter(acknowledgement.acceptedThroughSequence),
