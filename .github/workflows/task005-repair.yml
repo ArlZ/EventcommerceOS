@@ -1,0 +1,270 @@
+name: Task 005 One Shot Repair
+on:
+  push:
+    branches: [task/005-inventory-ledger-alerts]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task/005-inventory-ledger-alerts
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply deterministic repairs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+
+          def load(path):
+              p = root / path
+              return p, p.read_text()
+
+          def save(path, text):
+              (root / path).write_text(text)
+
+          # Explicit DI tokens: Vitest/Nest cannot rely on emitted constructor metadata here.
+          files = [
+              'apps/event-edge/src/inventory/inventory-alert.service.ts',
+              'apps/event-edge/src/inventory/inventory-cloud-forwarder.service.ts',
+              'apps/event-edge/src/inventory/inventory-configuration.service.ts',
+              'apps/event-edge/src/inventory/inventory-count.service.ts',
+              'apps/event-edge/src/inventory/inventory-ledger.service.ts',
+              'apps/event-edge/src/inventory/inventory-notification.service.ts',
+              'apps/event-edge/src/inventory/inventory-sale-consumer.service.ts',
+              'apps/event-edge/src/inventory/inventory-transfer.service.ts',
+              'apps/event-edge/src/inventory/inventory.controller.ts',
+              'apps/event-edge/src/sync/device-sync.controller.ts',
+          ]
+
+          token_types = [
+              'EdgeDatabaseService',
+              'InventoryAuthorizationService',
+              'InventoryLedgerService',
+              'InventoryNotificationTransport',
+              'InventoryConfigurationService',
+              'InventoryTransferService',
+              'InventoryCountService',
+              'InventoryAlertService',
+              'InventoryNotificationService',
+              'InventorySaleConsumerService',
+          ]
+
+          for path in files:
+              p, text = load(path)
+              # Add Inject to the first @nestjs/common named import when needed.
+              m = re.search(r"import \{([^}]*)\} from '@nestjs/common';", text)
+              if not m:
+                  raise SystemExit(f'No Nest import found in {path}')
+              names = [x.strip() for x in m.group(1).split(',')]
+              if 'Inject' not in names:
+                  names.insert(0, 'Inject')
+                  replacement = "import { " + ', '.join(names) + " } from '@nestjs/common';"
+                  text = text[:m.start()] + replacement + text[m.end():]
+
+              for typ in token_types:
+                  bare = f'private readonly '
+                  # Decorate any constructor property whose declared type is the token and is not already decorated.
+                  text = re.sub(
+                      rf'(?<!@Inject\({re.escape(typ)}\) )private readonly (\w+): {re.escape(typ)}',
+                      rf'@Inject({typ}) private readonly \1: {typ}',
+                      text,
+                  )
+              save(path, text)
+
+          # Cloud: sticky conflicts + advisory-lock/preflight idempotency check so a known conflict never aborts PostgreSQL.
+          path = 'apps/cloud-api/src/inventory/inventory.service.ts'
+          p, text = load(path)
+
+          old = """      if (same) return 'DUPLICATE';
+      await this.exception(client, 'INVENTORY_EDGE_EVENT_REUSE', event.id, {
+"""
+          new = """      if (same) {
+        const unresolved = await client.query(
+          `SELECT 1 FROM inventory_reconciliation_exceptions
+           WHERE edge_event_id = $1 AND resolved_at IS NULL LIMIT 1`,
+          [event.id],
+        );
+        return unresolved.rowCount === 1 ? 'CONFLICT' : 'DUPLICATE';
+      }
+      await this.exception(client, 'INVENTORY_EDGE_EVENT_REUSE', event.id, {
+"""
+          if old not in text:
+              raise SystemExit('Cloud sticky-conflict anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = """    if (existing.rowCount === 1) {
+      const row = existing.rows[0]!;
+      if (
+        row.event_id !== values.eventId ||
+        row.inventory_location_id !== values.inventoryLocationId ||
+        row.sku_id !== values.skuId ||
+        row.movement_type !== values.movementType ||
+        row.quantity_delta !== values.quantityDeltaBase ||
+        row.idempotency_key !== values.idempotencyKey
+      ) {
+        throw new Error('ledger entry ID reused with different content');
+      }
+      return;
+    }
+    await client.query(
+      `INSERT INTO inventory_ledger(
+"""
+          new = """    if (existing.rowCount === 1) {
+      const row = existing.rows[0]!;
+      if (
+        row.event_id !== values.eventId ||
+        row.inventory_location_id !== values.inventoryLocationId ||
+        row.sku_id !== values.skuId ||
+        row.movement_type !== values.movementType ||
+        row.quantity_delta !== values.quantityDeltaBase ||
+        row.idempotency_key !== values.idempotencyKey
+      ) {
+        throw new Error('ledger entry ID reused with different content');
+      }
+      return;
+    }
+
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+      `inventory-ledger-idempotency:${values.idempotencyKey}`,
+    ]);
+    const idempotencyExisting = await client.query<LedgerRow>(
+      `SELECT id, event_id, inventory_location_id, sku_id, movement_type,
+              quantity_delta::text, idempotency_key
+       FROM inventory_ledger WHERE idempotency_key = $1`,
+      [values.idempotencyKey],
+    );
+    if (idempotencyExisting.rowCount === 1) {
+      const row = idempotencyExisting.rows[0]!;
+      if (
+        row.id !== id ||
+        row.event_id !== values.eventId ||
+        row.inventory_location_id !== values.inventoryLocationId ||
+        row.sku_id !== values.skuId ||
+        row.movement_type !== values.movementType ||
+        row.quantity_delta !== values.quantityDeltaBase
+      ) {
+        throw new Error('ledger idempotency key reused with different content');
+      }
+      return;
+    }
+
+    await client.query(
+      `INSERT INTO inventory_ledger(
+"""
+          if old not in text:
+              raise SystemExit('Cloud ledger preflight anchor missing')
+          text = text.replace(old, new, 1)
+          save(path, text)
+
+          # Alert tests must seed sales velocity through the real sale consumer, not privileged manual SALE movements.
+          path = 'apps/event-edge/test/inventory-alerts.integration.test.ts'
+          p, text = load(path)
+          text = text.replace(
+              "import { InventoryNotificationService } from '../src/inventory/inventory-notification.service';\n",
+              "import { InventoryNotificationService } from '../src/inventory/inventory-notification.service';\nimport { InventorySaleConsumerService } from '../src/inventory/inventory-sale-consumer.service';\n",
+          )
+          text = text.replace(
+              "  beerSkuId,\n",
+              "  beerSkuId,\n  closedSale,\n",
+              1,
+          )
+          text = text.replace(
+              "  let ledger: InventoryLedgerService;\n",
+              "  let ledger: InventoryLedgerService;\n  let sales: InventorySaleConsumerService;\n",
+              1,
+          )
+          text = text.replace(
+              "    ledger = moduleRef.get(InventoryLedgerService);\n",
+              "    ledger = moduleRef.get(InventoryLedgerService);\n    sales = moduleRef.get(InventorySaleConsumerService);\n",
+              1,
+          )
+
+          old = """    await ledger.postManual({
+      id: 'alert-sale-history',
+      eventId: inventoryEventId,
+      inventoryLocationId: mainLocationId,
+      skuId: beerSkuId,
+      movementType: 'SALE',
+      quantityDeltaBase: '-30',
+      actorId: operatorActorId,
+      reason: 'recent sales velocity',
+      occurredAt: '2026-08-14T07:55:00.000Z',
+      idempotencyKey: 'alert-sale-history',
+    });
+"""
+          new = """    await sales.consume([
+      closedSale({
+        eventInstanceId: 'alert-sale-101',
+        occurredAt: '2026-08-14T07:55:00.000Z',
+        lines: [{ skuId: beerSkuId, quantity: 30 }],
+      }),
+    ]);
+"""
+          if old not in text:
+              raise SystemExit('First alert SALE fixture anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = """    await ledger.postManual({
+      id: 'workflow-sale',
+      eventId: inventoryEventId,
+      inventoryLocationId: mainLocationId,
+      skuId: beerSkuId,
+      movementType: 'SALE',
+      quantityDeltaBase: '-20',
+      actorId: operatorActorId,
+      reason: 'create risk',
+      occurredAt: '2026-08-14T07:55:00.000Z',
+      idempotencyKey: 'workflow-sale',
+    });
+"""
+          new = """    await sales.consume([
+      closedSale({
+        eventInstanceId: 'workflow-sale-102',
+        occurredAt: '2026-08-14T07:55:00.000Z',
+        lines: [{ skuId: beerSkuId, quantity: 20 }],
+      }),
+    ]);
+"""
+          if old not in text:
+              raise SystemExit('Second alert SALE fixture anchor missing')
+          text = text.replace(old, new, 1)
+          save(path, text)
+
+          tmp = root / 'apps/event-edge/test/inventory-alerts.integration.test.ts.tmp'
+          if tmp.exists():
+              tmp.unlink()
+
+          # Remove this one-shot workflow from the resulting commit.
+          helper = root / '.github/workflows/task005-repair.yml'
+          if helper.exists():
+              helper.unlink()
+          PY
+      - name: Resolve workspace and format touched source
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm exec prettier --write \
+            apps/cloud-api/src/inventory/inventory.service.ts \
+            apps/event-edge/src/inventory/*.ts \
+            apps/event-edge/src/sync/device-sync.controller.ts \
+            apps/event-edge/test/inventory-alerts.integration.test.ts
+      - name: Commit repaired branch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m "Repair Task 005 injection and conflict semantics"
+          git push origin HEAD:task/005-inventory-ledger-alerts
