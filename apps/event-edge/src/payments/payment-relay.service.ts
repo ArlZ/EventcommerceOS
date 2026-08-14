@@ -1,11 +1,12 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { QueryResultRow } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import type {
   InitiatePaymentRequest,
   InitiatePaymentResponse,
   PaymentAttemptSnapshot,
   PaymentAttemptState,
 } from '@event-commerce/contracts';
+import { requirePaymentAttemptTransition } from '@event-commerce/domain';
 import { EdgeDatabaseService } from '../database/database.service';
 import { PaymentCloudTransport } from './payment-cloud.transport';
 import { maskEdgeMsisdn } from './payment.validation';
@@ -182,28 +183,47 @@ export class PaymentRelayService {
   }
 
   private async applyCloudSnapshot(cloud: PaymentAttemptSnapshot): Promise<void> {
-    await this.database.query(
-      `UPDATE edge_payment_attempts SET
-         state = $2,
-         masked_payer_reference = COALESCE($3, masked_payer_reference),
-         provider_request_id = $4,
-         provider_receipt_reference = $5,
-         reconciliation_required = $6,
-         cloud_seen = true,
-         relay_status = 'ACKNOWLEDGED',
-         last_relay_error = NULL,
-         next_refresh_at = CASE WHEN $6 THEN clock_timestamp() + interval '5 seconds' ELSE NULL END,
-         updated_at = clock_timestamp()
-       WHERE attempt_id = $1`,
-      [
-        cloud.attemptId,
-        cloud.state,
-        cloud.maskedPayerReference,
-        cloud.providerRequestId,
-        cloud.providerReceiptReference,
-        cloud.reconciliationRequired,
-      ],
-    );
+    await this.database.transaction(async (client) => {
+      const current = await this.rowWithClient(client, cloud.attemptId, true);
+      try {
+        requirePaymentAttemptTransition(current.state, cloud.state);
+      } catch {
+        await client.query(
+          `UPDATE edge_payment_attempts SET
+             relay_status = 'UNAVAILABLE',
+             last_relay_error = 'CLOUD_PAYMENT_STATE_CONFLICT',
+             reconciliation_required = true,
+             next_refresh_at = clock_timestamp() + interval '5 seconds',
+             updated_at = clock_timestamp()
+           WHERE attempt_id = $1`,
+          [cloud.attemptId],
+        );
+        return;
+      }
+
+      await client.query(
+        `UPDATE edge_payment_attempts SET
+           state = $2,
+           masked_payer_reference = COALESCE($3, masked_payer_reference),
+           provider_request_id = COALESCE($4, provider_request_id),
+           provider_receipt_reference = COALESCE($5, provider_receipt_reference),
+           reconciliation_required = $6,
+           cloud_seen = true,
+           relay_status = 'ACKNOWLEDGED',
+           last_relay_error = NULL,
+           next_refresh_at = CASE WHEN $6 THEN clock_timestamp() + interval '5 seconds' ELSE NULL END,
+           updated_at = clock_timestamp()
+         WHERE attempt_id = $1`,
+        [
+          cloud.attemptId,
+          cloud.state,
+          cloud.maskedPayerReference,
+          cloud.providerRequestId,
+          cloud.providerReceiptReference,
+          cloud.reconciliationRequired,
+        ],
+      );
+    });
   }
 
   private async markCloudUnavailable(
@@ -241,11 +261,12 @@ export class PaymentRelayService {
   }
 
   private async rowWithClient(
-    client: import('pg').PoolClient,
+    client: PoolClient,
     attemptId: string,
+    lock = false,
   ): Promise<EdgeAttemptRow> {
     const result = await client.query<EdgeAttemptRow>(
-      `SELECT * FROM edge_payment_attempts WHERE attempt_id = $1`,
+      `SELECT * FROM edge_payment_attempts WHERE attempt_id = $1${lock ? ' FOR UPDATE' : ''}`,
       [attemptId],
     );
     const row = result.rows[0];
