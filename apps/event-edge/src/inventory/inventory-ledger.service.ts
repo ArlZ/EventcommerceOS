@@ -78,8 +78,19 @@ export class InventoryLedgerService {
     });
   }
 
+  async lockStock(
+    client: PoolClient,
+    eventId: string,
+    inventoryLocationId: string,
+    skuId: string,
+  ): Promise<void> {
+    const lockKey = `${eventId}\u0000${inventoryLocationId}\u0000${skuId}`;
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey]);
+  }
+
   async insert(client: PoolClient, input: LedgerInput): Promise<LedgerRow> {
     requireInventoryDelta(input.movementType, input.quantityDeltaBase);
+    await this.lockStock(client, input.eventId, input.inventoryLocationId, input.skuId);
     const id = input.id ?? randomUUID();
     const inserted = await client.query<LedgerRow>(
       `INSERT INTO edge_inventory_ledger(
