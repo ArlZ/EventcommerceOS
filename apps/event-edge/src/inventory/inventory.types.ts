@@ -1,4 +1,8 @@
-import type { InventoryAlertState, InventoryMovementType, StockTransferState } from '@event-commerce/domain';
+import type {
+  InventoryAlertState,
+  InventoryMovementType,
+  StockTransferState,
+} from '@event-commerce/domain';
 
 export interface InventoryLocationInput {
   id: string;
@@ -9,7 +13,7 @@ export interface InventoryLocationInput {
 export interface InventorySkuInput {
   skuId: string;
   name: string;
-  category?: string;
+  category?: string | undefined;
   baseUnit: string;
 }
 
@@ -26,23 +30,23 @@ export interface SalesInventoryMappingInput {
 
 export interface InventoryAlertConfigInput {
   id: string;
-  inventoryLocationId?: string;
+  inventoryLocationId?: string | undefined;
   skuId: string;
   absoluteMinimum: string;
   minutesCoverThreshold: number;
   targetCoverMinutes: number;
   sourceSafetyStock: string;
   eventWideSafetyStock: string;
-  imbalanceRatio?: number;
+  imbalanceRatio?: number | undefined;
 }
 
 export interface InventoryResponsibilityInput {
   id: string;
-  inventoryLocationId?: string;
-  category?: string;
+  inventoryLocationId?: string | undefined;
+  category?: string | undefined;
   responsibleActorId: string;
-  escalationActorId?: string;
-  priority?: number;
+  escalationActorId?: string | undefined;
+  priority?: number | undefined;
 }
 
 export interface InventoryPermissionInput {
@@ -58,10 +62,10 @@ export interface InventoryPermissionInput {
 export interface InventoryConfigurationSnapshot {
   eventId: string;
   eventEndAt: string;
-  shortWindowMinutes?: number;
-  mediumWindowMinutes?: number;
-  shortWeightBasisPoints?: number;
-  escalationMinutes?: number;
+  shortWindowMinutes?: number | undefined;
+  mediumWindowMinutes?: number | undefined;
+  shortWeightBasisPoints?: number | undefined;
+  escalationMinutes?: number | undefined;
   locations: InventoryLocationInput[];
   skus: InventorySkuInput[];
   salesMappings: SalesInventoryMappingInput[];
@@ -83,7 +87,7 @@ export interface ManualMovementInput {
   reason: string;
   occurredAt: string;
   idempotencyKey: string;
-  reversalOfLedgerId?: string;
+  reversalOfLedgerId?: string | undefined;
 }
 
 export interface TransferLineInput {
@@ -105,8 +109,8 @@ export interface CreateTransferInput {
 
 export interface TransferTransitionInput {
   actorId: string;
-  reason?: string;
-  assignedActorId?: string;
+  reason?: string | undefined;
+  assignedActorId?: string | undefined;
   occurredAt: string;
 }
 
@@ -116,7 +120,7 @@ export interface TransferDispatchInput extends TransferTransitionInput {
 
 export interface TransferReceiptInput {
   actorId: string;
-  reason?: string;
+  reason?: string | undefined;
   receivedAt: string;
   idempotencyKey: string;
   quantities: Array<{ skuId: string; quantityBase: string }>;
@@ -141,8 +145,8 @@ export interface CloseStockCountInput {
 export interface AlertTransitionInput {
   actorId: string;
   toState: InventoryAlertState;
-  assignedActorId?: string;
-  reason?: string;
+  assignedActorId?: string | undefined;
+  reason?: string | undefined;
   occurredAt: string;
 }
 
