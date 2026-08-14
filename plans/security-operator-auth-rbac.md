@@ -132,17 +132,9 @@ Event Edge forwards its machine credential for machine payment calls. Manual ext
 
 Event Edge inventory endpoints verify Cloud-signed operator tokens locally using the Ed25519 public key.
 
-The signed token establishes actor, organisation and role. Existing local `edge_inventory_actor_permissions` remain the source of event mutation authorization, including:
+The signed token establishes actor, organisation and role. For normal inventory mutations, existing local `edge_inventory_actor_permissions` remain the event authorization source, including `INVENTORY_MOVE`, `TRANSFER_MANAGE`, `COUNT_MANAGE`, and `ALERT_MANAGE`. Mutation request actor IDs must match the signed token subject before those service-level permission checks run, so a valid signed token does not create blanket inventory authority.
 
-- `INVENTORY_MOVE`;
-- `TRANSFER_MANAGE`;
-- `COUNT_MANAGE`;
-- `ALERT_MANAGE`;
-- `INVENTORY_CONFIGURE`.
-
-Mutation request actor IDs must match the signed token subject before service-level permission checks run. A valid signed token therefore does not create blanket inventory authority.
-
-Inventory configuration installation requires `ADMIN` or `PLATFORM_ADMIN`. Alert evaluation/escalation triggers require `SUPERVISOR` or higher. Notification draining requires `ADMIN` or higher. Event-scoped operational reads require a valid token for the Edge organisation and an event installed on that Edge.
+Inventory configuration installation is the bootstrap exception because the snapshot itself installs/replaces local permissions; it therefore requires a signed `ADMIN` or `PLATFORM_ADMIN` identity and matching `sourceActorId` rather than a pre-existing `INVENTORY_CONFIGURE` row. Alert evaluation/escalation triggers require `SUPERVISOR` or higher. Notification draining requires `ADMIN` or higher. Event-scoped operational reads require a valid token for the Edge organisation and an event installed on that Edge.
 
 ## Acceptance coverage
 
