@@ -85,11 +85,15 @@ export class DeviceEdgeAuthService {
       throw new UnauthorizedException('POS device credential is invalid');
     }
 
-    await this.database.query(
+    const touched = await this.database.query<{ device_id: string }>(
       `UPDATE edge_pos_devices SET last_authenticated_at=now()
-       WHERE device_id=$1 AND credential_version=$2 AND status='ACTIVE'`,
+       WHERE device_id=$1 AND credential_version=$2 AND status='ACTIVE'
+       RETURNING device_id`,
       [row.device_id, row.credential_version],
     );
+    if (touched.length !== 1) {
+      throw new UnauthorizedException('POS device credential changed during authentication');
+    }
 
     return {
       deviceId: row.device_id,
