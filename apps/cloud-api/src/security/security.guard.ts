@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Inject,
@@ -12,6 +13,7 @@ import type {
   AuthenticatedEdgePrincipal,
   AuthenticatedOperatorPrincipal,
 } from '@event-commerce/contracts';
+import { DatabaseService } from '../database/database.service';
 import { CloudSecurityService } from './security.service';
 import {
   CLOUD_SECURITY_ROUTE,
@@ -21,6 +23,7 @@ import {
 interface RequestLike {
   headers: Record<string, string | string[] | undefined>;
   body?: unknown;
+  params?: Record<string, string | undefined>;
   ip?: string;
   socket?: { remoteAddress?: string };
   securityPrincipal?: AuthenticatedOperatorPrincipal | AuthenticatedEdgePrincipal;
@@ -42,6 +45,7 @@ export class CloudSecurityGuard implements CanActivate {
   constructor(
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(CloudSecurityService) private readonly security: CloudSecurityService,
+    @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -86,6 +90,7 @@ export class CloudSecurityGuard implements CanActivate {
       }
       const principal = await this.security.authenticateOperator(authorization);
       this.applyOperator(request, principal);
+      await this.assertOperatorEventScope(request, principal);
       this.rateLimit(request, route, principal.credentialId);
       return true;
     }
@@ -93,6 +98,7 @@ export class CloudSecurityGuard implements CanActivate {
     if (route !== 'OPERATOR') throw new UnauthorizedException('Unsupported security route');
     const principal = await this.security.authenticateOperator(request.headers.authorization);
     this.applyOperator(request, principal);
+    await this.assertOperatorEventScope(request, principal);
     this.rateLimit(request, route, principal.credentialId);
     return true;
   }
@@ -119,6 +125,28 @@ export class CloudSecurityGuard implements CanActivate {
       request.headers['x-organisation-id'] = principal.organisationId;
     } else {
       delete request.headers['x-organisation-id'];
+    }
+  }
+
+  private async assertOperatorEventScope(
+    request: RequestLike,
+    principal: AuthenticatedOperatorPrincipal,
+  ): Promise<void> {
+    if (principal.role === 'PLATFORM_ADMIN') return;
+    const eventId = request.params?.eventId;
+    if (!eventId) return;
+    if (!principal.organisationId) {
+      throw new UnauthorizedException('ADMIN credential is missing organisation scope');
+    }
+    const rows = await this.database.query<{ organisation_id: string }>(
+      `SELECT organisation_id::text
+       FROM events
+       WHERE id::text=$1`,
+      [eventId],
+    );
+    const organisationId = rows[0]?.organisation_id;
+    if (organisationId && organisationId !== principal.organisationId) {
+      throw new ForbiddenException('Operator credential cannot access another organisation event');
     }
   }
 
