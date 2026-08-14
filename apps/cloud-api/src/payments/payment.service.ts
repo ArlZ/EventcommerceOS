@@ -175,9 +175,10 @@ export class PaymentService {
        JOIN payment_attempts a ON a.id = s.attempt_id
        WHERE s.reconciliation_required = true
          AND a.provider_request_id IS NOT NULL
-         AND (s.next_query_at IS NULL OR s.next_query_at <= clock_timestamp())
+         AND s.next_query_at IS NOT NULL
+         AND s.next_query_at <= clock_timestamp()
          AND (s.reconciliation_claimed_until IS NULL OR s.reconciliation_claimed_until < clock_timestamp())
-       ORDER BY COALESCE(s.next_query_at, s.updated_at), s.updated_at
+       ORDER BY s.next_query_at, s.updated_at
        LIMIT $1`,
       [boundedLimit],
     );
@@ -401,28 +402,37 @@ export class PaymentService {
 
       if (input.providerRequestId && attempt.provider_request_id !== input.providerRequestId) {
         if (attempt.provider_request_id !== null) {
-          await this.exception(
+          await this.quarantineProviderConflict(
             client,
-            attemptId,
-            attempt.provider,
+            attempt,
             'PROVIDER_REQUEST_ID_CONFLICT',
             {
               currentRequestId: attempt.provider_request_id,
               observedRequestId: input.providerRequestId,
             },
+            `request-id-conflict:${input.source}:${input.sourceId}`,
           );
           return;
         }
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `payment-provider-request:${attempt.provider}:${input.providerRequestId}`,
+        ]);
         const owner = await client.query<{ id: string }>(
           `SELECT id FROM payment_attempts
            WHERE provider = $1 AND provider_request_id = $2 AND id <> $3`,
           [attempt.provider, input.providerRequestId, attemptId],
         );
         if (owner.rowCount !== 0) {
-          await this.exception(client, attemptId, attempt.provider, 'PROVIDER_REQUEST_ID_REUSED', {
-            providerRequestId: input.providerRequestId,
-            existingAttemptId: owner.rows[0]!.id,
-          });
+          await this.quarantineProviderConflict(
+            client,
+            attempt,
+            'PROVIDER_REQUEST_ID_REUSED',
+            {
+              providerRequestId: input.providerRequestId,
+              existingAttemptId: owner.rows[0]!.id,
+            },
+            `request-id-reused:${input.source}:${input.sourceId}`,
+          );
           return;
         }
         await client.query(`UPDATE payment_attempts SET provider_request_id = $2 WHERE id = $1`, [
@@ -436,23 +446,38 @@ export class PaymentService {
           attempt.provider_receipt_reference !== null &&
           attempt.provider_receipt_reference !== input.providerReceiptReference
         ) {
-          await this.exception(client, attemptId, attempt.provider, 'PROVIDER_RECEIPT_CONFLICT', {
-            currentReceiptReference: attempt.provider_receipt_reference,
-            observedReceiptReference: input.providerReceiptReference,
-          });
+          await this.quarantineProviderConflict(
+            client,
+            attempt,
+            'PROVIDER_RECEIPT_CONFLICT',
+            {
+              currentReceiptReference: attempt.provider_receipt_reference,
+              observedReceiptReference: input.providerReceiptReference,
+            },
+            `receipt-conflict:${input.source}:${input.sourceId}`,
+          );
           return;
         }
         if (attempt.provider_receipt_reference === null) {
+          await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+            `payment-provider-receipt:${attempt.provider}:${input.providerReceiptReference}`,
+          ]);
           const owner = await client.query<{ id: string }>(
             `SELECT id FROM payment_attempts
              WHERE provider = $1 AND provider_receipt_reference = $2 AND id <> $3`,
             [attempt.provider, input.providerReceiptReference, attemptId],
           );
           if (owner.rowCount !== 0) {
-            await this.exception(client, attemptId, attempt.provider, 'PROVIDER_RECEIPT_REUSED', {
-              providerReceiptReference: input.providerReceiptReference,
-              existingAttemptId: owner.rows[0]!.id,
-            });
+            await this.quarantineProviderConflict(
+              client,
+              attempt,
+              'PROVIDER_RECEIPT_REUSED',
+              {
+                providerReceiptReference: input.providerReceiptReference,
+                existingAttemptId: owner.rows[0]!.id,
+              },
+              `receipt-reused:${input.source}:${input.sourceId}`,
+            );
             return;
           }
           await client.query(
@@ -529,6 +554,37 @@ export class PaymentService {
        WHERE attempt_id = $1 AND reconciliation_claimed_by = $2`,
       [attemptId, claimId],
     );
+  }
+
+  private async quarantineProviderConflict(
+    client: PoolClient,
+    attempt: AttemptRow,
+    exceptionType: string,
+    details: Record<string, unknown>,
+    sourceId: string,
+  ): Promise<void> {
+    await this.exception(client, attempt.id, attempt.provider, exceptionType, details);
+    if (!['INITIATED', 'PENDING', 'UNKNOWN'].includes(attempt.state)) return;
+
+    await client.query(
+      `UPDATE payment_attempt_state SET
+         state = 'UNKNOWN',
+         reconciliation_required = true,
+         next_query_at = NULL,
+         last_provider_error_code = $2,
+         updated_at = clock_timestamp()
+       WHERE attempt_id = $1`,
+      [attempt.id, exceptionType],
+    );
+    if (attempt.state !== 'UNKNOWN') {
+      await client.query(
+        `INSERT INTO payment_attempt_transitions(
+           id, attempt_id, from_state, to_state, source, source_id, reason_code, occurred_at
+         ) VALUES ($1,$2,$3,'UNKNOWN','SYSTEM',$4,$5,clock_timestamp())
+         ON CONFLICT (attempt_id, source, source_id) DO NOTHING`,
+        [randomUUID(), attempt.id, attempt.state, sourceId, exceptionType],
+      );
+    }
   }
 
   private async scheduleQueryFailure(attemptId: string, reasonCode: string): Promise<void> {
