@@ -59,15 +59,15 @@ function parseObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function callbackMetadataValue(
-  items: unknown,
-  name: string,
-): string | number | undefined {
+function callbackMetadataValue(items: unknown, name: string): string | number | undefined {
   if (!Array.isArray(items)) return undefined;
   for (const item of items) {
     if (!item || typeof item !== 'object') continue;
     const record = item as Record<string, unknown>;
-    if (record.Name === name && (typeof record.Value === 'string' || typeof record.Value === 'number')) {
+    if (
+      record.Name === name &&
+      (typeof record.Value === 'string' || typeof record.Value === 'number')
+    ) {
       return record.Value;
     }
   }
@@ -130,9 +130,7 @@ export class MpesaProvider implements PaymentProvider {
         return {
           status: 'PENDING',
           providerReference: response.CheckoutRequestID,
-          ...(response.MerchantRequestID
-            ? { providerRequestId: response.MerchantRequestID }
-            : {}),
+          ...(response.MerchantRequestID ? { providerRequestId: response.MerchantRequestID } : {}),
         };
       }
 
@@ -217,7 +215,10 @@ export class MpesaProvider implements PaymentProvider {
       receipt ?? '',
     )}`;
 
-    if (resultCode === 0 && (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0)) {
+    if (
+      resultCode === 0 &&
+      (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0)
+    ) {
       throw new Error('Successful M-PESA callback missing valid Amount');
     }
 
