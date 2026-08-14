@@ -8,6 +8,10 @@ export type PaymentAttemptStatus =
 
 export type PaymentAdjustmentStatus = 'REQUESTED' | 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
 
+export type ExternalTerminalOutcome = 'APPROVED' | 'DECLINED';
+
+export type PaymentRailAvailabilityStatus = 'AVAILABLE' | 'UNCONFIGURED' | 'DEGRADED';
+
 export interface PaymentAttemptEventPayload {
   eventId: string;
   paymentId: string;
@@ -51,6 +55,35 @@ export interface PaymentAttemptView {
   reconciliationRequired: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ConfirmExternalTerminalPaymentRequest {
+  confirmationId: string;
+  paymentAttemptId: string;
+  externalProviderId: string;
+  externalReference: string;
+  amountMinor: number;
+  currency: string;
+  outcome: ExternalTerminalOutcome;
+  actorId: string;
+  reason: string;
+  idempotencyKey: string;
+}
+
+export interface ExternalTerminalConfirmationView {
+  confirmationId: string;
+  paymentAttemptId: string;
+  eventId: string;
+  orderId: string;
+  externalProviderId: string;
+  externalReference: string;
+  amountMinor: number;
+  currency: string;
+  outcome: ExternalTerminalOutcome;
+  actorId: string;
+  reason: string;
+  idempotencyKey: string;
+  createdAt: string;
 }
 
 export interface RefundPaymentRequest {
@@ -104,4 +137,10 @@ export interface PaymentProviderHealthView {
   unknownCount: number;
   unknownValueMinor: number;
   oldestUnknownAt: string | null;
+}
+
+export interface PaymentRailAvailabilityView {
+  providerId: string;
+  status: PaymentRailAvailabilityStatus;
+  detailCode: string | null;
 }
