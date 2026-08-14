@@ -71,6 +71,8 @@ export interface AuthenticatedOperatorPrincipal {
   actorId: string;
   organisationId: string | null;
   role: SecurityOperatorRole;
+  /** Event scope is populated by Event Edge after verifying a signed event snapshot. */
+  eventId?: string;
 }
 
 export interface AuthenticatedDevicePrincipal {
