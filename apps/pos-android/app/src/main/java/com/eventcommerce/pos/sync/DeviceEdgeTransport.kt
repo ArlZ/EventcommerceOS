@@ -6,6 +6,7 @@ data class DeviceEdgeAck(
   val deviceId: String,
   val acceptedThroughSequence: Long,
   val edgeBacklogCount: Int,
+  val hasConflict: Boolean = false,
 )
 
 fun interface DeviceEdgeTransport {
