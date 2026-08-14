@@ -96,6 +96,9 @@ export interface CommandCentreDeviceMetric {
   edgeBacklogCount: number;
   syncAgeSeconds: number | null;
   status: 'HEALTHY' | 'DEGRADED' | 'STALE';
+  transactionCount?: number;
+  grossSales?: CommandCentreCurrencyAmount[];
+  currentSalesVelocity?: CommandCentreCurrencyVelocity[];
 }
 
 export type CommandCentreAlertSource = 'INVENTORY' | 'PAYMENT' | 'DEVICE';
