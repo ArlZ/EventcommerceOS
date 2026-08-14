@@ -1,3 +1,4 @@
+import type { PaymentRailAvailabilityStatus } from '@event-commerce/contracts';
 import type { PaymentProviderCapabilities, PaymentAttemptState } from '@event-commerce/domain';
 
 export interface ProviderInitiationRequest {
@@ -20,6 +21,9 @@ export interface ProviderInitiationResult {
 export interface ProviderStatusResult {
   status: Extract<PaymentAttemptState, 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN'>;
   providerReference?: string;
+  paymentAttemptId?: string;
+  amountMinor?: number;
+  currency?: string;
   failureCode?: string;
 }
 
@@ -38,12 +42,25 @@ export interface VerifiedProviderCallback {
   failureCode?: string | undefined;
 }
 
+export interface ProviderWebhookContext {
+  headers: Readonly<Record<string, string | readonly string[] | undefined>>;
+}
+
+export interface ProviderAvailability {
+  status: PaymentRailAvailabilityStatus;
+  detailCode?: string;
+}
+
 export interface PaymentProvider {
   readonly id: string;
   capabilities(): PaymentProviderCapabilities;
+  availability?(): ProviderAvailability;
   initiate(request: ProviderInitiationRequest): Promise<ProviderInitiationResult>;
   queryStatus(providerReference: string): Promise<ProviderStatusResult>;
-  parseAndVerifyWebhook(payload: unknown): Promise<VerifiedProviderCallback>;
+  parseAndVerifyWebhook(
+    payload: unknown,
+    context?: ProviderWebhookContext,
+  ): Promise<VerifiedProviderCallback>;
   refund?(input: {
     providerReference: string;
     amountMinor: number;
