@@ -90,4 +90,38 @@ describeIntegration('sync and inventory acceptance boundary', () => {
     expect(movement[0]).toEqual({ count: '1', quantity: '-2' });
     expect(stock[0]!.on_hand).toBe('98');
   });
+
+  it('depletes confirmed M-PESA inventory exactly once even when the close event is replayed', async () => {
+    const sale = closedSale({
+      eventInstanceId: 'sync-boundary-mpesa-402',
+      eventType: 'ORDER_CLOSED_MPESA',
+      lines: [{ skuId: beerSkuId, quantity: 3 }],
+    });
+
+    const first = await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .send({ deviceId: sale.deviceId, events: [sale] })
+      .expect(201);
+    expect(first.body.receipts[0].status).toBe('ACCEPTED');
+
+    const replay = await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .send({ deviceId: sale.deviceId, events: [sale] })
+      .expect(201);
+    expect(replay.body.receipts[0].status).toBe('DUPLICATE');
+
+    const movement = await database.query<{ count: string; quantity: string }>(
+      `SELECT count(*)::text AS count, SUM(quantity_delta)::text AS quantity
+       FROM edge_inventory_ledger
+       WHERE source_event_instance_id = $1 AND movement_type = 'SALE'`,
+      [sale.eventInstanceId],
+    );
+    const stock = await database.query<{ on_hand: string }>(
+      `SELECT on_hand::text FROM edge_inventory_stock_projection
+       WHERE inventory_location_id = $1 AND sku_id = $2`,
+      [mainLocationId, beerSkuId],
+    );
+    expect(movement[0]).toEqual({ count: '1', quantity: '-3' });
+    expect(stock[0]!.on_hand).toBe('97');
+  });
 });
