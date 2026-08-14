@@ -1,0 +1,40 @@
+name: Task 004 Canonicalize
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  canonicalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm exec prettier --write "apps/**/*.{ts,tsx,mjs}" "packages/**/*.{ts,tsx}" "scripts/*.mjs" eslint.config.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: task004-canonicalized
+          if-no-files-found: error
+          path: |
+            pnpm-lock.yaml
+            apps/cloud-api/src/sync/cloud-sync.service.ts
+            apps/cloud-api/src/sync/sync-validation.ts
+            apps/cloud-api/test/sync-invalid.integration.test.ts
+            apps/cloud-api/test/sync.integration.test.ts
+            apps/control-web/src/app/sync-health/sync-health-client.tsx
+            apps/event-edge/scripts/migrate.mjs
+            apps/event-edge/src/database/database.service.ts
+            apps/event-edge/src/sync/cloud-forwarder.service.ts
+            apps/event-edge/src/sync/device-sync.service.ts
+            apps/event-edge/src/sync/http-cloud-sync.transport.ts
+            apps/event-edge/src/sync/safe-device-sync.service.ts
+            apps/event-edge/src/sync/sync-validation.ts
+            apps/event-edge/test/sync.integration.test.ts
