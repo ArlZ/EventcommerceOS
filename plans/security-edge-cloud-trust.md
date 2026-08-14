@@ -28,7 +28,7 @@ This slice authenticates and tenant-binds both Edge-originated Cloud ingestion r
 
 ## Credential lifecycle
 
-Operator commands use `pnpm --filter @event-commerce/cloud-api edge:credential -- <action>` with `DATABASE_URL`, `EDGE_ID` and `EDGE_CREDENTIAL_ACTOR` set. Provision additionally requires `EDGE_ORGANISATION_ID`.
+Operator commands use `pnpm --filter @event-commerce/cloud-api edge-credential -- <action>` with `DATABASE_URL`, `EDGE_ID` and `EDGE_CREDENTIAL_ACTOR` set. Provision additionally requires `EDGE_ORGANISATION_ID`.
 
 Supported actions:
 
