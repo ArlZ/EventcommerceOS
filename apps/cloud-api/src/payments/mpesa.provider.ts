@@ -217,24 +217,18 @@ export class MpesaProvider implements PaymentProvider {
       receipt ?? '',
     )}`;
 
-    if (resultCode === 0) {
-      if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-        throw new Error('Successful M-PESA callback missing valid Amount');
-      }
-      return {
-        providerEventKey,
-        providerReference: checkoutRequestId,
-        status: 'SUCCEEDED',
-        amountMinor: Math.round(amount * 100),
-        currency: 'KES',
-      };
+    if (resultCode === 0 && (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0)) {
+      throw new Error('Successful M-PESA callback missing valid Amount');
     }
 
     return {
       providerEventKey,
       providerReference: checkoutRequestId,
-      status: 'FAILED',
-      failureCode: String(resultCode),
+      status: 'UNKNOWN',
+      ...(typeof amount === 'number' && Number.isFinite(amount)
+        ? { amountMinor: Math.round(amount * 100), currency: 'KES' }
+        : {}),
+      failureCode: `MPESA_CALLBACK_RESULT_${resultCode}`,
     };
   }
 
