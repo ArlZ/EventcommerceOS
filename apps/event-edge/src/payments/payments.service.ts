@@ -3,6 +3,7 @@ import type { InitiatePaymentRequest, PaymentAttemptView } from '@event-commerce
 import { canTransitionPaymentAttempt, paymentAttemptIsTerminal } from '@event-commerce/domain';
 import type { QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
+import { edgeCloudHeaders } from '../security/edge-cloud-credential';
 
 interface CachedAttemptRow extends QueryResultRow {
   payment_attempt_id: string;
@@ -95,7 +96,7 @@ export class EdgePaymentsService {
     try {
       const response = await fetch(this.cloudUrl('/payments/initiate'), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: edgeCloudHeaders({ 'content-type': 'application/json' }),
         body: JSON.stringify(request),
         signal: AbortSignal.timeout(this.timeoutMs()),
       });
@@ -130,7 +131,7 @@ export class EdgePaymentsService {
         this.cloudUrl(`/payments/attempts/${encodeURIComponent(paymentAttemptId)}/reconcile`),
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: edgeCloudHeaders({ 'content-type': 'application/json' }),
           signal: AbortSignal.timeout(this.timeoutMs()),
         },
       );
@@ -141,6 +142,21 @@ export class EdgePaymentsService {
       const latest = await this.cached(paymentAttemptId);
       return latest ? this.toView(latest) : this.toView(current);
     }
+  }
+
+  async assertAttemptEvent(paymentAttemptId: string, eventId: string): Promise<void> {
+    const current = await this.cached(paymentAttemptId);
+    if (!current || current.event_id !== eventId) {
+      throw new Error('payment attempt is not available for authenticated event');
+    }
+  }
+
+  async byOrderForEvent(orderId: string, eventId: string): Promise<PaymentAttemptView[]> {
+    const rows = await this.db.query<CachedAttemptRow>(
+      `${this.select()} WHERE order_id=$1 AND event_id=$2 ORDER BY updated_at`,
+      [orderId, eventId],
+    );
+    return rows.map((row) => this.toView(row));
   }
 
   async byOrder(orderId: string): Promise<PaymentAttemptView[]> {
