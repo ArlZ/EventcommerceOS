@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "db:migrate": "node scripts/migrate.mjs",
     "edge-credential": "node scripts/manage-edge-credential.mjs",
+    "operator-token-keypair": "node scripts/generate-operator-token-keypair.mjs",
     "operator-credential": "node scripts/manage-operator.mjs",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
