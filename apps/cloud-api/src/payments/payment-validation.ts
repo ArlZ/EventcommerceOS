@@ -54,6 +54,7 @@ export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequ
     eventId: requiredString(input.eventId, 'eventId'),
     orderId: requiredString(input.orderId, 'orderId'),
     paymentId: requiredString(input.paymentId, 'paymentId'),
+    attemptId: requiredString(input.attemptId, 'attemptId'),
     clientAttemptId: requiredString(input.clientAttemptId, 'clientAttemptId'),
     idempotencyKey: requiredString(input.idempotencyKey, 'idempotencyKey'),
     provider: 'MPESA',
