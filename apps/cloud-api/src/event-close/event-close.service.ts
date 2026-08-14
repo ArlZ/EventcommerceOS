@@ -14,6 +14,7 @@ import type {
 import type { PoolClient, QueryResultRow } from 'pg';
 import { assertOrganisationAccess, type AdminContext } from '../configuration/admin-context';
 import { DatabaseService } from '../database/database.service';
+import { EventCloseCashCountService } from './event-close-cash-count.service';
 import {
   EventCloseReportService,
   type EventCloseEventMeta,
@@ -84,11 +85,13 @@ export class EventCloseService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(EventCloseReportService) private readonly reports: EventCloseReportService,
+    @Inject(EventCloseCashCountService) private readonly cashCounts: EventCloseCashCountService,
   ) {}
 
   async liveReport(context: AdminContext, eventId: string): Promise<EventCloseReport> {
     const event = await this.eventFor(context, eventId);
-    return this.reports.buildLive(event);
+    const report = await this.reports.buildLive(event);
+    return this.cashCounts.enrichLive(eventId, report);
   }
 
   async operationallyClose(
@@ -125,7 +128,8 @@ export class EventCloseService {
       const revision = Number(revisionResult.rows[0]?.revision ?? 1);
       const reportId = randomUUID();
       const generatedAt = new Date().toISOString();
-      const live = await this.reports.buildInTransaction(client, event, generatedAt);
+      const baseReport = await this.reports.buildInTransaction(client, event, generatedAt);
+      const live = await this.cashCounts.enrichInTransaction(client, eventId, baseReport);
       const closedReport: EventCloseReport = {
         ...live,
         close: {
@@ -313,7 +317,7 @@ export class EventCloseService {
         method.grossTenderMinor,
         method.netTenderMinor,
         method.unresolvedAttemptCount > 0 ? 'UNRESOLVED' : 'RECONCILED',
-        `refund=${method.refundMinor};reversal=${method.reversalMinor}`,
+        `transactions=${method.succeededCount};refund=${method.refundMinor};reversal=${method.reversalMinor}`,
       ),
     );
     report.providerReconciliation.forEach((provider) =>
