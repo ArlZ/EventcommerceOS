@@ -50,12 +50,8 @@ export class PaymentsController {
   }
 
   @Post('manual-terminal-confirmations')
-  @SecurityRoute('EDGE_SERVICE')
-  async confirmExternalTerminal(@Req() request: SecurityRequest, @Body() body: unknown) {
-    const principal = this.edgePrincipal(request);
-    const confirmation = parseExternalTerminalConfirmation(body);
-    await this.edgeScope.assertPaymentAttempt(principal, confirmation.paymentAttemptId);
-    return this.manualTerminal.confirm(confirmation);
+  confirmExternalTerminal(@Body() body: unknown) {
+    return this.manualTerminal.confirm(parseExternalTerminalConfirmation(body));
   }
 
   @Post('refunds')
