@@ -65,7 +65,9 @@ describeIntegration('sync and inventory acceptance boundary', () => {
       ...sale,
       payload: {
         ...sale.payload,
-        lines: [{ ...((sale.payload.lines as Array<Record<string, unknown>>)[0] ?? {}), quantity: 50 }],
+        lines: [
+          { ...((sale.payload.lines as Array<Record<string, unknown>>)[0] ?? {}), quantity: 50 },
+        ],
       },
     };
     const rejected = await request(app.getHttpServer())

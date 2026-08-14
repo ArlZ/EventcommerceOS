@@ -96,13 +96,17 @@ export function InventoryOperationsClient() {
         {activeAlerts.length === 0 ? <p>No active inventory alerts.</p> : null}
         <div style={{ display: 'grid', gap: 10 }}>
           {activeAlerts.map((alert) => (
-            <article key={alert.id} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 14 }}>
+            <article
+              key={alert.id}
+              style={{ border: '1px solid #ddd', borderRadius: 12, padding: 14 }}
+            >
               <strong>
                 {alert.severity} • {alert.alertType}
               </strong>
               <p style={{ margin: '6px 0' }}>
                 {alert.inventoryLocationId ?? 'EVENT-WIDE'} / {alert.skuId} • available{' '}
-                {alert.availableQuantityBase} • cover {alert.minutesOfCover ?? 'no active velocity'} min
+                {alert.availableQuantityBase} • cover {alert.minutesOfCover ?? 'no active velocity'}{' '}
+                min
               </p>
               <p style={{ margin: '6px 0' }}>
                 Suggested transfer:{' '}
@@ -111,7 +115,8 @@ export function InventoryOperationsClient() {
                   : 'none'}
               </p>
               <small>
-                State {alert.state} • owner {alert.assignedActorId ?? alert.responsibleActorId ?? 'unassigned'}
+                State {alert.state} • owner{' '}
+                {alert.assignedActorId ?? alert.responsibleActorId ?? 'unassigned'}
               </small>
             </article>
           ))}
@@ -133,7 +138,10 @@ export function InventoryOperationsClient() {
         <h2>Transfers</h2>
         <div style={{ display: 'grid', gap: 10 }}>
           {(operations?.transfers ?? []).map((transfer) => (
-            <article key={transfer.id} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 14 }}>
+            <article
+              key={transfer.id}
+              style={{ border: '1px solid #ddd', borderRadius: 12, padding: 14 }}
+            >
               <strong>{transfer.state}</strong>
               <p style={{ margin: '6px 0' }}>
                 {transfer.sourceLocationId} → {transfer.destinationLocationId}

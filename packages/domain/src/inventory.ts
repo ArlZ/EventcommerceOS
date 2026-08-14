@@ -41,7 +41,10 @@ const negativeMovements = new Set<InventoryMovementType>([
   'SUPPLIER_RETURN',
 ]);
 
-export function requireInventoryDelta(type: InventoryMovementType, quantityDeltaBase: bigint): bigint {
+export function requireInventoryDelta(
+  type: InventoryMovementType,
+  quantityDeltaBase: bigint,
+): bigint {
   if (quantityDeltaBase === 0n) throw new Error('inventory movement quantity must not be zero');
   if (positiveMovements.has(type) && quantityDeltaBase < 0n) {
     throw new Error(`${type} inventory movement must increase stock`);
@@ -128,7 +131,8 @@ export function blendedVelocityPerMinute(
   if (!Number.isFinite(nowEpochMs)) throw new Error('nowEpochMs must be finite');
   const shortMinutes = positiveWindow(options.shortWindowMinutes ?? 10, 'short window');
   const mediumMinutes = positiveWindow(options.mediumWindowMinutes ?? 30, 'medium window');
-  if (mediumMinutes < shortMinutes) throw new Error('medium window must not be shorter than short window');
+  if (mediumMinutes < shortMinutes)
+    throw new Error('medium window must not be shorter than short window');
 
   const shortWeight = options.shortWeightBasisPoints ?? 6000;
   if (!Number.isInteger(shortWeight) || shortWeight < 0 || shortWeight > 10_000) {
@@ -142,7 +146,8 @@ export function blendedVelocityPerMinute(
 
   for (const sample of samples) {
     if (!Number.isFinite(sample.occurredAtEpochMs)) throw new Error('sample time must be finite');
-    if (sample.quantityBase < 0n) throw new Error('consumption sample quantity must not be negative');
+    if (sample.quantityBase < 0n)
+      throw new Error('consumption sample quantity must not be negative');
     if (sample.occurredAtEpochMs > nowEpochMs || sample.occurredAtEpochMs <= mediumCutoff) continue;
     mediumQuantity += sample.quantityBase;
     if (sample.occurredAtEpochMs > shortCutoff) shortQuantity += sample.quantityBase;
@@ -205,7 +210,8 @@ export interface ReplenishmentInput {
 }
 
 export function recommendedTransferQuantity(input: ReplenishmentInput): bigint {
-  if (input.destinationInboundBase < 0n) throw new Error('destination inbound stock must not be negative');
+  if (input.destinationInboundBase < 0n)
+    throw new Error('destination inbound stock must not be negative');
   if (input.sourceSafetyStockBase < 0n) throw new Error('source safety stock must not be negative');
   if (!Number.isFinite(input.velocityPerMinute) || input.velocityPerMinute < 0) {
     throw new Error('velocity must be finite and non-negative');

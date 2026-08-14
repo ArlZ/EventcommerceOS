@@ -6,7 +6,12 @@ export interface InventoryEdgeEvent {
     | 'INVENTORY_TRANSFER_UPSERTED'
     | 'INVENTORY_COUNT_CLOSED'
     | 'INVENTORY_ALERT_UPSERTED';
-  aggregateType: 'INVENTORY_EVENT' | 'STOCK_LEDGER_ENTRY' | 'STOCK_TRANSFER' | 'STOCK_COUNT' | 'INVENTORY_ALERT';
+  aggregateType:
+    | 'INVENTORY_EVENT'
+    | 'STOCK_LEDGER_ENTRY'
+    | 'STOCK_TRANSFER'
+    | 'STOCK_COUNT'
+    | 'INVENTORY_ALERT';
   aggregateId: string;
   payload: Record<string, unknown>;
 }

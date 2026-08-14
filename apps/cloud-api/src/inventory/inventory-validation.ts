@@ -38,9 +38,14 @@ export function parseInventoryEdgeBatch(value: unknown): InventoryEdgeBatch {
   const events = input.events.map((raw, index): InventoryEdgeEvent => {
     const row = object(raw, `events[${index}]`);
     const eventType = text(row.eventType, 'eventType') as InventoryEdgeEvent['eventType'];
-    const aggregateType = text(row.aggregateType, 'aggregateType') as InventoryEdgeEvent['aggregateType'];
-    if (!eventTypes.has(eventType)) throw new BadRequestException(`events[${index}].eventType is invalid`);
-    if (!aggregateTypes.has(aggregateType)) throw new BadRequestException(`events[${index}].aggregateType is invalid`);
+    const aggregateType = text(
+      row.aggregateType,
+      'aggregateType',
+    ) as InventoryEdgeEvent['aggregateType'];
+    if (!eventTypes.has(eventType))
+      throw new BadRequestException(`events[${index}].eventType is invalid`);
+    if (!aggregateTypes.has(aggregateType))
+      throw new BadRequestException(`events[${index}].aggregateType is invalid`);
     return {
       id: text(row.id, 'event.id'),
       eventType,
