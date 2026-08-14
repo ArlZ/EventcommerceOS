@@ -33,6 +33,7 @@ interface OperatorTokenClaims {
 }
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
+const MAX_OPERATOR_TOKEN_LIFETIME_SECONDS = 43_200;
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -141,7 +142,11 @@ export class OperatorEdgeAuthService {
 
     const claims = this.parseClaims(decodeJson(encodedClaims));
     const now = Math.floor(Date.now() / 1000);
-    if (claims.exp <= now || claims.iat > now + 30 || claims.exp - claims.iat > 3600) {
+    if (
+      claims.exp <= now ||
+      claims.iat > now + 30 ||
+      claims.exp - claims.iat > MAX_OPERATOR_TOKEN_LIFETIME_SECONDS
+    ) {
       throw new UnauthorizedException('Operator access token is expired or has invalid lifetime');
     }
     return claims;
