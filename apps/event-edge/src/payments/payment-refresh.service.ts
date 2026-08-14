@@ -30,7 +30,10 @@ export class PaymentRefreshService implements OnModuleInit, OnModuleDestroy {
 
   async tick(): Promise<void> {
     if (this.shuttingDown || this.activeTick) return;
-    const work = this.runTick();
+    const work = this.runTick().catch(() => {
+      // This is a repair/status loop, not a checkout path. Shutdown or one unexpected
+      // database/transport failure must not escape as an unhandled process rejection.
+    });
     this.activeTick = work;
     try {
       await work;
