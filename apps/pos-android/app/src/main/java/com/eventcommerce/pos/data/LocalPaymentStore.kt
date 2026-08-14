@@ -45,13 +45,21 @@ class LocalPaymentStore(
   ): LocalPaymentAttempt = mutex.withLock {
     db.withTransaction {
       val order = requireNotNull(orders.order(orderId)) { "order not found" }
+      require(providerId.isNotBlank()) { "payment provider must not be blank" }
+      val normalizedProvider = providerId.trim().lowercase()
+      val key = PaymentRules.idempotencyKey(order.id, paymentSlot, clientAttemptId)
+
+      payments.attemptByIdempotencyKey(key)?.let { existing ->
+        require(existing.orderId == order.id) { "payment idempotency key belongs to another order" }
+        require(existing.providerId == normalizedProvider) {
+          "payment idempotency key belongs to another provider"
+        }
+        return@withTransaction snapshot(existing)
+      }
+
       require(order.state == OrderState.OPEN.name) { "payment requires an open order" }
       require(order.totalMinor > 0L) { "payment amount must be positive" }
       require(orders.orderItems(orderId).isNotEmpty()) { "cannot pay an empty order" }
-      require(providerId.isNotBlank()) { "payment provider must not be blank" }
-
-      val key = PaymentRules.idempotencyKey(order.id, paymentSlot, clientAttemptId)
-      payments.attemptByIdempotencyKey(key)?.let { return@withTransaction snapshot(it) }
 
       val now = clock()
       val attempt = PaymentAttemptEntity(
@@ -59,7 +67,7 @@ class LocalPaymentStore(
         paymentId = idFactory(),
         eventId = order.eventId,
         orderId = order.id,
-        providerId = providerId.trim().lowercase(),
+        providerId = normalizedProvider,
         idempotencyKey = key,
         amountMinor = order.totalMinor,
         currency = order.currency,
