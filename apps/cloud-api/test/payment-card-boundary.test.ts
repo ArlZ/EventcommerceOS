@@ -21,6 +21,7 @@ describe('payment card-data boundary', () => {
   it.each([
     ['cardNumber', 'prohibited-value'],
     ['pan', 'prohibited-value'],
+    ['primaryAccountNumber', 'prohibited-value'],
     ['cvv', 'prohibited-value'],
     ['pin', 'prohibited-value'],
     ['track2', 'prohibited-value'],
@@ -35,6 +36,12 @@ describe('payment card-data boundary', () => {
     expect(() =>
       assertNoProhibitedCardFields({ terminal: { metadata: { cvc: 'prohibited-value' } } }),
     ).toThrow('Prohibited raw card field');
+  });
+
+  it('rejects all unexpected command fields rather than silently carrying arbitrary data', () => {
+    expect(() =>
+      parseInitiatePaymentRequest({ ...initiation(), arbitraryTerminalBlob: 'not-part-of-contract' }),
+    ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
   it('keeps valid terminal initiation and manual-confirmation models reference-only', () => {
