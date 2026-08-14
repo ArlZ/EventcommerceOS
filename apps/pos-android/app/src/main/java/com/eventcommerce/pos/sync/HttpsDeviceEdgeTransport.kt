@@ -1,14 +1,19 @@
 package com.eventcommerce.pos.sync
 
+import com.eventcommerce.pos.data.DeviceCredentialStore
 import com.eventcommerce.pos.data.OutboxEventEntity
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class HttpsDeviceEdgeTransport(private val endpoint: String) : DeviceEdgeTransport {
+class HttpsDeviceEdgeTransport(
+  private val endpoint: String,
+  private val deviceCredential: String,
+) : DeviceEdgeTransport {
   init {
     require(endpoint.startsWith("https://")) { "POS sync endpoint must use HTTPS" }
+    DeviceCredentialStore.requireValidToken(deviceCredential)
   }
 
   override suspend fun send(deviceId: String, events: List<OutboxEventEntity>): DeviceEdgeAck =
@@ -20,6 +25,7 @@ class HttpsDeviceEdgeTransport(private val endpoint: String) : DeviceEdgeTranspo
         connection.readTimeout = 5_000
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("Authorization", "Device $deviceCredential")
         connection.outputStream.bufferedWriter(Charsets.UTF_8).use {
           it.write(SyncJson.request(deviceId, events))
         }
