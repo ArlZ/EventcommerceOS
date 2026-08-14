@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseEdgeInitiatePayment } from '../src/payments/payments.service';
 import {
+  assertEdgeInitiatePaymentEnvelope,
   assertNoProhibitedEdgeCardFields,
   parseEdgeExternalTerminalConfirmation,
   TerminalPaymentsService,
@@ -75,6 +76,23 @@ describe('Edge payment boundary', () => {
         terminalMetadata: { cardNumber: 'prohibited-value' },
       }),
     ).toThrow('Prohibited raw card field');
+  });
+
+  it('rejects unexpected payment initiation fields instead of forwarding arbitrary payload data', () => {
+    expect(() =>
+      assertEdgeInitiatePaymentEnvelope({
+        eventId: 'event-1',
+        paymentId: 'payment-card-1',
+        paymentAttemptId: 'attempt-card-1',
+        orderId: 'order-card-1',
+        providerId: 'pesapal_sabi',
+        idempotencyKey: 'PAYMENT:order-card-1:primary:attempt-card-1',
+        amountMinor: 25000,
+        currency: 'KES',
+        accountReference: 'attempt-card-1',
+        arbitraryTerminalBlob: 'not-part-of-contract',
+      }),
+    ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
   it('normalizes a controlled manual terminal confirmation without card data', () => {
