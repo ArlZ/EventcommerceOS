@@ -190,6 +190,13 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
                   Text("Pay with M-PESA")
                 }
                 Button(
+                  onClick = { mutate { payments.startCard(current.id) } },
+                  enabled = !busy,
+                  modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) {
+                  Text("Pay by card • Pesapal Sabi")
+                }
+                Button(
                   onClick = { mutate { repository.recordCashPayment(current.id) } },
                   enabled = !busy,
                   modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -206,6 +213,10 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
               } else {
                 val attempt = paymentAttempt
                 Text("Payment state: ${attempt?.state?.name ?: "PENDING"}")
+                if (attempt?.providerId == "pesapal_sabi") {
+                  Text("Sabi merchant reference: ${attempt.id}")
+                  Text("Add this reference on the Sabi charge. Card details and PIN stay on the Pesapal terminal.")
+                }
                 when (attempt?.state?.name) {
                   "UNKNOWN" -> Text("Payment result is uncertain. Do not ask the customer to pay again until reconciled.")
                   "PENDING", "INITIATED", "CREATED" -> Text("Waiting for payment confirmation.")
