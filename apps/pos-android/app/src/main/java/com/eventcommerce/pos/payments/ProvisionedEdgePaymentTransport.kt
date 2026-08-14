@@ -9,7 +9,7 @@ class ProvisionedEdgePaymentTransport(
 ) : EdgePaymentTransport {
   override suspend fun initiate(
     attempt: LocalPaymentAttempt,
-    customerPhone: String,
+    customerPhone: String?,
   ): EdgePaymentState = delegate().initiate(attempt, customerPhone)
 
   override suspend fun reconcile(paymentAttemptId: String): EdgePaymentState =
