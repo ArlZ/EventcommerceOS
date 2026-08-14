@@ -5,7 +5,13 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { OperatorAuthService } from '../src/auth/operator-auth.service';
 import { DatabaseService } from '../src/database/database.service';
+import {
+  enableOperatorTestSigningKey,
+  operatorHeaders,
+  provisionOperator,
+} from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -18,14 +24,6 @@ const inventoryTwoId = '77777777-7777-4777-8777-777777777777';
 const productId = '88888888-8888-4888-8888-888888888888';
 const skuId = '99999999-9999-4999-8999-999999999999';
 
-function headers() {
-  return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
-    'x-organisation-id': organisationId,
-  };
-}
-
 function amount(report: { currency: string; amountMinor: string }[], currency = 'KES') {
   return report.find((entry) => entry.currency === currency)?.amountMinor ?? '0';
 }
@@ -33,12 +31,16 @@ function amount(report: { currency: string; amountMinor: string }[], currency = 
 describeIntegration('event operational close and post-close reconciliation', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let auth: OperatorAuthService;
+  let headers: Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
+    enableOperatorTestSigningKey();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     database = moduleRef.get(DatabaseService);
+    auth = moduleRef.get(OperatorAuthService);
     await app.init();
   });
 
@@ -203,10 +205,18 @@ describeIntegration('event operational close and post-close reconciliation', () 
        ) VALUES ('alert-1','STOCKOUT_RISK','CRITICAL','OPEN',$1,$2,$3,3,12.5,now()-interval '1 hour','edge-alert')`,
       [eventId, inventoryOneId, skuId],
     );
+    await provisionOperator(database, {
+      actorId,
+      organisationId,
+      role: 'ADMIN',
+    });
+    headers = await operatorHeaders(auth, actorId);
   });
 
   afterAll(async () => {
     delete process.env.PAYMENT_RECONCILIATION_DISABLED;
+    delete process.env.OPERATOR_TOKEN_SIGNING_KEY;
+    delete process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS;
     await app.close();
   });
 
@@ -222,17 +232,17 @@ describeIntegration('event operational close and post-close reconciliation', () 
     };
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/order-adjustments`)
-      .set(headers())
+      .set(headers)
       .send(discount)
       .expect(201);
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/order-adjustments`)
-      .set(headers())
+      .set(headers)
       .send(discount)
       .expect(201);
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/order-adjustments`)
-      .set(headers())
+      .set(headers)
       .send({
         adjustmentId: 'adjust-comp',
         orderId: 'order-provider-1',
@@ -245,7 +255,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
       .expect(201);
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/order-adjustments`)
-      .set(headers())
+      .set(headers)
       .send({
         adjustmentId: 'adjust-void',
         orderId: 'order-provider-1',
@@ -264,7 +274,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/cash-declarations`)
-      .set(headers())
+      .set(headers)
       .send({
         declarationId: 'cash-declaration-1',
         salesLocationId: barOneId,
@@ -278,7 +288,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
       .expect(201);
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/inventory-unit-costs`)
-      .set(headers())
+      .set(headers)
       .send({
         declarationId: 'cost-declaration-1',
         skuId,
@@ -291,7 +301,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const preClose = await request(app.getHttpServer())
       .get(`/event-close/events/${eventId}/report`)
-      .set(headers())
+      .set(headers)
       .expect(200);
     expect(amount(preClose.body.sales.grossSales)).toBe('60000');
     expect(amount(preClose.body.sales.discounts)).toBe('1000');
@@ -351,7 +361,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const closed = await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/close`)
-      .set(headers())
+      .set(headers)
       .send({ actionId: 'close-action-1', reason: 'Operational close after physical count' })
       .expect(201);
     expect(closed.body.revision).toBe(1);
@@ -368,7 +378,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const closeReplay = await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/close`)
-      .set(headers())
+      .set(headers)
       .send({ actionId: 'close-action-1', reason: 'Operational close after physical count' })
       .expect(201);
     expect(closeReplay.body.reportId).toBe(closed.body.reportId);
@@ -387,7 +397,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const liveAfterLateTruth = await request(app.getHttpServer())
       .get(`/event-close/events/${eventId}/report`)
-      .set(headers())
+      .set(headers)
       .expect(200);
     expect(liveAfterLateTruth.body.close).toMatchObject({
       state: 'OPERATIONALLY_CLOSED',
@@ -407,7 +417,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const storedRevisionOne = await request(app.getHttpServer())
       .get(`/event-close/events/${eventId}/reports/1`)
-      .set(headers())
+      .set(headers)
       .expect(200);
     expect(storedRevisionOne.body.sha256).toBe(closed.body.sha256);
     expect(storedRevisionOne.body.report.unresolvedPayments).toHaveLength(1);
@@ -417,19 +427,19 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/close`)
-      .set(headers())
+      .set(headers)
       .send({ actionId: 'close-action-without-reopen', reason: 'Should fail' })
       .expect(409);
 
     await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/reopen`)
-      .set(headers())
+      .set(headers)
       .send({ actionId: 'reopen-action-1', reason: 'Reconcile late Sabi confirmation' })
       .expect(201);
 
     const revisionTwo = await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/close`)
-      .set(headers())
+      .set(headers)
       .send({ actionId: 'close-action-2', reason: 'Re-close after provider reconciliation' })
       .expect(201);
     expect(revisionTwo.body.revision).toBe(2);
@@ -442,7 +452,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const actions = await request(app.getHttpServer())
       .get(`/event-close/events/${eventId}/actions`)
-      .set(headers())
+      .set(headers)
       .expect(200);
     expect(actions.body.map((action: { action: string }) => action.action)).toEqual([
       'OPERATIONALLY_CLOSE',
@@ -452,7 +462,7 @@ describeIntegration('event operational close and post-close reconciliation', () 
 
     const csv = await request(app.getHttpServer())
       .get(`/event-close/events/${eventId}/reports/2/export.csv`)
-      .set(headers())
+      .set(headers)
       .expect(200)
       .expect('Content-Type', /text\/csv/);
     expect(Buffer.from(csv.body).toString('utf8')).toContain('FINANCIAL_RECONCILIATION');
