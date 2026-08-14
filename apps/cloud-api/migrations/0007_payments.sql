@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS payment_provider_observations (
   provider text NOT NULL,
   observation_key text NOT NULL,
   provider_request_id text,
+  provider_receipt_reference text,
   attempt_id text REFERENCES payment_attempts(id),
   observation_type text NOT NULL,
   normalized_outcome text NOT NULL,
