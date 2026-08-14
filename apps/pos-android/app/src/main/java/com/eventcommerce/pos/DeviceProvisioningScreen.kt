@@ -21,9 +21,10 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun DeviceProvisioningScreen(
   deviceId: String,
+  initialEndpoint: String = "",
   onProvision: (endpoint: String, token: String) -> Unit,
 ) {
-  var endpoint by remember { mutableStateOf("") }
+  var endpoint by remember(initialEndpoint) { mutableStateOf(initialEndpoint) }
   var token by remember { mutableStateOf("") }
   var error by remember { mutableStateOf<String?>(null) }
 
@@ -33,7 +34,7 @@ fun DeviceProvisioningScreen(
   ) {
     Text("Provision this POS", style = MaterialTheme.typography.headlineSmall)
     Text(
-      "Give this device ID to the event operator. They must provision this exact device at Event Edge before entering the one-time credential below.",
+      "Give this device ID to the event operator. They must provision or rotate this exact device at Event Edge before entering the one-time credential below.",
     )
     Text("Device ID: $deviceId", style = MaterialTheme.typography.bodyLarge)
     OutlinedTextField(
@@ -67,7 +68,7 @@ fun DeviceProvisioningScreen(
         }
       },
     ) {
-      Text("Provision POS")
+      Text("Save device credential")
     }
   }
 }
