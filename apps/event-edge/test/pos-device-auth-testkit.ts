@@ -31,6 +31,27 @@ export async function ensureDeviceEvent(
   );
 }
 
+async function ensureSalesLocation(
+  database: EdgeDatabaseService,
+  eventId: string,
+  salesLocationId: string,
+): Promise<void> {
+  const inventoryLocationId = `inventory-${salesLocationId}`;
+  await database.query(
+    `INSERT INTO edge_inventory_locations(event_id,id,name,type,lifecycle)
+     VALUES ($1,$2,$3,'BAR','ACTIVE')
+     ON CONFLICT (event_id,id) DO NOTHING`,
+    [eventId, inventoryLocationId, `Inventory ${salesLocationId}`],
+  );
+  await database.query(
+    `INSERT INTO edge_sales_inventory_mapping(event_id,sales_location_id,inventory_location_id)
+     VALUES ($1,$2,$3)
+     ON CONFLICT (event_id,sales_location_id) DO UPDATE SET
+       inventory_location_id=EXCLUDED.inventory_location_id`,
+    [eventId, salesLocationId, inventoryLocationId],
+  );
+}
+
 export async function provisionPosDevice(
   database: EdgeDatabaseService,
   deviceId: string,
@@ -42,8 +63,10 @@ export async function provisionPosDevice(
   } = {},
 ): Promise<{ token: string; headers: ReturnType<typeof posDeviceHeaders> }> {
   const eventId = options.eventId ?? DEFAULT_DEVICE_EVENT_ID;
+  const salesLocationId = options.salesLocationId ?? null;
   const token = options.token ?? tokenForDevice(deviceId);
   await ensureDeviceEvent(database, eventId);
+  if (salesLocationId !== null) await ensureSalesLocation(database, eventId, salesLocationId);
   await database.query(
     `INSERT INTO edge_pos_devices(
        device_id,credential_sha256,credential_version,status,event_id,sales_location_id,register_id,revoked_at
@@ -54,13 +77,7 @@ export async function provisionPosDevice(
        status='ACTIVE',event_id=EXCLUDED.event_id,
        sales_location_id=EXCLUDED.sales_location_id,register_id=EXCLUDED.register_id,
        revoked_at=NULL,last_authenticated_at=NULL,updated_at=now()`,
-    [
-      deviceId,
-      digest(token),
-      eventId,
-      options.salesLocationId ?? null,
-      options.registerId ?? null,
-    ],
+    [deviceId, digest(token), eventId, salesLocationId, options.registerId ?? null],
   );
   return { token, headers: posDeviceHeaders(deviceId, token) };
 }
