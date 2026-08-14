@@ -15,6 +15,9 @@ class ProvisionedEdgePaymentTransport(
   override suspend fun reconcile(paymentAttemptId: String): EdgePaymentState =
     delegate().reconcile(paymentAttemptId)
 
+  override suspend fun railAvailability(): List<EdgePaymentRailAvailability> =
+    delegate().railAvailability()
+
   private suspend fun delegate(): HttpsEdgePaymentTransport {
     val syncEndpoint = requireNotNull(provisioning.endpoint()) { "Edge endpoint is not provisioned" }
     val uri = URI(syncEndpoint)
