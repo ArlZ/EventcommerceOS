@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
+import { SecurityModule } from '../security/security.module';
 import { ExternalTerminalProvider } from './external-terminal.provider';
 import { ManualTerminalService } from './manual-terminal.service';
 import { MpesaProvider } from './mpesa.provider';
@@ -11,7 +12,7 @@ import { PaymentsService } from './payments.service';
 import { PesapalSabiProvider } from './pesapal-sabi.provider';
 
 @Module({
-  imports: [DatabaseModule],
+  imports: [DatabaseModule, SecurityModule],
   controllers: [PaymentsController],
   providers: [
     MpesaProvider,
