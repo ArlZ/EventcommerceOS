@@ -9,17 +9,17 @@ class PaymentCoordinator(
 ) {
   suspend fun startMpesa(orderId: String, customerPhone: String): LocalPaymentAttempt {
     val attempt = repository.createPaymentAttempt(orderId, "mpesa")
-    return try {
-      val result = transport.initiate(attempt, customerPhone)
-      repository.applyPaymentState(
-        attempt.id,
-        result.state,
-        result.providerReference,
-        result.failureCode,
-      )
-    } catch (_: Exception) {
-      repository.markPaymentTransportUncertain(attempt.id)
-    }
+    return initiate(attempt, customerPhone)
+  }
+
+  suspend fun startCard(orderId: String): LocalPaymentAttempt {
+    val attempt = repository.createPaymentAttempt(orderId, "pesapal_sabi")
+    return initiate(attempt)
+  }
+
+  suspend fun startExternalTerminal(orderId: String): LocalPaymentAttempt {
+    val attempt = repository.createPaymentAttempt(orderId, "external_terminal")
+    return initiate(attempt)
   }
 
   suspend fun reconcile(paymentAttemptId: String): LocalPaymentAttempt {
@@ -33,6 +33,23 @@ class PaymentCoordinator(
       )
     } catch (_: Exception) {
       repository.markPaymentTransportUncertain(paymentAttemptId)
+    }
+  }
+
+  private suspend fun initiate(
+    attempt: LocalPaymentAttempt,
+    customerPhone: String? = null,
+  ): LocalPaymentAttempt {
+    return try {
+      val result = transport.initiate(attempt, customerPhone)
+      repository.applyPaymentState(
+        attempt.id,
+        result.state,
+        result.providerReference,
+        result.failureCode,
+      )
+    } catch (_: Exception) {
+      repository.markPaymentTransportUncertain(attempt.id)
     }
   }
 }
