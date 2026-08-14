@@ -56,10 +56,12 @@ export class PaymentWebhookService {
       );
       if (existing.rowCount === 1) {
         const row = existing.rows[0]!;
-        if (!this.sameObservation(row, observation)) {
+        const same = this.sameObservation(row, observation);
+        if (!same) {
           await this.exception(client, row.attempt_id, 'WEBHOOK_OBSERVATION_KEY_REUSE', {
             observationKey: observation.observationKey,
           });
+          if (row.attempt_id) await this.wakeReconciliation(client, row.attempt_id);
         }
         return {
           duplicate: true,
@@ -104,15 +106,7 @@ export class PaymentWebhookService {
 
       // M-PESA callback correlation is not treated as cryptographic payment truth.
       // Persist the observation and wake the authenticated outbound status query.
-      await client.query(
-        `UPDATE payment_attempt_state SET
-           reconciliation_required = true,
-           next_query_at = clock_timestamp(),
-           updated_at = clock_timestamp()
-         WHERE attempt_id = $1
-           AND state IN ('INITIATED','PENDING','UNKNOWN')`,
-        [attemptId],
-      );
+      await this.wakeReconciliation(client, attemptId);
 
       return {
         duplicate: false,
@@ -120,6 +114,18 @@ export class PaymentWebhookService {
         reconciliationRequested: true,
       };
     });
+  }
+
+  private async wakeReconciliation(client: PoolClient, attemptId: string): Promise<void> {
+    await client.query(
+      `UPDATE payment_attempt_state SET
+         reconciliation_required = true,
+         next_query_at = clock_timestamp(),
+         updated_at = clock_timestamp()
+       WHERE attempt_id = $1
+         AND state IN ('INITIATED','PENDING','UNKNOWN')`,
+      [attemptId],
+    );
   }
 
   private async correlateAttempt(
