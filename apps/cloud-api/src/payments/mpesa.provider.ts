@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type {
   PaymentProvider,
+  ProviderAvailability,
   ProviderInitiationRequest,
   ProviderInitiationResult,
   ProviderStatusResult,
@@ -85,6 +86,19 @@ export class MpesaProvider implements PaymentProvider {
       reversals: false,
       asynchronousCallbacks: true,
     } as const;
+  }
+
+  availability(): ProviderAvailability {
+    const configured = [
+      'MPESA_CONSUMER_KEY',
+      'MPESA_CONSUMER_SECRET',
+      'MPESA_BUSINESS_SHORT_CODE',
+      'MPESA_PASSKEY',
+      'MPESA_CALLBACK_URL',
+    ].every((name) => Boolean(process.env[name]?.trim()));
+    return configured
+      ? { status: 'AVAILABLE', detailCode: 'MPESA_CONFIGURED' }
+      : { status: 'UNCONFIGURED', detailCode: 'MPESA_CREDENTIALS_MISSING' };
   }
 
   async initiate(request: ProviderInitiationRequest): Promise<ProviderInitiationResult> {
