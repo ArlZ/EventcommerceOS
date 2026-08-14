@@ -1,0 +1,40 @@
+name: Task005FinalFormat
+
+on:
+  push:
+    branches:
+      - "task/005-inventory-ledger-alerts"
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task/005-inventory-ledger-alerts
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec prettier --write
+          apps/cloud-api/src/inventory/inventory-validation.ts
+          apps/control-web/src/app/inventory/inventory-operations-client.tsx
+          apps/control-web/src/app/inventory/page.tsx
+          apps/event-edge/test/inventory-sync-boundary.integration.test.ts
+          packages/contracts/src/inventory.ts
+          packages/domain/src/inventory.ts
+      - run: |
+          rm .github/workflows/task005-format-final.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Format final Task 005 files"
+          git push origin HEAD:task/005-inventory-ledger-alerts
