@@ -29,6 +29,7 @@ interface DeviceRow extends QueryResultRow {
 
 interface EventOwnerRow extends QueryResultRow {
   event_id: string;
+  device_id: string | null;
 }
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
@@ -138,24 +139,30 @@ export class DeviceEdgeAuthService {
 
   async authorizePaymentAttempt(identity: PosDeviceIdentity, paymentAttemptId: string): Promise<void> {
     const rows = await this.database.query<EventOwnerRow>(
-      `SELECT event_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1`,
+      `SELECT event_id,device_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1`,
       [paymentAttemptId],
     );
-    const eventId = rows[0]?.event_id;
-    if (!eventId) throw new BadRequestException('payment attempt is not cached at Event Edge');
-    if (eventId !== identity.eventId) {
+    const owner = rows[0];
+    if (!owner) throw new BadRequestException('payment attempt is not cached at Event Edge');
+    if (owner.event_id !== identity.eventId) {
       throw new UnauthorizedException('payment attempt is outside the POS device event assignment');
+    }
+    if (owner.device_id !== null && owner.device_id !== identity.deviceId) {
+      throw new UnauthorizedException('payment attempt belongs to another POS device');
     }
   }
 
   async authorizeOrder(identity: PosDeviceIdentity, orderId: string): Promise<void> {
     const rows = await this.database.query<EventOwnerRow>(
-      `SELECT DISTINCT event_id FROM edge_payment_attempt_cache WHERE order_id=$1`,
+      `SELECT DISTINCT event_id,device_id FROM edge_payment_attempt_cache WHERE order_id=$1`,
       [orderId],
     );
     if (rows.length === 0) throw new BadRequestException('order has no cached Edge payment attempts');
     if (rows.some((row) => row.event_id !== identity.eventId)) {
       throw new UnauthorizedException('order is outside the POS device event assignment');
+    }
+    if (rows.some((row) => row.device_id !== null && row.device_id !== identity.deviceId)) {
+      throw new UnauthorizedException('order payment history belongs to another POS device');
     }
   }
 }
