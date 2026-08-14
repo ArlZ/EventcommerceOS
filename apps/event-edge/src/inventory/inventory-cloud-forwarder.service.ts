@@ -13,6 +13,7 @@ interface InventoryOutboxRow extends QueryResultRow {
   aggregate_id: string;
   payload: Record<string, unknown>;
   attempts: number;
+  created_at: Date;
 }
 
 interface CountRow extends QueryResultRow {
@@ -41,10 +42,10 @@ export class InventoryCloudForwarderService implements OnModuleInit, OnModuleDes
 
   async drainOnce(limit = 100): Promise<{ sent: number; backlog: number }> {
     const rows = await this.database.query<InventoryOutboxRow>(
-      `SELECT id, event_type, aggregate_type, aggregate_id, payload, attempts
+      `SELECT id, event_type, aggregate_type, aggregate_id, payload, attempts, created_at
        FROM edge_inventory_cloud_outbox
        WHERE delivered_at IS NULL AND next_attempt_at <= now()
-       ORDER BY next_attempt_at ASC, created_at ASC
+       ORDER BY next_attempt_at ASC, created_at ASC, id ASC
        LIMIT $1`,
       [Math.max(1, Math.min(100, limit))],
     );
@@ -57,7 +58,7 @@ export class InventoryCloudForwarderService implements OnModuleInit, OnModuleDes
         eventType: row.event_type,
         aggregateType: row.aggregate_type,
         aggregateId: row.aggregate_id,
-        payload: row.payload,
+        payload: this.orderedPayload(row),
       })),
     };
 
@@ -91,7 +92,8 @@ export class InventoryCloudForwarderService implements OnModuleInit, OnModuleDes
       });
       return { sent: rows.length, backlog: await this.backlogCount() };
     } catch (error) {
-      const message = error instanceof Error ? error.message.slice(0, 500) : 'inventory cloud sync failed';
+      const message =
+        error instanceof Error ? error.message.slice(0, 500) : 'inventory cloud sync failed';
       await this.database.transaction(async (client) => {
         for (const row of rows) {
           const attempts = row.attempts + 1;
@@ -114,6 +116,17 @@ export class InventoryCloudForwarderService implements OnModuleInit, OnModuleDes
       'SELECT count(*)::text AS count FROM edge_inventory_cloud_outbox WHERE delivered_at IS NULL',
     );
     return Number.parseInt(rows[0]!.count, 10);
+  }
+
+  private orderedPayload(row: InventoryOutboxRow): Record<string, unknown> {
+    const sourceUpdatedAt = row.created_at.toISOString();
+    if (row.event_type === 'INVENTORY_ALERT_UPSERTED') {
+      return { ...row.payload, sourceUpdatedAt };
+    }
+    if (row.event_type === 'INVENTORY_TRANSFER_UPSERTED') {
+      return { ...row.payload, updatedAt: sourceUpdatedAt };
+    }
+    return row.payload;
   }
 
   private async tick(): Promise<void> {
