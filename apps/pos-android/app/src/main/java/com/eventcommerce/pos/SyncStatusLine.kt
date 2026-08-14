@@ -24,7 +24,7 @@ fun SyncStatusLine(
       runCatching {
         val health = state.health()
         val pending = queue.countAfter(health.acknowledgedThroughSequence)
-        val mode = if (provisioning.endpoint() == null) "not provisioned" else "active"
+        val mode = if (provisioning.current() == null) "not provisioned" else "active"
         label = "Edge sync $mode • pending $pending • ack ${health.acknowledgedThroughSequence} • edge backlog ${health.edgeBacklogCount}" +
           (health.lastError?.let { " • error $it" } ?: "")
       }
