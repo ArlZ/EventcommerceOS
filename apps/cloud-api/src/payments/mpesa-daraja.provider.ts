@@ -39,6 +39,15 @@ function text(value: unknown): string | null {
   return null;
 }
 
+function httpsUrl(value: string, label: string, trimTrailingSlash = false): string {
+  const parsed = new URL(value);
+  if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
+    throw new Error(`${label} must be an HTTPS URL without embedded credentials`);
+  }
+  const normalized = parsed.toString();
+  return trimTrailingSlash ? normalized.replace(/\/$/, '') : normalized;
+}
+
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     return JSON.stringify(value);
@@ -300,17 +309,18 @@ export class MpesaDarajaProvider implements PaymentProvider {
       return value;
     };
     const timeout = Number(this.environment.MPESA_HTTP_TIMEOUT_MS ?? '10000');
+    const rawBaseUrl =
+      this.environment.MPESA_BASE_URL?.trim() ||
+      (environment === 'production'
+        ? 'https://api.safaricom.co.ke'
+        : 'https://sandbox.safaricom.co.ke');
     return {
-      baseUrl:
-        this.environment.MPESA_BASE_URL?.trim() ||
-        (environment === 'production'
-          ? 'https://api.safaricom.co.ke'
-          : 'https://sandbox.safaricom.co.ke'),
+      baseUrl: httpsUrl(rawBaseUrl, 'MPESA_BASE_URL', true),
       consumerKey: required('MPESA_CONSUMER_KEY'),
       consumerSecret: required('MPESA_CONSUMER_SECRET'),
       shortCode: required('MPESA_SHORTCODE'),
       passKey: required('MPESA_PASSKEY'),
-      callbackUrl: required('MPESA_CALLBACK_URL'),
+      callbackUrl: httpsUrl(required('MPESA_CALLBACK_URL'), 'MPESA_CALLBACK_URL'),
       transactionType: this.environment.MPESA_TRANSACTION_TYPE?.trim() || 'CustomerPayBillOnline',
       timeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.min(timeout, 30_000) : 10_000,
     };
