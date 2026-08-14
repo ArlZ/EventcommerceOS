@@ -16,6 +16,7 @@ interface AttemptLookupRow extends QueryResultRow {
 interface ObservationRow extends QueryResultRow {
   attempt_id: string | null;
   provider_request_id: string | null;
+  provider_receipt_reference: string | null;
   normalized_outcome: string;
   verification_strength: string;
   payload_hash: string;
@@ -47,7 +48,7 @@ export class PaymentWebhookService {
       ]);
 
       const existing = await client.query<ObservationRow>(
-        `SELECT attempt_id, provider_request_id, normalized_outcome,
+        `SELECT attempt_id, provider_request_id, provider_receipt_reference, normalized_outcome,
                 verification_strength, payload_hash
          FROM payment_provider_observations
          WHERE provider = $1 AND observation_key = $2`,
@@ -70,15 +71,16 @@ export class PaymentWebhookService {
       const attemptId = await this.correlateAttempt(client, observation.providerRequestId);
       await client.query(
         `INSERT INTO payment_provider_observations(
-           id, provider, observation_key, provider_request_id, attempt_id,
+           id, provider, observation_key, provider_request_id, provider_receipt_reference, attempt_id,
            observation_type, normalized_outcome, verification_strength,
            payload_hash, sanitized_details, received_at
-         ) VALUES ($1,$2,$3,$4,$5,'WEBHOOK',$6,$7,$8,$9::jsonb,$10)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,'WEBHOOK',$7,$8,$9,$10::jsonb,$11)`,
         [
           randomUUID(),
           this.provider.code,
           observation.observationKey,
           observation.providerRequestId,
+          observation.providerReceiptReference,
           attemptId,
           observation.outcome,
           observation.verificationStrength,
@@ -136,6 +138,7 @@ export class PaymentWebhookService {
   private sameObservation(row: ObservationRow, observation: ProviderWebhookObservation): boolean {
     return (
       row.provider_request_id === observation.providerRequestId &&
+      row.provider_receipt_reference === observation.providerReceiptReference &&
       row.normalized_outcome === observation.outcome &&
       row.verification_strength === observation.verificationStrength &&
       row.payload_hash === observation.payloadHash
