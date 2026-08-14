@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseEdgeInitiatePayment } from '../src/payments/payments.service';
+import { EdgePaymentsController } from '../src/payments/payments.controller';
+import { EdgePaymentsService, parseEdgeInitiatePayment } from '../src/payments/payments.service';
 import {
   assertEdgeInitiatePaymentEnvelope,
   assertNoProhibitedEdgeCardFields,
@@ -93,6 +94,33 @@ describe('Edge payment boundary', () => {
         arbitraryTerminalBlob: 'not-part-of-contract',
       }),
     ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
+  });
+
+  it('rejects M-PESA phone data and wrong merchant references on Sabi at the Edge controller', () => {
+    const initiate = vi.fn();
+    const controller = new EdgePaymentsController(
+      { initiate } as unknown as EdgePaymentsService,
+      new TerminalPaymentsService(),
+    );
+    const cardRequest = {
+      eventId: 'event-1',
+      paymentId: 'payment-card-1',
+      paymentAttemptId: 'attempt-card-1',
+      orderId: 'order-card-1',
+      providerId: 'pesapal_sabi',
+      idempotencyKey: 'PAYMENT:order-card-1:primary:attempt-card-1',
+      amountMinor: 25000,
+      currency: 'KES',
+      accountReference: 'attempt-card-1',
+    };
+
+    expect(() => controller.initiate({ ...cardRequest, customerPhone: '254700000000' })).toThrow(
+      'customerPhone is only accepted for the M-PESA provider',
+    );
+    expect(() => controller.initiate({ ...cardRequest, accountReference: 'order-card-1' })).toThrow(
+      'Pesapal Sabi accountReference must equal paymentAttemptId',
+    );
+    expect(initiate).not.toHaveBeenCalled();
   });
 
   it('normalizes a controlled manual terminal confirmation without card data', () => {
