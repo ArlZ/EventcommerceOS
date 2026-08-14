@@ -11,4 +11,5 @@ export function makeHealthResponse(service: string, now: Date = new Date()): Hea
 
 export * from './configuration';
 export * from './inventory';
+export * from './payment';
 export * from './sync';
