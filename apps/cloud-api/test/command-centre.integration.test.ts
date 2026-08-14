@@ -4,36 +4,40 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { OperatorAuthService } from '../src/auth/operator-auth.service';
 import { DatabaseService } from '../src/database/database.service';
+import {
+  enableOperatorTestSigningKey,
+  operatorHeaders,
+  provisionOperator,
+} from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
 const otherOrganisationId = '11111111-1111-4111-8111-222222222222';
 const eventId = '22222222-2222-4222-8222-222222222222';
 const actorId = '33333333-3333-4333-8333-333333333333';
+const otherActorId = '33333333-3333-4333-8333-444444444444';
 const assignedActorId = '44444444-4444-4444-8444-444444444444';
 const salesLocationId = '55555555-5555-4555-8555-555555555555';
 const inventoryLocationId = '66666666-6666-4666-8666-666666666666';
 const productId = '77777777-7777-4777-8777-777777777777';
 const skuId = '88888888-8888-4888-8888-888888888888';
 
-function adminHeaders(organisation = organisationId) {
-  return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
-    'x-organisation-id': organisation,
-  };
-}
-
 describeIntegration('live event command centre', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let auth: OperatorAuthService;
+  let adminHeaders: Record<string, string>;
+  let otherAdminHeaders: Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
+    enableOperatorTestSigningKey();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     database = moduleRef.get(DatabaseService);
+    auth = moduleRef.get(OperatorAuthService);
     await app.init();
   });
 
@@ -153,17 +157,32 @@ describeIntegration('live event command centre', () => {
        )`,
       [eventId, inventoryLocationId, skuId],
     );
+
+    await provisionOperator(database, {
+      actorId,
+      organisationId,
+      role: 'ADMIN',
+    });
+    await provisionOperator(database, {
+      actorId: otherActorId,
+      organisationId: otherOrganisationId,
+      role: 'ADMIN',
+    });
+    adminHeaders = await operatorHeaders(auth, actorId);
+    otherAdminHeaders = await operatorHeaders(auth, otherActorId);
   });
 
   afterAll(async () => {
     delete process.env.PAYMENT_RECONCILIATION_DISABLED;
+    delete process.env.OPERATOR_TOKEN_SIGNING_KEY;
+    delete process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS;
     await app.close();
   });
 
   it('returns actionable event truth without double-counting successful payment retries', async () => {
     const response = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders)
       .expect(200);
 
     expect(response.body.sales).toMatchObject({ transactionCount: 1 });
@@ -192,14 +211,14 @@ describeIntegration('live event command centre', () => {
   it('rejects cross-organisation access before returning event metrics', async () => {
     await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders(otherOrganisationId))
+      .set(otherAdminHeaders)
       .expect(403);
   });
 
   it('audits acknowledge and assignment while Edge RESOLVED remains authoritative', async () => {
     const acknowledge = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
-      .set(adminHeaders())
+      .set(adminHeaders)
       .send({ action: 'ACKNOWLEDGE' })
       .expect(201);
     expect(acknowledge.body).toMatchObject({
@@ -210,7 +229,7 @@ describeIntegration('live event command centre', () => {
 
     const assign = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
-      .set(adminHeaders())
+      .set(adminHeaders)
       .send({ action: 'ASSIGN', assignedActorId })
       .expect(201);
     expect(assign.body).toMatchObject({
@@ -221,7 +240,7 @@ describeIntegration('live event command centre', () => {
 
     const active = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders)
       .expect(200);
     expect(active.body.inventory.risks[0]).toMatchObject({
       state: 'ASSIGNED',
@@ -240,9 +259,11 @@ describeIntegration('live event command centre', () => {
     );
     const resolved = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders)
       .expect(200);
     expect(resolved.body.inventory.risks).toEqual([]);
-    expect(resolved.body.alerts.find((alert: { id: string }) => alert.id === 'inventory:alert-1')).toBeUndefined();
+    expect(
+      resolved.body.alerts.find((alert: { id: string }) => alert.id === 'inventory:alert-1'),
+    ).toBeUndefined();
   });
 });
