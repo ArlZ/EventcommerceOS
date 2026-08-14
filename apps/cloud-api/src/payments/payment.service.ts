@@ -439,6 +439,12 @@ export class PaymentService {
           attemptId,
           input.providerRequestId,
         ]);
+        await client.query(
+          `UPDATE payment_provider_observations
+           SET attempt_id = $1
+           WHERE provider = $2 AND provider_request_id = $3 AND attempt_id IS NULL`,
+          [attemptId, attempt.provider, input.providerRequestId],
+        );
       }
 
       if (input.providerReceiptReference) {
