@@ -7,6 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "db:migrate": "node scripts/migrate.mjs",
+    "edge-credential": "node scripts/manage-edge-credential.mjs",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
