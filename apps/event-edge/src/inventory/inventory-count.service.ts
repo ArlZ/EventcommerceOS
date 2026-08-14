@@ -50,16 +50,19 @@ export class InventoryCountService {
   async create(input: CreateStockCountInput): Promise<StockCountResult> {
     return this.database.transaction(async (client) => {
       await this.authorization.require(client, input.eventId, input.actorId, 'COUNT_MANAGE');
+      if (new Set(input.lines.map((line) => line.skuId)).size !== input.lines.length) {
+        throw new ConflictException('stock count lines must not repeat a SKU');
+      }
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `stock-count-id:${input.id}`,
+      ]);
       const existing = await client.query<CountRow>(
         'SELECT * FROM edge_stock_counts WHERE id = $1',
         [input.id],
       );
       if (existing.rowCount === 1) {
         const row = existing.rows[0]!;
-        if (
-          row.event_id !== input.eventId ||
-          row.inventory_location_id !== input.inventoryLocationId
-        ) {
+        if (!(await this.sameCreate(client, row, input))) {
           throw new ConflictException('stock count ID was reused with different content');
         }
         return this.result(client, row);
@@ -149,6 +152,30 @@ export class InventoryCountService {
       await this.queueCloud(client, closed);
       return this.result(client, closed);
     });
+  }
+
+  private async sameCreate(
+    client: PoolClient,
+    existing: CountRow,
+    input: CreateStockCountInput,
+  ): Promise<boolean> {
+    if (
+      existing.event_id !== input.eventId ||
+      existing.inventory_location_id !== input.inventoryLocationId ||
+      existing.opened_by_actor_id !== input.actorId ||
+      existing.opened_at.toISOString() !== new Date(input.openedAt).toISOString() ||
+      existing.reason !== input.reason
+    ) {
+      return false;
+    }
+    const stored = await this.lines(client, existing.id);
+    const requested = [...input.lines].sort((a, b) => a.skuId.localeCompare(b.skuId));
+    if (stored.length !== requested.length) return false;
+    return stored.every(
+      (line, index) =>
+        line.sku_id === requested[index]!.skuId &&
+        line.counted_quantity === requested[index]!.countedQuantityBase,
+    );
   }
 
   private async count(client: PoolClient, id: string, lock: boolean): Promise<CountRow> {

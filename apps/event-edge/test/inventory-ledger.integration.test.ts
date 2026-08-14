@@ -165,6 +165,47 @@ describeIntegration('inventory ledger and sale consumption', () => {
       [sale.eventInstanceId],
     );
     expect(movementCount[0]!.count).toBe('0');
-    expect(exceptions.map((row) => row.exception_type)).toContain('MISSING_SALES_INVENTORY_MAPPING');
+    expect(exceptions.map((row) => row.exception_type)).toContain(
+      'MISSING_SALES_INVENTORY_MAPPING',
+    );
+  });
+  it('serializes identical count creation and rejects changed quantities under the same ID', async () => {
+    const input = {
+      id: 'count-create-race-002',
+      eventId: inventoryEventId,
+      inventoryLocationId: mainLocationId,
+      actorId: operatorActorId,
+      reason: 'cycle count',
+      openedAt: '2026-08-14T08:00:00.000Z',
+      lines: [{ skuId: beerSkuId, countedQuantityBase: '12' }],
+    };
+
+    const [first, second] = await Promise.all([counts.create(input), counts.create(input)]);
+    expect(first.id).toBe(input.id);
+    expect(second.id).toBe(input.id);
+
+    const rows = await database.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM edge_stock_counts WHERE id = $1',
+      [input.id],
+    );
+    expect(rows[0]!.count).toBe('1');
+
+    await expect(
+      counts.create({
+        ...input,
+        lines: [{ skuId: beerSkuId, countedQuantityBase: '13' }],
+      }),
+    ).rejects.toThrow(/reused with different content/);
+
+    await expect(
+      counts.create({
+        ...input,
+        id: 'count-duplicate-lines-003',
+        lines: [
+          { skuId: beerSkuId, countedQuantityBase: '6' },
+          { skuId: beerSkuId, countedQuantityBase: '6' },
+        ],
+      }),
+    ).rejects.toThrow(/must not repeat a SKU/);
   });
 });
