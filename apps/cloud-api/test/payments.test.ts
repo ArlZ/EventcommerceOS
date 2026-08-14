@@ -45,7 +45,7 @@ describe('payment request validation', () => {
 });
 
 describe('M-PESA callback parsing', () => {
-  it('normalizes a successful STK callback without persisting phone metadata', async () => {
+  it('treats a successful STK callback as a reconciliation signal without persisting phone metadata', async () => {
     const provider = new MpesaProvider();
     const callback = await provider.parseAndVerifyWebhook({
       Body: {
@@ -67,14 +67,15 @@ describe('M-PESA callback parsing', () => {
 
     expect(callback).toMatchObject({
       providerReference: 'checkout-1',
-      status: 'SUCCEEDED',
+      status: 'UNKNOWN',
       amountMinor: 15000,
       currency: 'KES',
+      failureCode: 'MPESA_CALLBACK_RESULT_0',
     });
     expect(JSON.stringify(callback)).not.toContain('254700000000');
   });
 
-  it('normalizes a definitive provider failure', async () => {
+  it('treats a non-zero STK callback as a reconciliation signal rather than authoritative failure', async () => {
     const provider = new MpesaProvider();
     await expect(
       provider.parseAndVerifyWebhook({
@@ -87,7 +88,10 @@ describe('M-PESA callback parsing', () => {
           },
         },
       }),
-    ).resolves.toMatchObject({ status: 'FAILED', failureCode: '1032' });
+    ).resolves.toMatchObject({
+      status: 'UNKNOWN',
+      failureCode: 'MPESA_CALLBACK_RESULT_1032',
+    });
   });
 
   it('rejects malformed callbacks', async () => {
