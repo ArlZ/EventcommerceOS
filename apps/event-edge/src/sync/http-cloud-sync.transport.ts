@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EdgeCloudAck, EdgeCloudBatch } from '@event-commerce/contracts';
+import { edgeCloudHeaders } from '../security/edge-cloud-credential';
 import { CloudSyncTransport } from './cloud-sync.transport';
 
 @Injectable()
@@ -16,7 +17,7 @@ export class HttpCloudSyncTransport extends CloudSyncTransport {
     }
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: edgeCloudHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify(batch),
       signal: AbortSignal.timeout(5_000),
     });
