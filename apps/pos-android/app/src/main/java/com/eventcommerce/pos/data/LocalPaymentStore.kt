@@ -2,6 +2,8 @@ package com.eventcommerce.pos.data
 
 import androidx.room.withTransaction
 import com.eventcommerce.pos.domain.LocalPaymentAttempt
+import com.eventcommerce.pos.domain.OrderRules
+import com.eventcommerce.pos.domain.OrderState
 import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.util.UUID
 
@@ -14,25 +16,23 @@ class LocalPaymentStore(
   private val dao = db.payments()
 
   suspend fun beginMpesa(orderId: String): LocalPaymentAttempt {
-    val order = requireNotNull(orders.order(orderId)) { "order not found" }
-    require(order.state.name == "OPEN") { "M-PESA requires an open order" }
-    require(order.totalMinor > 0) { "cannot pay an empty order" }
-    require(order.currency == "KES") { "M-PESA currently supports KES orders only" }
-    require(order.totalMinor % 100L == 0L) { "M-PESA requires a whole KES order total" }
-
     val attemptId = idFactory()
     val paymentId = idFactory()
     val clientAttemptId = idFactory()
-    val idempotencyKey = "PAYMENT:${order.id}:full:$clientAttemptId"
+    val idempotencyKey = "PAYMENT:$orderId:full:$clientAttemptId"
     val now = clock()
 
     db.withTransaction {
-      // Re-read inside the transaction so a cash close cannot race payment suspension.
       val current = requireNotNull(db.orders().order(orderId)) { "order not found" }
-      require(current.state == "OPEN") { "order is no longer open" }
+      require(current.state == OrderState.OPEN.name) { "M-PESA requires an open order" }
+      require(db.orders().orderItems(orderId).isNotEmpty()) { "cannot pay an empty order" }
+      require(current.totalMinor > 0) { "cannot pay an empty order" }
+      require(current.currency == "KES") { "M-PESA currently supports KES orders only" }
+      require(current.totalMinor % 100L == 0L) { "M-PESA requires a whole KES order total" }
       require(db.payments().forOrder(orderId).none { it.state in UNRESOLVED_STATES }) {
         "order already has an unresolved payment attempt"
       }
+
       db.payments().insert(
         PaymentAttemptEntity(
           attemptId = attemptId,
@@ -53,10 +53,11 @@ class LocalPaymentStore(
           updatedAtEpochMs = now,
         ),
       )
+      OrderRules.requireTransition(OrderState.OPEN, OrderState.PAYMENT_PENDING)
+      db.orders().updateOrder(
+        current.copy(state = OrderState.PAYMENT_PENDING.name, updatedAtEpochMs = now),
+      )
     }
-    // LocalOrderStore owns order transition/fault-injection semantics. If this fails, the orphan
-    // INITIATED attempt remains non-dispatched and can be safely superseded only after cleanup.
-    orders.suspendForPayment(orderId)
     return requireNotNull(attempt(attemptId))
   }
 
@@ -74,6 +75,8 @@ class LocalPaymentStore(
     db.withTransaction {
       dao.update(updated)
       if (snapshot.state == PaymentAttemptState.SUCCESS) {
+        // LocalOrderStore uses a nested Room transaction; Room joins the existing transaction,
+        // so payment projection + order close + order outbox commit or roll back together.
         orders.closeConfirmedMpesa(existing.orderId, existing.attemptId)
       }
     }
@@ -114,6 +117,7 @@ class LocalPaymentStore(
     require(
       existing.paymentId == snapshot.paymentId &&
         existing.clientAttemptId == snapshot.clientAttemptId &&
+        existing.initiationIdempotencyKey == snapshot.idempotencyKey &&
         existing.eventId == snapshot.eventId &&
         existing.orderId == snapshot.orderId &&
         existing.provider == snapshot.provider &&
@@ -126,6 +130,7 @@ class LocalPaymentStore(
     paymentId = row.paymentId,
     attemptId = row.attemptId,
     clientAttemptId = row.clientAttemptId,
+    idempotencyKey = row.initiationIdempotencyKey,
     eventId = row.eventId,
     orderId = row.orderId,
     provider = row.provider,
