@@ -5,6 +5,7 @@ import type {
   PaymentRailAvailabilityStatus,
   PaymentRailAvailabilityView,
 } from '@event-commerce/contracts';
+import { edgeCloudHeaders } from '../security/edge-cloud-credential';
 
 const PROHIBITED_CARD_KEYS = new Set([
   'pan',
@@ -143,7 +144,7 @@ export class TerminalPaymentsService {
   ): Promise<ExternalTerminalConfirmationView> {
     const response = await fetch(this.cloudUrl('/payments/manual-terminal-confirmations'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: edgeCloudHeaders({ 'content-type': 'application/json' }),
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs()),
     });
@@ -157,7 +158,7 @@ export class TerminalPaymentsService {
     try {
       const response = await fetch(this.cloudUrl('/payments/providers/availability'), {
         method: 'GET',
-        headers: { accept: 'application/json' },
+        headers: edgeCloudHeaders({ accept: 'application/json' }),
         signal: AbortSignal.timeout(this.timeoutMs()),
       });
       if (!response.ok) throw new Error(`cloud payment rail health returned HTTP ${response.status}`);
