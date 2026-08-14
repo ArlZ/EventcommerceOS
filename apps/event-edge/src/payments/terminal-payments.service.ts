@@ -8,10 +8,14 @@ import type {
 
 const PROHIBITED_CARD_KEYS = new Set([
   'pan',
+  'primaryaccountnumber',
   'cardnumber',
   'cvv',
   'cvc',
+  'securitycode',
+  'cardsecuritycode',
   'pin',
+  'pinblock',
   'track',
   'track1',
   'track2',
@@ -24,11 +28,46 @@ const PROHIBITED_CARD_KEYS = new Set([
   'cardexpiry',
 ]);
 
+const INITIATE_FIELDS = new Set([
+  'eventId',
+  'paymentId',
+  'paymentAttemptId',
+  'orderId',
+  'providerId',
+  'idempotencyKey',
+  'amountMinor',
+  'currency',
+  'customerPhone',
+  'accountReference',
+  'description',
+]);
+
+const MANUAL_CONFIRMATION_FIELDS = new Set([
+  'confirmationId',
+  'paymentAttemptId',
+  'externalProviderId',
+  'externalReference',
+  'amountMinor',
+  'currency',
+  'outcome',
+  'actorId',
+  'reason',
+  'idempotencyKey',
+]);
+
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('terminal payment payload must be an object');
   }
   return value as Record<string, unknown>;
+}
+
+function assertOnlyFields(value: unknown, allowed: ReadonlySet<string>): void {
+  const input = record(value);
+  const unexpected = Object.keys(input).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0) {
+    throw new Error(`Unexpected payment request field: ${unexpected.sort()[0]}`);
+  }
 }
 
 function text(value: Record<string, unknown>, key: string): string {
@@ -68,10 +107,16 @@ export function assertNoProhibitedEdgeCardFields(value: unknown): void {
   }
 }
 
+export function assertEdgeInitiatePaymentEnvelope(value: unknown): void {
+  assertNoProhibitedEdgeCardFields(value);
+  assertOnlyFields(value, INITIATE_FIELDS);
+}
+
 export function parseEdgeExternalTerminalConfirmation(
   value: unknown,
 ): ConfirmExternalTerminalPaymentRequest {
   assertNoProhibitedEdgeCardFields(value);
+  assertOnlyFields(value, MANUAL_CONFIRMATION_FIELDS);
   const input = record(value);
   const outcome = text(input, 'outcome').toUpperCase();
   if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
