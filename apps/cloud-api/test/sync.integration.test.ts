@@ -10,8 +10,14 @@ import type {
 } from '@event-commerce/contracts';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import {
+  DEFAULT_SYNC_EVENT_ID,
+  DEFAULT_SYNC_ORGANISATION_ID,
+  provisionSyncEdge,
+} from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
+const edgeId = 'test-edge';
 
 function event(
   deviceId: string,
@@ -33,7 +39,13 @@ function event(
     sequence,
     occurredAt: new Date(1_780_100_000_000 + sequence * 1000).toISOString(),
     idempotencyKey: `idem-${token}`,
-    payload: { orderId, state, totalMinor: sequence * 25_000, currency: 'KES' },
+    payload: {
+      orderId,
+      eventId: DEFAULT_SYNC_EVENT_ID,
+      state,
+      totalMinor: sequence * 25_000,
+      currency: 'KES',
+    },
   };
 }
 
@@ -51,7 +63,7 @@ function status(deviceId: string, sequence: number, backlog = 0): DeviceCloudSta
 function batch(events: SyncEventEnvelope[], backlog = 0): EdgeCloudBatch {
   const devices = [...new Set(events.map((item) => item.deviceId))];
   return {
-    edgeId: 'test-edge',
+    edgeId,
     events,
     deviceStatuses: devices.map((deviceId) =>
       status(
@@ -68,6 +80,7 @@ function batch(events: SyncEventEnvelope[], backlog = 0): EdgeCloudBatch {
 describeIntegration('edge to cloud synchronization', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let authHeaders: Record<string, string>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -80,6 +93,7 @@ describeIntegration('edge to cloud synchronization', () => {
     await database.query(
       'TRUNCATE sync_processed_events, sync_order_state, sync_device_state, sync_reconciliation_exceptions',
     );
+    authHeaders = (await provisionSyncEdge(database, { edgeId })).headers;
   });
 
   afterAll(async () => {
@@ -91,6 +105,7 @@ describeIntegration('edge to cloud synchronization', () => {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const response = await request(app.getHttpServer())
         .post('/sync/edge-events')
+        .set(authHeaders)
         .send(batch([first]))
         .expect(201);
       if (attempt === 0)
@@ -112,10 +127,12 @@ describeIntegration('edge to cloud synchronization', () => {
     const earlierOpen = event('cloud-device-2', 2, 'order-reordered', 'OPEN');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([closed]))
       .expect(201);
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([earlierOpen]))
       .expect(201);
 
@@ -137,10 +154,12 @@ describeIntegration('edge to cloud synchronization', () => {
     const unsafeOpen = event('cloud-device-3', 4, 'order-conflict', 'OPEN');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([closed]))
       .expect(201);
     const response = await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([unsafeOpen]))
       .expect(201);
     expect(response.body.conflictEventInstanceIds).toEqual([unsafeOpen.eventInstanceId]);
@@ -161,27 +180,45 @@ describeIntegration('edge to cloud synchronization', () => {
     const otherDevice = event('cloud-device-b', 1, 'shared-order', 'OPEN');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([original]))
       .expect(201);
     const response = await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([otherDevice]))
       .expect(201);
     expect(response.body.conflictEventInstanceIds).toEqual([otherDevice.eventInstanceId]);
   });
 
-  it('exposes device last-sync and reported edge backlog for control surfaces', async () => {
+  it('attributes device health and backlog to the authenticated Edge and organisation', async () => {
     const first = event('cloud-device-health', 1, 'health-order', 'OPEN');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch([first], 7))
       .expect(201);
-    const response = await request(app.getHttpServer()).get('/sync/devices').expect(200);
-    const device = response.body.find(
-      (item: { deviceId: string }) => item.deviceId === 'cloud-device-health',
+
+    const rows = await database.query<{
+      device_id: string;
+      edge_id: string;
+      organisation_id: string;
+      last_sequence_seen: string;
+      edge_accepted_through_sequence: string;
+      edge_backlog_count: number;
+    }>(
+      `SELECT device_id,edge_id,organisation_id::text,last_sequence_seen::text,
+              edge_accepted_through_sequence::text,edge_backlog_count
+       FROM sync_device_state WHERE device_id=$1`,
+      ['cloud-device-health'],
     );
-    expect(device.lastSequenceSeen).toBe(1);
-    expect(device.edgeAcceptedThroughSequence).toBe(1);
-    expect(device.edgeBacklogCount).toBe(7);
+    expect(rows[0]).toEqual({
+      device_id: 'cloud-device-health',
+      edge_id: edgeId,
+      organisation_id: DEFAULT_SYNC_ORGANISATION_ID,
+      last_sequence_seen: '1',
+      edge_accepted_through_sequence: '1',
+      edge_backlog_count: 7,
+    });
   });
 });
