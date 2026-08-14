@@ -10,6 +10,10 @@ class PosPaymentCoordinator(
 ) {
   suspend fun beginMpesa(orderId: String): LocalPaymentAttempt = repository.beginMpesaPayment(orderId)
 
+  fun validatePayerMsisdn(value: String) {
+    maskMsisdn(value)
+  }
+
   suspend fun relayMpesa(attemptId: String, payerMsisdn: String): LocalPaymentAttempt {
     val local = requireNotNull(repository.paymentAttempt(attemptId)) { "payment attempt not found" }
     require(local.state == PaymentAttemptState.INITIATED || local.state == PaymentAttemptState.UNKNOWN) {
