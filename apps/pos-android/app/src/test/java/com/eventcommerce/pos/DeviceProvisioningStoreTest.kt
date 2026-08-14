@@ -54,7 +54,10 @@ class DeviceProvisioningStoreTest {
     assertEquals(token, credentials.value)
     assertEquals(token, provisioning.current()?.token)
 
-    val metadataValues = db.localMetadata().all().map { it.value }
+    val metadataValues = mutableListOf<String>()
+    db.openHelper.readableDatabase.query("SELECT value FROM local_metadata").use { cursor ->
+      while (cursor.moveToNext()) metadataValues += cursor.getString(0)
+    }
     assertEquals(false, metadataValues.contains(token))
   }
 
