@@ -6,16 +6,20 @@ import androidx.test.core.app.ApplicationProvider
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.data.TransactionFaultInjector
+import com.eventcommerce.pos.domain.LocalPaymentAttempt
 import com.eventcommerce.pos.domain.MenuCandidate
 import com.eventcommerce.pos.domain.OrderState
+import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -142,6 +146,124 @@ class LocalPosRepositoryTest {
   }
 
   @Test
+  fun `M-PESA attempt suspends one order and immediately frees POS for the next customer`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val firstOrder = repository.addItem(item.itemId)
+    val attempt = repository.beginMpesaPayment(firstOrder.id)
+
+    assertEquals(PaymentAttemptState.INITIATED, attempt.state)
+    assertNull(repository.currentOpenOrder())
+    assertEquals(OrderState.PAYMENT_PENDING, repository.paymentPendingOrders().single().state)
+
+    val secondOrder = repository.addItem(item.itemId)
+    assertTrue(secondOrder.id != firstOrder.id)
+    assertEquals(secondOrder.id, repository.currentOpenOrder()?.id)
+    assertEquals(firstOrder.id, repository.paymentPendingOrders().single().id)
+  }
+
+  @Test
+  fun `pending and unknown M-PESA attempts never close order or create a sale event`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId)
+    val attempt = repository.beginMpesaPayment(order.id)
+
+    repository.applyPaymentSnapshot(edgeSnapshot(attempt, PaymentAttemptState.PENDING))
+    assertEquals(OrderState.PAYMENT_PENDING, repository.paymentPendingOrders().single().state)
+    assertEquals(0, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+
+    repository.applyPaymentSnapshot(edgeSnapshot(attempt, PaymentAttemptState.UNKNOWN))
+    assertEquals(OrderState.PAYMENT_PENDING, repository.paymentPendingOrders().single().state)
+    assertEquals(0, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+  }
+
+  @Test
+  fun `confirmed M-PESA success closes suspended order exactly once and freezes sale lines`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId, quantityDelta = 2)
+    val attempt = repository.beginMpesaPayment(order.id)
+    val success = edgeSnapshot(attempt, PaymentAttemptState.SUCCESS)
+
+    repository.applyPaymentSnapshot(success)
+    repository.applyPaymentSnapshot(success.copy(updatedAtEpochMs = success.updatedAtEpochMs + 1))
+
+    assertEquals(1, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+    assertTrue(repository.paymentPendingOrders().isEmpty())
+    val closed = repository.history().single { it.id == order.id }
+    assertEquals(OrderState.CLOSED, closed.state)
+
+    val event = repository.allOutboxEvents()
+      .single { it.aggregateId == order.id && it.eventType == "ORDER_CLOSED_MPESA" }
+    val lines = JSONObject(event.payloadJson).getJSONArray("lines")
+    assertEquals(1, lines.length())
+    assertEquals(item.skuId, lines.getJSONObject(0).getString("skuId"))
+    assertEquals(2, lines.getJSONObject(0).getInt("quantity"))
+  }
+
+  @Test
+  fun `failure during confirmed M-PESA close rolls back payment projection order and outbox together`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val failing = LocalPosRepository(
+      db = db,
+      faultInjector = TransactionFaultInjector { operation ->
+        if (operation == "closeConfirmedMpesa") error("simulated process death")
+      },
+    )
+    failing.ensureDevelopmentMenu()
+    val order = failing.addItem(item.itemId)
+    val attempt = failing.beginMpesaPayment(order.id)
+    val success = edgeSnapshot(attempt, PaymentAttemptState.SUCCESS)
+
+    assertThrows(IllegalStateException::class.java) {
+      runBlocking { failing.applyPaymentSnapshot(success) }
+    }
+
+    assertEquals(PaymentAttemptState.INITIATED, failing.paymentAttempt(attempt.attemptId)?.state)
+    assertEquals(OrderState.PAYMENT_PENDING, failing.paymentPendingOrders().single().state)
+    assertEquals(0, failing.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+  }
+
+  @Test
+  fun `unresolved M-PESA payment survives restart without storing payer phone`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId)
+    val attempt = repository.beginMpesaPayment(order.id)
+    repository.markPaymentTransportUnknown(attempt.attemptId, "254****5678")
+
+    db.close()
+    db = openDatabase()
+    repository = LocalPosRepository(db)
+
+    val restored = repository.unresolvedPayments().single()
+    assertEquals(attempt.attemptId, restored.attemptId)
+    assertEquals(PaymentAttemptState.UNKNOWN, restored.state)
+    assertEquals("254****5678", restored.maskedPayerReference)
+    assertEquals(OrderState.PAYMENT_PENDING, repository.paymentPendingOrders().single().state)
+
+    val cursor = db.openHelper.readableDatabase.query("SELECT * FROM payment_attempts")
+    cursor.use {
+      assertTrue(it.moveToFirst())
+      val values = buildString {
+        repeat(it.columnCount) { index ->
+          if (!it.isNull(index)) append(it.getString(index))
+        }
+      }
+      assertFalse(values.contains("254712345678"))
+    }
+  }
+
+  @Test
+  fun `failed M-PESA can return suspended order to cart only after provider truth is terminal`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId)
+    val attempt = repository.beginMpesaPayment(order.id)
+    repository.applyPaymentSnapshot(edgeSnapshot(attempt, PaymentAttemptState.FAILED))
+
+    repository.resumeOrderAfterFailedPayment(attempt.attemptId)
+    assertEquals(order.id, repository.currentOpenOrder()?.id)
+    assertTrue(repository.paymentPendingOrders().isEmpty())
+  }
+
+  @Test
   fun `invalid menu update leaves last valid menu active`() = runBlocking {
     val active = repository.ensureDevelopmentMenu()
     val invalid = MenuCandidate(
@@ -165,9 +287,23 @@ class LocalPosRepositoryTest {
     assertEquals(active.checksum, stillActive?.checksum)
   }
 
+  private fun edgeSnapshot(
+    local: LocalPaymentAttempt,
+    state: PaymentAttemptState,
+  ): LocalPaymentAttempt = local.copy(
+    state = state,
+    maskedPayerReference = "254****5678",
+    providerRequestId = if (state == PaymentAttemptState.INITIATED) null else "checkout-${local.attemptId}",
+    providerReceiptReference = if (state == PaymentAttemptState.SUCCESS) "receipt-${local.attemptId}" else null,
+    reconciliationRequired = state == PaymentAttemptState.INITIATED ||
+      state == PaymentAttemptState.PENDING ||
+      state == PaymentAttemptState.UNKNOWN,
+    updatedAtEpochMs = local.updatedAtEpochMs + 1000,
+  )
+
   private fun openDatabase(): AppDatabase =
     Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-      .addMigrations(AppDatabase.MIGRATION_1_2)
+      .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
       .allowMainThreadQueries()
       .build()
 }
