@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { InitiatePaymentRequest, PaymentAttemptView } from '@event-commerce/contracts';
+import { canTransitionPaymentAttempt, paymentAttemptIsTerminal } from '@event-commerce/domain';
 import type { QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
 
@@ -70,21 +71,24 @@ export class EdgePaymentsService {
   constructor(@Inject(EdgeDatabaseService) private readonly db: EdgeDatabaseService) {}
 
   async initiate(request: InitiatePaymentRequest): Promise<PaymentAttemptView> {
-    await this.cache({
-      eventId: request.eventId,
-      paymentId: request.paymentId,
-      paymentAttemptId: request.paymentAttemptId,
-      orderId: request.orderId,
-      providerId: request.providerId,
-      amountMinor: request.amountMinor,
-      currency: request.currency,
-      status: 'CREATED',
-      providerReference: null,
-      failureCode: null,
-      reconciliationRequired: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }, request.idempotencyKey);
+    await this.cache(
+      {
+        eventId: request.eventId,
+        paymentId: request.paymentId,
+        paymentAttemptId: request.paymentAttemptId,
+        orderId: request.orderId,
+        providerId: request.providerId,
+        amountMinor: request.amountMinor,
+        currency: request.currency,
+        status: 'CREATED',
+        providerReference: null,
+        failureCode: null,
+        reconciliationRequired: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      request.idempotencyKey,
+    );
 
     try {
       const response = await fetch(this.cloudUrl('/payments/initiate'), {
@@ -95,8 +99,7 @@ export class EdgePaymentsService {
       });
       if (!response.ok) throw new Error(`cloud payments returned HTTP ${response.status}`);
       const view = this.parsePaymentView(await response.json());
-      await this.cache(view, request.idempotencyKey);
-      return view;
+      return this.cache(view, request.idempotencyKey);
     } catch {
       const uncertain: PaymentAttemptView = {
         eventId: request.eventId,
@@ -113,8 +116,7 @@ export class EdgePaymentsService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      await this.cache(uncertain, request.idempotencyKey);
-      return uncertain;
+      return this.cache(uncertain, request.idempotencyKey);
     }
   }
 
@@ -132,19 +134,16 @@ export class EdgePaymentsService {
       );
       if (!response.ok) throw new Error(`cloud reconciliation returned HTTP ${response.status}`);
       const view = this.parsePaymentView(await response.json());
-      await this.cache(view, current.idempotency_key);
-      return view;
+      return this.cache(view, current.idempotency_key);
     } catch {
-      return this.toView(current);
+      const latest = await this.cached(paymentAttemptId);
+      return latest ? this.toView(latest) : this.toView(current);
     }
   }
 
   async byOrder(orderId: string): Promise<PaymentAttemptView[]> {
     const rows = await this.db.query<CachedAttemptRow>(
-      `SELECT payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
-              amount_minor::text,currency,status,provider_reference,failure_code,updated_at
-       FROM edge_payment_attempt_cache
-       WHERE order_id=$1 ORDER BY updated_at`,
+      `${this.select()} WHERE order_id=$1 ORDER BY updated_at`,
       [orderId],
     );
     return rows.map((row) => this.toView(row));
@@ -152,43 +151,119 @@ export class EdgePaymentsService {
 
   private async cached(paymentAttemptId: string): Promise<CachedAttemptRow | undefined> {
     const rows = await this.db.query<CachedAttemptRow>(
-      `SELECT payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
-              amount_minor::text,currency,status,provider_reference,failure_code,updated_at
-       FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1`,
+      `${this.select()} WHERE payment_attempt_id=$1`,
       [paymentAttemptId],
     );
     return rows[0];
   }
 
-  private async cache(view: PaymentAttemptView, idempotencyKey: string): Promise<void> {
-    await this.db.query(
-      `INSERT INTO edge_payment_attempt_cache(
-         payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
-         amount_minor,currency,status,provider_reference,failure_code,updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
-       ON CONFLICT (payment_attempt_id) DO UPDATE SET
-         provider_reference=coalesce(EXCLUDED.provider_reference,edge_payment_attempt_cache.provider_reference),
-         status=EXCLUDED.status,
-         failure_code=EXCLUDED.failure_code,
-         updated_at=now()`,
-      [
-        view.paymentAttemptId,
-        view.paymentId,
-        view.eventId,
-        view.orderId,
-        view.providerId,
-        idempotencyKey,
-        view.amountMinor,
-        view.currency,
-        view.status,
-        view.providerReference,
-        view.failureCode,
-      ],
-    );
+  private async cache(view: PaymentAttemptView, idempotencyKey: string): Promise<PaymentAttemptView> {
+    return this.db.transaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `edge-payment:${view.paymentAttemptId}`,
+      ]);
+      const existingResult = await client.query<CachedAttemptRow>(
+        `${this.select()} WHERE payment_attempt_id=$1 FOR UPDATE`,
+        [view.paymentAttemptId],
+      );
+      const existing = existingResult.rows[0];
+
+      if (!existing) {
+        await client.query(
+          `INSERT INTO edge_payment_attempt_cache(
+             payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
+             amount_minor,currency,status,provider_reference,failure_code,updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())`,
+          [
+            view.paymentAttemptId,
+            view.paymentId,
+            view.eventId,
+            view.orderId,
+            view.providerId,
+            idempotencyKey,
+            view.amountMinor,
+            view.currency,
+            view.status,
+            view.providerReference,
+            view.failureCode,
+          ],
+        );
+        const inserted = await client.query<CachedAttemptRow>(
+          `${this.select()} WHERE payment_attempt_id=$1`,
+          [view.paymentAttemptId],
+        );
+        return this.toView(inserted.rows[0]!);
+      }
+
+      this.assertSameIdentity(existing, view, idempotencyKey);
+
+      if (
+        existing.provider_reference !== null &&
+        view.providerReference !== null &&
+        existing.provider_reference !== view.providerReference
+      ) {
+        if (paymentAttemptIsTerminal(existing.status)) return this.toView(existing);
+        await client.query(
+          `UPDATE edge_payment_attempt_cache
+           SET status='UNKNOWN',failure_code='EDGE_PROVIDER_REFERENCE_CONFLICT',updated_at=now()
+           WHERE payment_attempt_id=$1`,
+          [view.paymentAttemptId],
+        );
+        const conflicted = await client.query<CachedAttemptRow>(
+          `${this.select()} WHERE payment_attempt_id=$1`,
+          [view.paymentAttemptId],
+        );
+        return this.toView(conflicted.rows[0]!);
+      }
+
+      if (!canTransitionPaymentAttempt(existing.status, view.status)) {
+        return this.toView(existing);
+      }
+
+      await client.query(
+        `UPDATE edge_payment_attempt_cache
+         SET provider_reference=coalesce($2,provider_reference),
+             status=$3,failure_code=$4,updated_at=now()
+         WHERE payment_attempt_id=$1`,
+        [view.paymentAttemptId, view.providerReference, view.status, view.failureCode],
+      );
+      const updated = await client.query<CachedAttemptRow>(
+        `${this.select()} WHERE payment_attempt_id=$1`,
+        [view.paymentAttemptId],
+      );
+      return this.toView(updated.rows[0]!);
+    });
+  }
+
+  private assertSameIdentity(
+    existing: CachedAttemptRow,
+    view: PaymentAttemptView,
+    idempotencyKey: string,
+  ): void {
+    if (
+      existing.payment_id !== view.paymentId ||
+      existing.event_id !== view.eventId ||
+      existing.order_id !== view.orderId ||
+      existing.provider_id !== view.providerId ||
+      existing.idempotency_key !== idempotencyKey ||
+      Number(existing.amount_minor) !== view.amountMinor ||
+      existing.currency !== view.currency
+    ) {
+      throw new Error('payment attempt identity conflicts with Edge cache');
+    }
+  }
+
+  private select(): string {
+    return `SELECT payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
+                   amount_minor::text,currency,status,provider_reference,failure_code,updated_at
+            FROM edge_payment_attempt_cache`;
   }
 
   private toView(row: CachedAttemptRow): PaymentAttemptView {
-    const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : new Date(row.updated_at).toISOString();
+    const updatedAt =
+      row.updated_at instanceof Date
+        ? row.updated_at.toISOString()
+        : new Date(row.updated_at).toISOString();
     return {
       eventId: row.event_id,
       paymentId: row.payment_id,
@@ -245,7 +320,9 @@ export class EdgePaymentsService {
     const base = (process.env.CLOUD_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
     const parsed = new URL(base);
     const loopback =
-      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '::1';
     if (parsed.protocol !== 'https:' && !loopback) {
       throw new Error('Cloud API URL must use HTTPS outside loopback development');
     }
@@ -254,7 +331,8 @@ export class EdgePaymentsService {
 
   private timeoutMs(): number {
     const value = Number(process.env.CLOUD_PAYMENT_TIMEOUT_MS ?? '10000');
-    if (!Number.isSafeInteger(value) || value <= 0) throw new Error('CLOUD_PAYMENT_TIMEOUT_MS must be positive');
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new Error('CLOUD_PAYMENT_TIMEOUT_MS must be positive');
     return value;
   }
 }
