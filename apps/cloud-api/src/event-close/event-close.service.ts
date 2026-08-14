@@ -112,7 +112,9 @@ export class EventCloseService {
 
       const latest = await this.latestAction(client, eventId);
       if (latest?.action === 'OPERATIONALLY_CLOSE') {
-        throw new ConflictException('Event is already operationally closed; reopen before re-closing');
+        throw new ConflictException(
+          'Event is already operationally closed; reopen before re-closing',
+        );
       }
 
       const revisionResult = await client.query<{ revision: number }>(
@@ -143,7 +145,7 @@ export class EventCloseService {
         `INSERT INTO event_close_reports(
            id,organisation_id,event_id,revision,source_version_token,report_json,
            report_sha256,created_by_actor_id,created_at
-         ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)
+         ) VALUES ($1,$2,$3,$4,$5,$6::json,$7,$8,$9)
          RETURNING id::text,event_id::text,revision,source_version_token,report_json,
                    report_sha256,created_by_actor_id::text,created_at`,
         [
@@ -258,8 +260,26 @@ export class EventCloseService {
     const push = (...values: Array<string | number | boolean | null>): void => {
       rows.push(values.map((value) => (value === null ? '' : String(value))));
     };
-    push('SECTION', 'KEY_1', 'KEY_2', 'CURRENCY', 'VALUE_1', 'VALUE_2', 'STATUS', 'DETAIL');
-    push('META', 'event_id', report.event.eventId, '', report.event.name, '', report.close.state, '');
+    push(
+      'SECTION',
+      'KEY_1',
+      'KEY_2',
+      'CURRENCY',
+      'VALUE_1',
+      'VALUE_2',
+      'STATUS',
+      'DETAIL',
+    );
+    push(
+      'META',
+      'event_id',
+      report.event.eventId,
+      '',
+      report.event.name,
+      '',
+      report.close.state,
+      '',
+    );
     push('META', 'generated_at', report.generatedAt, '', '', '', '', '');
     push('META', 'source_version', report.sourceVersionToken, '', '', '', '', '');
     push(
@@ -280,7 +300,9 @@ export class EventCloseService {
       ['refunds', report.sales.refunds],
       ['net_sales', report.sales.netSales],
     ] as const) {
-      values.forEach((value) => push('SALES', label, '', value.currency, value.amountMinor, '', '', ''));
+      values.forEach((value) =>
+        push('SALES', label, '', value.currency, value.amountMinor, '', '', ''),
+      );
     }
     report.paymentMethods.forEach((method) =>
       push(
