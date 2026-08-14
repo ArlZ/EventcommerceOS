@@ -18,6 +18,9 @@ const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 class FakePaymentProvider implements PaymentProvider {
   readonly id = 'fake';
   initiations = 0;
+  queries = 0;
+  initiationGate: Promise<void> | undefined;
+  onInitiationStarted: (() => void) | undefined;
   queryResult: ProviderStatusResult = { status: 'UNKNOWN', failureCode: 'NOT_YET_KNOWN' };
   initiationResult: ProviderInitiationResult = {
     status: 'UNKNOWN',
@@ -36,10 +39,13 @@ class FakePaymentProvider implements PaymentProvider {
 
   async initiate(_request: ProviderInitiationRequest): Promise<ProviderInitiationResult> {
     this.initiations += 1;
+    this.onInitiationStarted?.();
+    if (this.initiationGate) await this.initiationGate;
     return this.initiationResult;
   }
 
   async queryStatus(providerReference: string): Promise<ProviderStatusResult> {
+    this.queries += 1;
     return { ...this.queryResult, providerReference };
   }
 
@@ -112,6 +118,74 @@ describeIntegration('Cloud payment orchestration', () => {
     expect(rows[0]?.count).toBe('1');
   });
 
+  it('does not let a simultaneous duplicate steal the in-flight provider result', async () => {
+    let releaseInitiation!: () => void;
+    let signalStarted!: () => void;
+    provider.initiationGate = new Promise<void>((resolve) => {
+      releaseInitiation = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    provider.onInitiationStarted = signalStarted;
+
+    const firstPromise = payments.initiate(request());
+    await started;
+
+    const replay = await payments.initiate(request());
+    expect(replay.status).toBe('CREATED');
+    expect(provider.initiations).toBe(1);
+
+    releaseInitiation();
+    const first = await firstPromise;
+    expect(first.status).toBe('UNKNOWN');
+    expect(first.providerReference).toBe('fake-provider-ref');
+
+    const final = (await payments.byOrder('order-1'))[0];
+    expect(final?.status).toBe('UNKNOWN');
+    expect(final?.providerReference).toBe('fake-provider-ref');
+    expect(provider.initiations).toBe(1);
+  });
+
+  it('moves stale CREATED work to UNKNOWN manual review instead of re-initiating it', async () => {
+    let releaseInitiation!: () => void;
+    let signalStarted!: () => void;
+    provider.initiationGate = new Promise<void>((resolve) => {
+      releaseInitiation = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      signalStarted = resolve;
+    });
+    provider.onInitiationStarted = signalStarted;
+
+    const firstPromise = payments.initiate(request());
+    await started;
+    await database.query(
+      `UPDATE payment_attempts
+       SET updated_at=now() - interval '2 minutes'
+       WHERE id='attempt-1'`,
+    );
+
+    await (
+      payments as unknown as {
+        reconcileDue(): Promise<void>;
+      }
+    ).reconcileDue();
+
+    const stale = (await payments.byOrder('order-1'))[0];
+    expect(stale?.status).toBe('UNKNOWN');
+    expect(stale?.failureCode).toBe('AMBIGUOUS_INITIATION_CRASH');
+    const jobs = await database.query<{ status: string }>(
+      `SELECT status FROM payment_reconciliation_jobs WHERE payment_attempt_id='attempt-1'`,
+    );
+    expect(jobs[0]?.status).toBe('MANUAL_REVIEW');
+
+    releaseInitiation();
+    const completedOwner = await firstPromise;
+    expect(completedOwner.status).toBe('UNKNOWN');
+    expect(provider.initiations).toBe(1);
+  });
+
   it('keeps provider timeout UNKNOWN until an authoritative status query resolves it', async () => {
     const uncertain = await payments.initiate(request());
     expect(uncertain.status).toBe('UNKNOWN');
@@ -121,10 +195,57 @@ describeIntegration('Cloud payment orchestration', () => {
 
     expect(resolved.status).toBe('SUCCEEDED');
     expect(resolved.providerReference).toBe('fake-provider-ref');
+    expect(provider.queries).toBe(1);
     const jobs = await database.query<{ status: string }>(
       `SELECT status FROM payment_reconciliation_jobs WHERE payment_attempt_id='attempt-1'`,
     );
     expect(jobs[0]?.status).toBe('RESOLVED');
+  });
+
+  it('actively reconciles PENDING attempts even if no callback arrives', async () => {
+    provider.initiationResult = {
+      status: 'PENDING',
+      providerReference: 'fake-provider-ref',
+    };
+    const pending = await payments.initiate(request());
+    expect(pending.status).toBe('PENDING');
+
+    const queued = await database.query<{ status: string; attempt_count: number }>(
+      `SELECT status,attempt_count
+       FROM payment_reconciliation_jobs
+       WHERE payment_attempt_id='attempt-1'`,
+    );
+    expect(queued[0]?.status).toBe('PENDING');
+    expect(queued[0]?.attempt_count).toBe(0);
+
+    provider.queryResult = { status: 'SUCCEEDED' };
+    const resolved = await payments.reconcileAttempt('attempt-1');
+    expect(resolved.status).toBe('SUCCEEDED');
+    expect(provider.queries).toBe(1);
+  });
+
+  it('keeps polling when a status query still reports PENDING', async () => {
+    provider.initiationResult = {
+      status: 'PENDING',
+      providerReference: 'fake-provider-ref',
+    };
+    await payments.initiate(request());
+    provider.queryResult = { status: 'PENDING' };
+
+    const stillPending = await payments.reconcileAttempt('attempt-1');
+    expect(stillPending.status).toBe('PENDING');
+    const jobs = await database.query<{
+      status: string;
+      attempt_count: number;
+      next_attempt_at: Date;
+    }>(
+      `SELECT status,attempt_count,next_attempt_at
+       FROM payment_reconciliation_jobs
+       WHERE payment_attempt_id='attempt-1'`,
+    );
+    expect(jobs[0]?.status).toBe('PENDING');
+    expect(jobs[0]?.attempt_count).toBe(1);
+    expect(jobs[0]?.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
   });
 
   it('rejects reuse of an idempotency key for a different amount', async () => {
