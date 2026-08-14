@@ -29,6 +29,22 @@ function newCredential() {
   return randomBytes(32).toString('base64url');
 }
 
+async function validateAssignment(client, eventId, salesLocationId) {
+  const event = await client.query('SELECT 1 FROM edge_inventory_event_config WHERE event_id=$1', [eventId]);
+  if (event.rowCount !== 1) {
+    throw new Error('DEVICE_EVENT_ID is not installed in Event Edge configuration');
+  }
+  if (salesLocationId !== null) {
+    const location = await client.query(
+      'SELECT 1 FROM edge_sales_inventory_mapping WHERE event_id=$1 AND sales_location_id=$2',
+      [eventId, salesLocationId],
+    );
+    if (location.rowCount !== 1) {
+      throw new Error('DEVICE_SALES_LOCATION_ID is not mapped for DEVICE_EVENT_ID');
+    }
+  }
+}
+
 const deviceId = required('DEVICE_ID');
 const actor = required('DEVICE_CREDENTIAL_ACTOR');
 const client = new Client({ connectionString });
@@ -43,6 +59,7 @@ try {
     const eventId = required('DEVICE_EVENT_ID');
     const salesLocationId = optional('DEVICE_SALES_LOCATION_ID');
     const registerId = optional('DEVICE_REGISTER_ID');
+    await validateAssignment(client, eventId, salesLocationId);
     const existing = await client.query('SELECT 1 FROM edge_pos_devices WHERE device_id=$1', [deviceId]);
     if (existing.rowCount !== 0) {
       throw new Error('POS device already exists; rotate, reassign or revoke it instead');
@@ -98,6 +115,7 @@ try {
       const eventId = required('DEVICE_EVENT_ID');
       const salesLocationId = optional('DEVICE_SALES_LOCATION_ID');
       const registerId = optional('DEVICE_REGISTER_ID');
+      await validateAssignment(client, eventId, salesLocationId);
       await client.query(
         `UPDATE edge_pos_devices
          SET event_id=$2,sales_location_id=$3,register_id=$4,updated_at=now()
