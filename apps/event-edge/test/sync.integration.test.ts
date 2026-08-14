@@ -8,6 +8,11 @@ import { AppModule } from '../src/app.module';
 import { EdgeDatabaseService } from '../src/database/database.service';
 import { CloudForwarderService } from '../src/sync/cloud-forwarder.service';
 import { CloudSyncTransport } from '../src/sync/cloud-sync.transport';
+import {
+  DEFAULT_DEVICE_EVENT_ID,
+  posDeviceHeaders,
+  provisionPosDevice,
+} from './pos-device-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -27,6 +32,7 @@ function event(deviceId: string, sequence: number, suffix = ''): SyncEventEnvelo
     idempotencyKey: `idem-${id}`,
     payload: {
       orderId: `order-${deviceId}`,
+      eventId: DEFAULT_DEVICE_EVENT_ID,
       state: sequence === 3 ? 'CLOSED' : 'OPEN',
       totalMinor: sequence * 10_000,
       currency: 'KES',
@@ -69,7 +75,8 @@ describeIntegration('device to edge synchronization', () => {
     cloudAvailable = false;
     sentBatches.length = 0;
     await database.query(
-      'TRUNCATE edge_cloud_outbox, edge_processed_device_events, edge_device_watermarks, edge_reconciliation_exceptions',
+      `TRUNCATE edge_cloud_outbox,edge_processed_device_events,edge_device_watermarks,
+                edge_reconciliation_exceptions,edge_pos_device_audit,edge_pos_devices`,
     );
   });
 
@@ -80,9 +87,11 @@ describeIntegration('device to edge synchronization', () => {
 
   it('replays a persisted event twenty times after a lost acknowledgement with one durable effect', async () => {
     const firstEvent = event('device-replay', 1);
+    await provisionPosDevice(database, firstEvent.deviceId);
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const response = await request(app.getHttpServer())
         .post('/sync/device-events')
+        .set(posDeviceHeaders(firstEvent.deviceId))
         .send({ deviceId: firstEvent.deviceId, events: [firstEvent] })
         .expect(201);
       expect(response.body.acceptedThroughSequence).toBe(1);
@@ -101,13 +110,16 @@ describeIntegration('device to edge synchronization', () => {
   it('accepts out-of-order arrival but advances cleanup watermark only after gaps close', async () => {
     const second = event('device-gap', 2);
     const first = event('device-gap', 1);
+    await provisionPosDevice(database, second.deviceId);
     const early = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(second.deviceId))
       .send({ deviceId: second.deviceId, events: [second] })
       .expect(201);
     expect(early.body.acceptedThroughSequence).toBe(0);
     const filled = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(first.deviceId))
       .send({ deviceId: first.deviceId, events: [first] })
       .expect(201);
     expect(filled.body.acceptedThroughSequence).toBe(2);
@@ -119,8 +131,10 @@ describeIntegration('device to edge synchronization', () => {
       event('device-offline-cloud', 2),
       event('device-offline-cloud', 3),
     ];
+    await provisionPosDevice(database, 'device-offline-cloud');
     await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders('device-offline-cloud'))
       .send({ deviceId: 'device-offline-cloud', events })
       .expect(201);
     expect(await forwarder.backlogCount()).toBe(3);
@@ -142,12 +156,15 @@ describeIntegration('device to edge synchronization', () => {
   it('creates a reconciliation exception when a device sequence is reused', async () => {
     const original = event('device-conflict', 1);
     const conflicting = { ...event('device-conflict', 1, '-other'), sequence: 1 };
+    await provisionPosDevice(database, original.deviceId);
     await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(original.deviceId))
       .send({ deviceId: original.deviceId, events: [original] })
       .expect(201);
     const result = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(conflicting.deviceId))
       .send({ deviceId: conflicting.deviceId, events: [conflicting] })
       .expect(201);
     expect(result.body.receipts[0].status).toBe('CONFLICT');
@@ -159,10 +176,12 @@ describeIntegration('device to edge synchronization', () => {
 
   it('ingests multiple devices concurrently with independent monotonic watermarks', async () => {
     const deviceIds = Array.from({ length: 10 }, (_, index) => `sim-device-${index + 1}`);
+    await Promise.all(deviceIds.map((deviceId) => provisionPosDevice(database, deviceId)));
     await Promise.all(
       deviceIds.map((deviceId) =>
         request(app.getHttpServer())
           .post('/sync/device-events')
+          .set(posDeviceHeaders(deviceId))
           .send({
             deviceId,
             events: Array.from({ length: 10 }, (_, index) => event(deviceId, index + 1)),
