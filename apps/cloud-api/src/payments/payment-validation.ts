@@ -139,18 +139,28 @@ export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequ
   assertNoProhibitedCardFields(value);
   const record = object(value);
   assertOnlyFields(record, INITIATE_FIELDS);
+  const providerId = requiredString(record, 'providerId').toLowerCase();
+  const paymentAttemptId = requiredString(record, 'paymentAttemptId');
+  const accountReference = requiredString(record, 'accountReference');
+  const customerPhone = optionalString(record, 'customerPhone');
+  if (customerPhone !== undefined && providerId !== 'mpesa') {
+    throw new Error('customerPhone is only accepted for the M-PESA provider');
+  }
+  if (providerId === 'pesapal_sabi' && accountReference !== paymentAttemptId) {
+    throw new Error('Pesapal Sabi accountReference must equal paymentAttemptId');
+  }
+
   const request: InitiatePaymentRequest = {
     eventId: requiredString(record, 'eventId'),
     paymentId: requiredString(record, 'paymentId'),
-    paymentAttemptId: requiredString(record, 'paymentAttemptId'),
+    paymentAttemptId,
     orderId: requiredString(record, 'orderId'),
-    providerId: requiredString(record, 'providerId').toLowerCase(),
+    providerId,
     idempotencyKey: requiredString(record, 'idempotencyKey'),
     amountMinor: positiveAmount(record),
     currency: currency(record),
-    accountReference: requiredString(record, 'accountReference'),
+    accountReference,
   };
-  const customerPhone = optionalString(record, 'customerPhone');
   const description = optionalString(record, 'description');
   if (customerPhone !== undefined) request.customerPhone = customerPhone;
   if (description !== undefined) request.description = description;
