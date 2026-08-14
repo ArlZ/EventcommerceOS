@@ -7,7 +7,7 @@ import { InventoryAuthorizationService } from './inventory-authorization.service
 import type { InventoryProjectionRow, ManualMovementInput } from './inventory.types';
 
 interface LedgerInput {
-  id?: string;
+  id?: string | undefined;
   eventId: string;
   inventoryLocationId: string;
   skuId: string;
@@ -15,13 +15,13 @@ interface LedgerInput {
   quantityDeltaBase: bigint;
   sourceType: string;
   sourceId: string;
-  sourceEventInstanceId?: string;
-  actorId?: string;
-  deviceId?: string;
-  reason?: string;
+  sourceEventInstanceId?: string | undefined;
+  actorId?: string | undefined;
+  deviceId?: string | undefined;
+  reason?: string | undefined;
   occurredAt: string;
   idempotencyKey: string;
-  reversalOfLedgerId?: string;
+  reversalOfLedgerId?: string | undefined;
 }
 
 interface LedgerRow extends QueryResultRow {
