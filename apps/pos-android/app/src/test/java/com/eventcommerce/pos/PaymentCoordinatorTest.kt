@@ -38,10 +38,7 @@ class PaymentCoordinatorTest {
   fun setUp() {
     context = ApplicationProvider.getApplicationContext()
     dbName = "task007-coordinator-${UUID.randomUUID()}.db"
-    db = Room.databaseBuilder(context, AppDatabase::class.java, dbName)
-      .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
-      .allowMainThreadQueries()
-      .build()
+    db = openDatabase()
     repository = LocalPosRepository(db)
     transport = FakeEdgePaymentTransport()
     coordinator = PaymentCoordinator(repository, transport)
@@ -103,11 +100,50 @@ class PaymentCoordinatorTest {
     assertEquals(OrderState.PAYMENT_PENDING, repository.currentOpenOrder()?.state)
   }
 
+  @Test
+  fun `pending Sabi payment survives app restart and later authoritative success closes order`() =
+    runBlocking {
+      val item = repository.ensureDevelopmentMenu().items.first()
+      val order = repository.addItem(item.itemId)
+      transport.rails = listOf(
+        EdgePaymentRailAvailability("pesapal_sabi", "AVAILABLE", "SABI_WIRELESS_CONFIGURED"),
+      )
+      val pending = coordinator.startCard(order.id)
+
+      db.close()
+      db = openDatabase()
+      repository = LocalPosRepository(db)
+      coordinator = PaymentCoordinator(repository, transport)
+      transport.reconcileResult = EdgePaymentState(
+        state = PaymentAttemptState.SUCCEEDED,
+        providerReference = "sabi-confirmation-1",
+        failureCode = null,
+      )
+
+      val resolved = coordinator.reconcile(pending.id)
+
+      assertEquals(PaymentAttemptState.SUCCEEDED, resolved.state)
+      assertEquals("sabi-confirmation-1", resolved.providerReference)
+      assertEquals(1, repository.closedOrderCount())
+      assertNull(repository.currentOpenOrder())
+    }
+
+  private fun openDatabase(): AppDatabase =
+    Room.databaseBuilder(context, AppDatabase::class.java, dbName)
+      .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
+      .allowMainThreadQueries()
+      .build()
+
   private class FakeEdgePaymentTransport : EdgePaymentTransport {
     var rails: List<EdgePaymentRailAvailability> = emptyList()
     var throwOnHealth = false
     var lastInitiatedAttempt: LocalPaymentAttempt? = null
     var lastCustomerPhone: String? = null
+    var reconcileResult = EdgePaymentState(
+      state = PaymentAttemptState.PENDING,
+      providerReference = null,
+      failureCode = null,
+    )
 
     override suspend fun initiate(
       attempt: LocalPaymentAttempt,
@@ -122,13 +158,7 @@ class PaymentCoordinatorTest {
       )
     }
 
-    override suspend fun reconcile(paymentAttemptId: String): EdgePaymentState {
-      return EdgePaymentState(
-        state = PaymentAttemptState.PENDING,
-        providerReference = null,
-        failureCode = null,
-      )
-    }
+    override suspend fun reconcile(paymentAttemptId: String): EdgePaymentState = reconcileResult
 
     override suspend fun railAvailability(): List<EdgePaymentRailAvailability> {
       if (throwOnHealth) throw IllegalStateException("Edge unavailable")
