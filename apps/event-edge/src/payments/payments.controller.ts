@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { DeviceEdgeAuthService } from '../security/device-edge-auth.service';
 import { EdgePaymentsService, parseEdgeInitiatePayment } from './payments.service';
 import {
@@ -8,6 +17,10 @@ import {
 } from './terminal-payments.service';
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
+
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 @Controller('payments')
 export class EdgePaymentsController {
@@ -33,9 +46,14 @@ export class EdgePaymentsController {
   }
 
   @Post('manual-terminal-confirmations')
-  confirmExternalTerminal(@Body() body: unknown) {
+  confirmExternalTerminal(@Headers() headers: HeadersRecord, @Body() body: unknown) {
+    const authorization = first(headers.authorization)?.trim();
+    if (!authorization?.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Operator bearer access token required');
+    }
     return this.terminalPayments.confirmExternalTerminal(
       parseEdgeExternalTerminalConfirmation(body),
+      authorization,
     );
   }
 
