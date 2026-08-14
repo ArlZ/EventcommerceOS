@@ -11,10 +11,12 @@ import {
   beerSkuId,
   closedSale,
   installInventoryFixture,
+  inventoryEventId,
   mainLocationId,
   receipt,
   resetInventory,
 } from './inventory-fixture';
+import { posDeviceHeaders, provisionPosDevice } from './pos-device-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -37,11 +39,12 @@ describeIntegration('sync and inventory acceptance boundary', () => {
   beforeEach(async () => {
     await database.query(
       `TRUNCATE edge_cloud_outbox, edge_processed_device_events,
-       edge_device_watermarks, edge_reconciliation_exceptions`,
+       edge_device_watermarks, edge_reconciliation_exceptions,edge_pos_device_audit,edge_pos_devices`,
     );
     await resetInventory(database);
     await installInventoryFixture(configuration);
     await receipt(ledger, mainLocationId, beerSkuId, 100n, 'sync-boundary-main');
+    await provisionPosDevice(database, 'device-inventory-test', { eventId: inventoryEventId });
   });
 
   afterAll(async () => {
@@ -57,6 +60,7 @@ describeIntegration('sync and inventory acceptance boundary', () => {
 
     const accepted = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(sale.deviceId))
       .send({ deviceId: sale.deviceId, events: [sale] })
       .expect(201);
     expect(accepted.body.receipts[0].status).toBe('ACCEPTED');
@@ -72,7 +76,8 @@ describeIntegration('sync and inventory acceptance boundary', () => {
     };
     const rejected = await request(app.getHttpServer())
       .post('/sync/device-events')
-      .send({ deviceId: sale.deviceId, events: [conflicting] })
+      .set(posDeviceHeaders(conflicting.deviceId))
+      .send({ deviceId: conflicting.deviceId, events: [conflicting] })
       .expect(201);
     expect(rejected.body.receipts[0].status).toBe('CONFLICT');
 
