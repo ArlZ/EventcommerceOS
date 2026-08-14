@@ -2,6 +2,7 @@ package com.eventcommerce.pos.sync
 
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.DeviceSyncStateStore
+import com.eventcommerce.pos.data.SyncQueueStore
 
 class DeviceSyncEngine(
   db: AppDatabase,
@@ -9,15 +10,15 @@ class DeviceSyncEngine(
   private val state: DeviceSyncStateStore = DeviceSyncStateStore(db),
   private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
-  private val events = db.pendingEvents()
+  private val queue = SyncQueueStore(db)
 
   suspend fun syncOnce(batchSize: Int = 50): DeviceSyncResult {
     val before = state.health()
-    val all = events.events().sortedBy { it.sequence }
-    val highestLocalSequence = all.maxOfOrNull { it.sequence } ?: 0L
-    val pending = all
-      .filter { it.sequence > before.acknowledgedThroughSequence }
-      .take(batchSize.coerceIn(1, 100))
+    val highestLocalSequence = queue.highestSequence()
+    val pending = queue.pendingAfter(
+      before.acknowledgedThroughSequence,
+      batchSize.coerceIn(1, 100),
+    )
 
     if (pending.isEmpty()) {
       return DeviceSyncResult(
@@ -48,7 +49,7 @@ class DeviceSyncEngine(
       )
       DeviceSyncResult(
         attempted = pending.size,
-        remaining = all.count { it.sequence > acknowledgement.acceptedThroughSequence },
+        remaining = queue.countAfter(acknowledgement.acceptedThroughSequence),
         acceptedThroughSequence = acknowledgement.acceptedThroughSequence,
         edgeBacklogCount = acknowledgement.edgeBacklogCount,
       )
