@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
+      EDGE_FORWARDER_DISABLED: 'true'
     services:
       postgres:
         image: postgres:16-alpine
@@ -36,6 +37,7 @@ jobs:
           node-version: 22
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
+      - run: pnpm --filter @event-commerce/event-edge db:migrate
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
