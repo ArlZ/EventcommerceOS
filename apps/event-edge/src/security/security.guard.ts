@@ -141,6 +141,10 @@ export class EdgeSecurityGuard implements CanActivate {
   }
 
   private limit(route: EdgeSecurityRoute): number {
+    if (process.env.NODE_ENV === 'test') {
+      const override = Number(process.env.SECURITY_TEST_RATE_LIMIT_PER_MINUTE);
+      if (Number.isSafeInteger(override) && override > 0) return override;
+    }
     if (route === 'SNAPSHOT_INSTALL') return 30;
     if (route === 'OPERATOR') return 600;
     if (route === 'DEVICE') return 6_000;
