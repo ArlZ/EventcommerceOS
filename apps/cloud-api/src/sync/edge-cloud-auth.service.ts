@@ -91,11 +91,15 @@ export class EdgeCloudAuthService {
       throw new UnauthorizedException('Event Edge credential is invalid');
     }
 
-    await this.database.query(
+    const touched = await this.database.query<{ edge_id: string }>(
       `UPDATE edge_sync_clients SET last_authenticated_at=now()
-       WHERE edge_id=$1 AND credential_version=$2 AND status='ACTIVE'`,
+       WHERE edge_id=$1 AND credential_version=$2 AND status='ACTIVE'
+       RETURNING edge_id`,
       [row.edge_id, row.credential_version],
     );
+    if (touched.length !== 1) {
+      throw new UnauthorizedException('Event Edge credential changed during authentication');
+    }
 
     return {
       edgeId: row.edge_id,
