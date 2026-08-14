@@ -23,8 +23,9 @@ class PosPaymentCoordinator(
       require(local.providerRequestId == null) {
         "provider already accepted this attempt; refresh status instead of sending another prompt"
       }
-      val discovered = runCatching { transport.getAttempt(local) }.getOrNull()
-      if (discovered != null) return repository.applyPaymentSnapshot(discovered)
+      // Re-submit the same immutable attempt/idempotency key rather than minting a new charge.
+      // Cloud will either return the existing attempt or dispatch it once if it was never created.
+      return relayInitiation(local, payerMsisdn)
     }
     return relayInitiation(local, payerMsisdn)
   }
