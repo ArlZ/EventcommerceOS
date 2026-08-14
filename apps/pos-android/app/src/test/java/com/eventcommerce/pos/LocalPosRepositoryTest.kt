@@ -200,6 +200,29 @@ class LocalPosRepositoryTest {
   }
 
   @Test
+  fun `stale pending snapshot cannot regress confirmed M-PESA success or reopen duplicate charge risk`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId)
+    val attempt = repository.beginMpesaPayment(order.id)
+    val success = edgeSnapshot(attempt, PaymentAttemptState.SUCCESS)
+    repository.applyPaymentSnapshot(success)
+
+    assertThrows(IllegalArgumentException::class.java) {
+      runBlocking {
+        repository.applyPaymentSnapshot(
+          edgeSnapshot(attempt, PaymentAttemptState.PENDING)
+            .copy(updatedAtEpochMs = success.updatedAtEpochMs - 1),
+        )
+      }
+    }
+    repository.markPaymentTransportUnknown(attempt.attemptId, "254****5678")
+
+    assertEquals(PaymentAttemptState.SUCCESS, repository.paymentAttempt(attempt.attemptId)?.state)
+    assertEquals(1, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+    assertEquals(OrderState.CLOSED, repository.history().single { it.id == order.id }.state)
+  }
+
+  @Test
   fun `failure during confirmed M-PESA close rolls back payment projection order and outbox together`() = runBlocking {
     val item = repository.ensureDevelopmentMenu().items.first()
     val failing = LocalPosRepository(
