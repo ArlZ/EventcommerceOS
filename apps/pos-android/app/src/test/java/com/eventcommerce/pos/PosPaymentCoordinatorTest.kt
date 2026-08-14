@@ -67,7 +67,7 @@ class PosPaymentCoordinatorTest {
   }
 
   @Test
-  fun `resume UNKNOWN first discovers Edge success by stable attempt ID and never sends a second prompt`() = runBlocking {
+  fun `resume UNKNOWN replays the same immutable attempt and can recover Edge success without a second payment identity`() = runBlocking {
     val order = repository.addItem(repository.ensureDevelopmentMenu().items.first().itemId)
     val attempt = coordinator.beginMpesa(order.id)
     transport.throwInitiate = true
@@ -78,8 +78,10 @@ class PosPaymentCoordinatorTest {
     val recovered = coordinator.resumeUnknownInitiation(attempt.attemptId, "254712345678")
 
     assertEquals(PaymentAttemptState.SUCCESS, recovered.state)
-    assertEquals(1, transport.initiateCalls)
-    assertEquals(1, transport.getCalls)
+    assertEquals(attempt.attemptId, recovered.attemptId)
+    assertEquals(attempt.idempotencyKey, recovered.idempotencyKey)
+    assertEquals(2, transport.initiateCalls)
+    assertEquals(0, transport.getCalls)
     assertEquals(1, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
   }
 
