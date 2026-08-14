@@ -185,19 +185,28 @@ export class PaymentRelayService {
   private async applyCloudSnapshot(cloud: PaymentAttemptSnapshot): Promise<void> {
     await this.database.transaction(async (client) => {
       const current = await this.rowWithClient(client, cloud.attemptId, true);
+
+      if (
+        current.provider_request_id !== null &&
+        cloud.providerRequestId !== null &&
+        current.provider_request_id !== cloud.providerRequestId
+      ) {
+        await this.markProjectionConflict(client, current, 'CLOUD_PROVIDER_REQUEST_ID_CONFLICT');
+        return;
+      }
+      if (
+        current.provider_receipt_reference !== null &&
+        cloud.providerReceiptReference !== null &&
+        current.provider_receipt_reference !== cloud.providerReceiptReference
+      ) {
+        await this.markProjectionConflict(client, current, 'CLOUD_PROVIDER_RECEIPT_CONFLICT');
+        return;
+      }
+
       try {
         requirePaymentAttemptTransition(current.state, cloud.state);
       } catch {
-        await client.query(
-          `UPDATE edge_payment_attempts SET
-             relay_status = 'UNAVAILABLE',
-             last_relay_error = 'CLOUD_PAYMENT_STATE_CONFLICT',
-             reconciliation_required = true,
-             next_refresh_at = clock_timestamp() + interval '5 seconds',
-             updated_at = clock_timestamp()
-           WHERE attempt_id = $1`,
-          [cloud.attemptId],
-        );
+        await this.markProjectionConflict(client, current, 'CLOUD_PAYMENT_STATE_CONFLICT');
         return;
       }
 
@@ -226,6 +235,27 @@ export class PaymentRelayService {
     });
   }
 
+  private async markProjectionConflict(
+    client: PoolClient,
+    current: EdgeAttemptRow,
+    reason: string,
+  ): Promise<void> {
+    const unresolved = !this.isFinal(current.state);
+    await client.query(
+      `UPDATE edge_payment_attempts SET
+         relay_status = 'UNAVAILABLE',
+         last_relay_error = $2,
+         reconciliation_required = CASE WHEN $3 THEN true ELSE reconciliation_required END,
+         next_refresh_at = CASE
+           WHEN $3 THEN clock_timestamp() + interval '5 seconds'
+           ELSE NULL
+         END,
+         updated_at = clock_timestamp()
+       WHERE attempt_id = $1`,
+      [current.attempt_id, reason, unresolved],
+    );
+  }
+
   private async markCloudUnavailable(
     attemptId: string,
     reason = 'CLOUD_PAYMENT_UNAVAILABLE',
@@ -239,7 +269,10 @@ export class PaymentRelayService {
          END,
          relay_status = 'UNAVAILABLE',
          last_relay_error = $2,
-         next_refresh_at = clock_timestamp() + interval '5 seconds',
+         next_refresh_at = CASE
+           WHEN state IN ('SUCCESS','FAILED','EXPIRED','REVERSED') THEN NULL
+           ELSE clock_timestamp() + interval '5 seconds'
+         END,
          updated_at = clock_timestamp()
        WHERE attempt_id = $1`,
       [attemptId, reason],
