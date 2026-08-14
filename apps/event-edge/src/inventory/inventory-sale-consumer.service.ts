@@ -38,6 +38,8 @@ interface SaleMovement {
   quantity: bigint;
 }
 
+const SALE_CLOSE_EVENTS = new Set(['ORDER_CLOSED_CASH', 'ORDER_CLOSED_MPESA']);
+
 @Injectable()
 export class InventorySaleConsumerService {
   constructor(
@@ -48,7 +50,7 @@ export class InventorySaleConsumerService {
   async consume(events: readonly SyncEventEnvelope[]): Promise<string[]> {
     const affected = new Set<string>();
     for (const event of events) {
-      if (event.eventType !== 'ORDER_CLOSED_CASH') continue;
+      if (!SALE_CLOSE_EVENTS.has(event.eventType)) continue;
       const eventId = await this.consumeOne(event);
       if (eventId) affected.add(eventId);
     }
