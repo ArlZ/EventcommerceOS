@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS edge_sync_clients (
   status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
+  last_authenticated_at timestamptz,
   revoked_at timestamptz,
   CHECK ((status = 'ACTIVE' AND revoked_at IS NULL) OR (status = 'REVOKED' AND revoked_at IS NOT NULL))
 );
