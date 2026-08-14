@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { OperatorEdgeAuthModule } from '../security/operator-edge-auth.module';
 import { InventoryAlertService } from './inventory-alert.service';
 import { InventoryAuthorizationService } from './inventory-authorization.service';
 import { InventoryCloudForwarderService } from './inventory-cloud-forwarder.service';
@@ -18,6 +19,7 @@ import { InventorySaleConsumerService } from './inventory-sale-consumer.service'
 import { InventoryTransferService } from './inventory-transfer.service';
 
 @Module({
+  imports: [OperatorEdgeAuthModule],
   controllers: [InventoryController],
   providers: [
     InventoryAuthorizationService,
