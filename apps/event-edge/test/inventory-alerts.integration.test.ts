@@ -194,7 +194,7 @@ describeIntegration('inventory alerts and replenishment operations', () => {
     await database.query(
       `INSERT INTO edge_inventory_notification_outbox(
          id, alert_id, channel, recipient_actor_id, payload, next_attempt_at
-       ) VALUES ('sms-failure-test',$1,'SMS',$2,'{"kind":"external-test"}'::jsonb,'2026-08-14T08:00:00Z')`,
+       ) VALUES ('sms-failure-test',$1,'SMS',$2,'{"kind":"external-test"}'::jsonb,now() - interval '1 minute')`,
       [eventWide.id, escalationActorId],
     );
     const ledgerBefore = await database.query<{ count: string }>(
