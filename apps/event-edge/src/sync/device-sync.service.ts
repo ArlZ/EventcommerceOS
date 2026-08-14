@@ -28,6 +28,10 @@ interface SequenceValueRow extends QueryResultRow {
   sequence: string;
 }
 
+interface BlockingSequenceRow extends QueryResultRow {
+  sequence: string | null;
+}
+
 interface CountRow extends QueryResultRow {
   count: string;
 }
@@ -52,15 +56,27 @@ export class DeviceSyncService {
       );
 
       const durableWatermark = await this.advanceWatermark(client, batch.deviceId);
-      const firstConflictSequence = receipts.reduce<number | null>((lowest, receipt, index) => {
-        if (receipt.status !== 'CONFLICT') return lowest;
-        const sequence = batch.events[index]!.sequence;
-        return lowest === null ? sequence : Math.min(lowest, sequence);
-      }, null);
+      const blocking = await client.query<BlockingSequenceRow>(
+        `SELECT MIN(sequence)::text AS sequence
+         FROM edge_reconciliation_exceptions
+         WHERE device_id = $1
+           AND resolved_at IS NULL
+           AND sequence IS NOT NULL
+           AND exception_type IN ('DEVICE_SEQUENCE_REUSE', 'EVENT_INSTANCE_REUSE')`,
+        [batch.deviceId],
+      );
+      const blockingSequence = blocking.rows[0]?.sequence
+        ? Number.parseInt(blocking.rows[0].sequence, 10)
+        : null;
       const acceptedThroughSequence =
-        firstConflictSequence === null
+        blockingSequence === null
           ? durableWatermark
-          : Math.min(durableWatermark, Math.max(0, firstConflictSequence - 1));
+          : Math.min(durableWatermark, Math.max(0, blockingSequence - 1));
+
+      await client.query(
+        'UPDATE edge_device_watermarks SET accepted_through_sequence = $2 WHERE device_id = $1',
+        [batch.deviceId, acceptedThroughSequence],
+      );
 
       const backlog = await client.query<CountRow>(
         'SELECT count(*)::text AS count FROM edge_cloud_outbox WHERE delivered_at IS NULL',
@@ -161,7 +177,8 @@ export class DeviceSyncService {
     let watermark = Number.parseInt(currentResult.rows[0]?.accepted_through_sequence ?? '0', 10);
     const sequences = await client.query<SequenceValueRow>(
       `SELECT sequence::text FROM edge_processed_device_events
-       WHERE device_id = $1 AND sequence > $2 ORDER BY sequence ASC`,
+       WHERE device_id = $1 AND sequence > $2
+       ORDER BY edge_processed_device_events.sequence ASC`,
       [deviceId, watermark],
     );
     for (const row of sequences.rows) {
@@ -169,10 +186,6 @@ export class DeviceSyncService {
       if (sequence !== watermark + 1) break;
       watermark = sequence;
     }
-    await client.query(
-      'UPDATE edge_device_watermarks SET accepted_through_sequence = $2 WHERE device_id = $1',
-      [deviceId, watermark],
-    );
     return watermark;
   }
 
