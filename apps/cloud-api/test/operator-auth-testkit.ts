@@ -1,16 +1,20 @@
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { OperatorAuthService, type OperatorRole } from '../src/auth/operator-auth.service';
 import { DatabaseService } from '../src/database/database.service';
 
-export const TEST_OPERATOR_SIGNING_KEY = Buffer.from(
-  'event-commerce-test-signing-key-32-bytes!',
-  'utf8',
-).toString('base64url');
+const TEST_OPERATOR_KEY_PAIR = generateKeyPairSync('ed25519');
+export const TEST_OPERATOR_SIGNING_PRIVATE_KEY = TEST_OPERATOR_KEY_PAIR.privateKey
+  .export({ format: 'der', type: 'pkcs8' })
+  .toString('base64url');
+export const TEST_OPERATOR_VERIFYING_PUBLIC_KEY = TEST_OPERATOR_KEY_PAIR.publicKey
+  .export({ format: 'der', type: 'spki' })
+  .toString('base64url');
 
 const CREDENTIAL_PREFIX = 'operator-test-credential-0123456789-abcdefghijklmnopqrstuvwxyz';
 
 export function enableOperatorTestSigningKey(): void {
-  process.env.OPERATOR_TOKEN_SIGNING_KEY = TEST_OPERATOR_SIGNING_KEY;
+  process.env.OPERATOR_TOKEN_SIGNING_PRIVATE_KEY = TEST_OPERATOR_SIGNING_PRIVATE_KEY;
+  process.env.OPERATOR_TOKEN_VERIFYING_PUBLIC_KEY = TEST_OPERATOR_VERIFYING_PUBLIC_KEY;
   process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS = '900';
 }
 
