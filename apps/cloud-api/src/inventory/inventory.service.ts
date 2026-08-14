@@ -1,14 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
-import type { InventoryEdgeAck, InventoryEdgeBatch, InventoryEdgeEvent } from '@event-commerce/contracts';
+import type {
+  InventoryEdgeAck,
+  InventoryEdgeBatch,
+  InventoryEdgeEvent,
+} from '@event-commerce/contracts';
 import { DatabaseService } from '../database/database.service';
 
 interface StoredEventRow extends QueryResultRow {
   event_type: string;
   aggregate_type: string;
   aggregate_id: string;
-  payload: Record<string, unknown>;
+  same_payload: boolean;
 }
 
 interface LedgerRow extends QueryResultRow {
@@ -41,7 +45,9 @@ export class InventoryService {
     const conflictIds: string[] = [];
 
     for (const event of batch.events) {
-      const result = await this.database.transaction(async (client) => this.ingestOne(client, event));
+      const result = await this.database.transaction(async (client) =>
+        this.ingestOne(client, event),
+      );
       if (result === 'ACCEPTED') acceptedIds.push(event.id);
       else if (result === 'DUPLICATE') duplicateIds.push(event.id);
       else conflictIds.push(event.id);
@@ -65,7 +71,8 @@ export class InventoryService {
                 suggested_source_location_id AS "suggestedSourceLocationId",
                 suggested_transfer_quantity::text AS "suggestedTransferQuantityBase",
                 responsible_actor_id AS "responsibleActorId",
-                assigned_actor_id AS "assignedActorId", opened_at AS "openedAt", escalate_at AS "escalateAt"
+                assigned_actor_id AS "assignedActorId", opened_at AS "openedAt",
+                escalate_at AS "escalateAt", source_updated_at AS "sourceUpdatedAt"
          FROM inventory_alert_projection WHERE event_id = $1
          ORDER BY CASE severity WHEN 'CRITICAL' THEN 1 WHEN 'URGENT' THEN 2 ELSE 3 END,
                   CASE state WHEN 'OPEN' THEN 1 WHEN 'ACKNOWLEDGED' THEN 2 WHEN 'ASSIGNED' THEN 3 ELSE 4 END,
@@ -98,10 +105,12 @@ export class InventoryService {
     client: PoolClient,
     event: InventoryEdgeEvent,
   ): Promise<'ACCEPTED' | 'DUPLICATE' | 'CONFLICT'> {
+    const serializedPayload = JSON.stringify(event.payload);
     const existing = await client.query<StoredEventRow>(
-      `SELECT event_type, aggregate_type, aggregate_id, payload
+      `SELECT event_type, aggregate_type, aggregate_id,
+              (payload = $2::jsonb) AS same_payload
        FROM inventory_edge_events WHERE id = $1`,
-      [event.id],
+      [event.id, serializedPayload],
     );
     if (existing.rowCount === 1) {
       const row = existing.rows[0]!;
@@ -109,7 +118,7 @@ export class InventoryService {
         row.event_type === event.eventType &&
         row.aggregate_type === event.aggregateType &&
         row.aggregate_id === event.aggregateId &&
-        JSON.stringify(row.payload) === JSON.stringify(event.payload);
+        row.same_payload;
       if (same) return 'DUPLICATE';
       await this.exception(client, 'INVENTORY_EDGE_EVENT_REUSE', event.id, {
         aggregateId: event.aggregateId,
@@ -129,12 +138,14 @@ export class InventoryService {
     await client.query(
       `INSERT INTO inventory_edge_events(id, event_type, aggregate_type, aggregate_id, payload)
        VALUES ($1,$2,$3,$4,$5::jsonb)`,
-      [event.id, event.eventType, event.aggregateType, event.aggregateId, JSON.stringify(event.payload)],
+      [event.id, event.eventType, event.aggregateType, event.aggregateId, serializedPayload],
     );
 
     try {
       if (event.eventType === 'INVENTORY_LEDGER_POSTED') await this.applyLedger(client, event);
-      if (event.eventType === 'INVENTORY_TRANSFER_UPSERTED') await this.applyTransfer(client, event);
+      if (event.eventType === 'INVENTORY_TRANSFER_UPSERTED') {
+        await this.applyTransfer(client, event);
+      }
       if (event.eventType === 'INVENTORY_ALERT_UPSERTED') await this.applyAlert(client, event);
       if (event.eventType === 'INVENTORY_COUNT_CLOSED') await this.applyCount(client, event);
       return 'ACCEPTED';
@@ -162,7 +173,11 @@ export class InventoryService {
       inventoryLocationId: this.string(payload.inventoryLocationId, 'ledger.inventoryLocationId'),
       skuId: this.string(payload.skuId, 'ledger.skuId'),
       movementType: this.string(payload.movementType, 'ledger.movementType'),
-      quantityDeltaBase: this.integerString(payload.quantityDeltaBase, 'ledger.quantityDeltaBase', false),
+      quantityDeltaBase: this.integerString(
+        payload.quantityDeltaBase,
+        'ledger.quantityDeltaBase',
+        false,
+      ),
       sourceType: this.string(payload.sourceType, 'ledger.sourceType'),
       sourceId: this.string(payload.sourceId, 'ledger.sourceId'),
       idempotencyKey: this.string(payload.idempotencyKey, 'ledger.idempotencyKey'),
@@ -246,22 +261,32 @@ export class InventoryService {
   private async applyAlert(client: PoolClient, event: InventoryEdgeEvent): Promise<void> {
     const payload = event.payload;
     const id = this.string(payload.id, 'alert.id');
-    const sourceUpdatedAt = this.timestamp(payload.sourceUpdatedAt ?? payload.openedAt, 'alert.sourceUpdatedAt');
+    const sourceUpdatedAt = this.timestamp(
+      payload.sourceUpdatedAt ?? payload.openedAt,
+      'alert.sourceUpdatedAt',
+    );
     await client.query(
       `INSERT INTO inventory_alert_projection(
          id, alert_type, severity, state, event_id, inventory_location_id, sku_id,
          available_quantity, minutes_of_cover, suggested_source_location_id,
          suggested_transfer_quantity, responsible_actor_id, assigned_actor_id,
-         opened_at, escalate_at, edge_event_id, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
+         opened_at, escalate_at, source_updated_at, edge_event_id, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,now())
        ON CONFLICT (id) DO UPDATE SET
-         alert_type = EXCLUDED.alert_type, severity = EXCLUDED.severity, state = EXCLUDED.state,
-         available_quantity = EXCLUDED.available_quantity, minutes_of_cover = EXCLUDED.minutes_of_cover,
+         alert_type = EXCLUDED.alert_type,
+         severity = EXCLUDED.severity,
+         state = EXCLUDED.state,
+         available_quantity = EXCLUDED.available_quantity,
+         minutes_of_cover = EXCLUDED.minutes_of_cover,
          suggested_source_location_id = EXCLUDED.suggested_source_location_id,
          suggested_transfer_quantity = EXCLUDED.suggested_transfer_quantity,
          responsible_actor_id = EXCLUDED.responsible_actor_id,
          assigned_actor_id = EXCLUDED.assigned_actor_id,
-         escalate_at = EXCLUDED.escalate_at, edge_event_id = EXCLUDED.edge_event_id, updated_at = now()`,
+         escalate_at = EXCLUDED.escalate_at,
+         source_updated_at = EXCLUDED.source_updated_at,
+         edge_event_id = EXCLUDED.edge_event_id,
+         updated_at = now()
+       WHERE inventory_alert_projection.source_updated_at <= EXCLUDED.source_updated_at`,
       [
         id,
         this.string(payload.alertType, 'alert.alertType'),
@@ -271,19 +296,25 @@ export class InventoryService {
         this.optionalString(payload.inventoryLocationId),
         this.string(payload.skuId, 'alert.skuId'),
         this.integerString(payload.availableQuantityBase, 'alert.availableQuantityBase'),
-        payload.minutesOfCover === null || payload.minutesOfCover === undefined ? null : Number(payload.minutesOfCover),
-        this.optionalString(payload.suggestedSourceLocationId),
-        payload.suggestedTransferQuantityBase === null || payload.suggestedTransferQuantityBase === undefined
+        payload.minutesOfCover === null || payload.minutesOfCover === undefined
           ? null
-          : this.integerString(payload.suggestedTransferQuantityBase, 'alert.suggestedTransferQuantityBase'),
+          : Number(payload.minutesOfCover),
+        this.optionalString(payload.suggestedSourceLocationId),
+        payload.suggestedTransferQuantityBase === null ||
+        payload.suggestedTransferQuantityBase === undefined
+          ? null
+          : this.integerString(
+              payload.suggestedTransferQuantityBase,
+              'alert.suggestedTransferQuantityBase',
+            ),
         this.optionalString(payload.responsibleActorId),
         this.optionalString(payload.assignedActorId),
         this.timestamp(payload.openedAt, 'alert.openedAt'),
         payload.escalateAt ? this.timestamp(payload.escalateAt, 'alert.escalateAt') : null,
+        sourceUpdatedAt,
         event.id,
       ],
     );
-    void sourceUpdatedAt;
   }
 
   private async applyCount(client: PoolClient, event: InventoryEdgeEvent): Promise<void> {
@@ -323,7 +354,9 @@ export class InventoryService {
   }
 
   private string(value: unknown, label: string): string {
-    if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`${label} must be a non-empty string`);
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      throw new Error(`${label} must be a non-empty string`);
+    }
     return value.trim();
   }
 
