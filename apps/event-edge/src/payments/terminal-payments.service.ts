@@ -141,10 +141,17 @@ export function parseEdgeExternalTerminalConfirmation(
 export class TerminalPaymentsService {
   async confirmExternalTerminal(
     request: ConfirmExternalTerminalPaymentRequest,
+    operatorAuthorization: string,
   ): Promise<ExternalTerminalConfirmationView> {
+    if (!operatorAuthorization.startsWith('Bearer ')) {
+      throw new Error('Authenticated operator credential is required for manual terminal confirmation');
+    }
     const response = await fetch(this.cloudUrl('/payments/manual-terminal-confirmations'), {
       method: 'POST',
-      headers: edgeCloudHeaders({ 'content-type': 'application/json' }),
+      headers: {
+        authorization: operatorAuthorization,
+        'content-type': 'application/json',
+      },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs()),
     });
