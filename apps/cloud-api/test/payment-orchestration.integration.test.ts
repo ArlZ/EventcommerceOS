@@ -9,7 +9,6 @@ import {
   type ProviderInitiationResult,
   type ProviderQueryInput,
   type ProviderQueryResult,
-  type ProviderWebhookInput,
   type ProviderWebhookObservation,
 } from '../src/payments/payment-provider';
 import { PaymentService } from '../src/payments/payment.service';
@@ -56,7 +55,7 @@ class FakePaymentProvider implements PaymentProvider {
     };
   }
 
-  async parseAndVerifyWebhook(_input: ProviderWebhookInput): Promise<ProviderWebhookObservation> {
+  async parseAndVerifyWebhook(): Promise<ProviderWebhookObservation> {
     throw new Error('not used by orchestration tests');
   }
 }
