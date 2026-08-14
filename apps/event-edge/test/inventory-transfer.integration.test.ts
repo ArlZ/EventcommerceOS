@@ -231,4 +231,52 @@ describeIntegration('inventory transfer custody', () => {
       expect(stock[0]!.on_hand).toBe('40');
     }
   });
+  it('serializes concurrent transfer creation and rejects semantic idempotency reuse', async () => {
+    const input = {
+      id: 'transfer-create-race-001',
+      eventId: inventoryEventId,
+      sourceLocationId: warehouseLocationId,
+      destinationLocationId: mainLocationId,
+      actorId: operatorActorId,
+      reason: 'concurrent create',
+      requestedAt: '2026-08-14T08:00:00.000Z',
+      idempotencyKey: 'transfer-create-race-key',
+      lines: [{ skuId: beerSkuId, requestedQuantityBase: '25' }],
+    };
+
+    const [first, second] = await Promise.all([transfers.create(input), transfers.create(input)]);
+    expect(first.id).toBe(input.id);
+    expect(second.id).toBe(input.id);
+
+    const rows = await database.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM edge_stock_transfers WHERE id = $1',
+      [input.id],
+    );
+    const history = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM edge_stock_transfer_history
+       WHERE transfer_id = $1 AND to_state = 'REQUESTED'`,
+      [input.id],
+    );
+    expect(rows[0]!.count).toBe('1');
+    expect(history[0]!.count).toBe('1');
+
+    await expect(
+      transfers.create({
+        ...input,
+        lines: [{ skuId: beerSkuId, requestedQuantityBase: '26' }],
+      }),
+    ).rejects.toThrow(/idempotency key was reused with different content/);
+
+    await expect(
+      transfers.create({
+        ...input,
+        id: 'transfer-create-duplicate-lines',
+        idempotencyKey: 'transfer-create-duplicate-lines-key',
+        lines: [
+          { skuId: beerSkuId, requestedQuantityBase: '10' },
+          { skuId: beerSkuId, requestedQuantityBase: '10' },
+        ],
+      }),
+    ).rejects.toThrow(/must not repeat a SKU/);
+  });
 });

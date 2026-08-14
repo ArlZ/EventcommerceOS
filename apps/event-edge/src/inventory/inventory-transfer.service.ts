@@ -22,6 +22,7 @@ interface TransferDbRow extends QueryResultRow {
   requested_by_actor_id: string;
   assigned_actor_id: string | null;
   request_reason: string;
+  requested_at: Date;
   updated_at: Date;
   idempotency_key: string | null;
 }
@@ -34,6 +35,9 @@ interface TransferLineRow extends QueryResultRow {
 }
 
 interface ReceiptRow extends QueryResultRow {
+  transfer_id: string;
+  actor_id: string;
+  received_at: Date;
   same_payload: boolean;
 }
 
@@ -49,21 +53,36 @@ export class InventoryTransferService {
   async create(input: CreateTransferInput): Promise<TransferRow> {
     return this.database.transaction(async (client) => {
       await this.authorization.require(client, input.eventId, input.actorId, 'TRANSFER_MANAGE');
+      if (new Set(input.lines.map((line) => line.skuId)).size !== input.lines.length) {
+        throw new ConflictException('transfer lines must not repeat a SKU');
+      }
+
+      const lockKeys = [
+        `stock-transfer-id:${input.id}`,
+        `stock-transfer-idempotency:${input.idempotencyKey}`,
+      ].sort();
+      for (const lockKey of lockKeys) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey]);
+      }
+
       const duplicate = await client.query<TransferDbRow>(
         'SELECT * FROM edge_stock_transfers WHERE idempotency_key = $1',
         [input.idempotencyKey],
       );
       if (duplicate.rowCount === 1) {
         const existing = duplicate.rows[0]!;
-        if (
-          existing.id !== input.id ||
-          existing.event_id !== input.eventId ||
-          existing.source_location_id !== input.sourceLocationId ||
-          existing.destination_location_id !== input.destinationLocationId
-        ) {
+        if (!(await this.sameCreate(client, existing, input))) {
           throw new ConflictException('transfer idempotency key was reused with different content');
         }
         return this.map(existing);
+      }
+
+      const idReuse = await client.query<TransferDbRow>(
+        'SELECT * FROM edge_stock_transfers WHERE id = $1',
+        [input.id],
+      );
+      if (idReuse.rowCount === 1) {
+        throw new ConflictException('transfer ID was reused with different content');
       }
 
       await client.query(
@@ -131,6 +150,9 @@ export class InventoryTransferService {
       const supplied = new Map(
         input.quantities.map((line) => [line.skuId, BigInt(line.quantityBase)]),
       );
+      if (supplied.size !== input.quantities.length) {
+        throw new ConflictException('dispatch quantities must not repeat a SKU');
+      }
       if (requested.size !== supplied.size)
         throw new Error('dispatch must include every requested transfer line');
 
@@ -208,16 +230,28 @@ export class InventoryTransferService {
       }
 
       const orderedReceipts = [...input.quantities].sort((a, b) => a.skuId.localeCompare(b.skuId));
+      if (new Set(orderedReceipts.map((line) => line.skuId)).size !== orderedReceipts.length) {
+        throw new ConflictException('receipt quantities must not repeat a SKU');
+      }
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `stock-transfer-receipt-idempotency:${input.idempotencyKey}`,
+      ]);
       const canonicalPayload = JSON.stringify(
         orderedReceipts.map((line) => ({ skuId: line.skuId, quantityBase: line.quantityBase })),
       );
       const existingReceipt = await client.query<ReceiptRow>(
-        `SELECT (payload = $2::jsonb) AS same_payload
+        `SELECT transfer_id, actor_id, received_at, (payload = $2::jsonb) AS same_payload
          FROM edge_stock_transfer_receipts WHERE idempotency_key = $1`,
         [input.idempotencyKey, canonicalPayload],
       );
       if (existingReceipt.rowCount === 1) {
-        if (!existingReceipt.rows[0]!.same_payload) {
+        const previous = existingReceipt.rows[0]!;
+        if (
+          !previous.same_payload ||
+          previous.transfer_id !== transfer.id ||
+          previous.actor_id !== input.actorId ||
+          previous.received_at.toISOString() !== new Date(input.receivedAt).toISOString()
+        ) {
           throw new ConflictException(
             'transfer receipt idempotency key was reused with different content',
           );
@@ -310,6 +344,32 @@ export class InventoryTransferService {
       [eventId],
     );
     return rows.map((row) => this.map(row));
+  }
+
+  private async sameCreate(
+    client: PoolClient,
+    existing: TransferDbRow,
+    input: CreateTransferInput,
+  ): Promise<boolean> {
+    if (
+      existing.id !== input.id ||
+      existing.event_id !== input.eventId ||
+      existing.source_location_id !== input.sourceLocationId ||
+      existing.destination_location_id !== input.destinationLocationId ||
+      existing.requested_by_actor_id !== input.actorId ||
+      existing.request_reason !== input.reason ||
+      existing.requested_at.toISOString() !== new Date(input.requestedAt).toISOString()
+    ) {
+      return false;
+    }
+    const stored = await this.lines(client, existing.id);
+    const requested = [...input.lines].sort((a, b) => a.skuId.localeCompare(b.skuId));
+    if (stored.length !== requested.length) return false;
+    return stored.every(
+      (line, index) =>
+        line.sku_id === requested[index]!.skuId &&
+        line.requested_quantity === requested[index]!.requestedQuantityBase,
+    );
   }
 
   private async simpleTransition(

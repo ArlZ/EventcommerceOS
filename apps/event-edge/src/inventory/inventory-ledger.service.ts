@@ -50,6 +50,14 @@ interface ProjectionDbRow extends QueryResultRow {
   inbound: string;
 }
 
+const DEDICATED_WORKFLOW_MOVEMENTS = new Set<InventoryMovementType>([
+  'SALE',
+  'RECIPE_CONSUMPTION',
+  'TRANSFER_OUT',
+  'TRANSFER_IN',
+  'COUNT_ADJUSTMENT',
+]);
+
 @Injectable()
 export class InventoryLedgerService {
   constructor(
@@ -61,7 +69,11 @@ export class InventoryLedgerService {
   async postManual(input: ManualMovementInput): Promise<LedgerRow> {
     return this.database.transaction(async (client) => {
       await this.authorization.require(client, input.eventId, input.actorId, 'INVENTORY_MOVE');
-      return this.insert(client, {
+      if (DEDICATED_WORKFLOW_MOVEMENTS.has(input.movementType)) {
+        throw new ConflictException('movement type requires a dedicated inventory workflow');
+      }
+
+      const movement: LedgerInput = {
         id: input.id,
         eventId: input.eventId,
         inventoryLocationId: input.inventoryLocationId,
@@ -75,7 +87,47 @@ export class InventoryLedgerService {
         occurredAt: input.occurredAt,
         idempotencyKey: input.idempotencyKey,
         reversalOfLedgerId: input.reversalOfLedgerId,
-      });
+      };
+
+      if (input.movementType === 'REVERSAL') {
+        if (!input.reversalOfLedgerId) {
+          throw new ConflictException('reversal requires a reversal target');
+        }
+        await this.lockStock(client, input.eventId, input.inventoryLocationId, input.skuId);
+        const targetResult = await client.query<LedgerRow>(
+          'SELECT * FROM edge_inventory_ledger WHERE id = $1 FOR UPDATE',
+          [input.reversalOfLedgerId],
+        );
+        const target = targetResult.rows[0];
+        if (!target) throw new ConflictException('reversal target does not exist');
+        if (
+          target.event_id !== input.eventId ||
+          target.inventory_location_id !== input.inventoryLocationId ||
+          target.sku_id !== input.skuId
+        ) {
+          throw new ConflictException('reversal target must match event, location and SKU');
+        }
+        if (target.movement_type === 'REVERSAL') {
+          throw new ConflictException('a reversal cannot reverse another reversal');
+        }
+        if (movement.quantityDeltaBase !== -BigInt(target.quantity_delta)) {
+          throw new ConflictException('reversal must exactly negate the target movement');
+        }
+
+        const previous = await client.query<LedgerRow>(
+          'SELECT * FROM edge_inventory_ledger WHERE reversal_of_ledger_id = $1 LIMIT 1',
+          [target.id],
+        );
+        if (previous.rowCount === 1) {
+          const existing = previous.rows[0]!;
+          if (this.sameMovement(existing, movement)) return existing;
+          throw new ConflictException('reversal target was reused');
+        }
+      } else if (input.reversalOfLedgerId) {
+        throw new ConflictException('only a REVERSAL movement may reference a reversal target');
+      }
+
+      return this.insert(client, movement);
     });
   }
 
@@ -85,7 +137,7 @@ export class InventoryLedgerService {
     inventoryLocationId: string,
     skuId: string,
   ): Promise<void> {
-    const lockKey = `${eventId}\u0000${inventoryLocationId}\u0000${skuId}`;
+    const lockKey = JSON.stringify([eventId, inventoryLocationId, skuId]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [lockKey]);
   }
 
@@ -99,7 +151,7 @@ export class InventoryLedgerService {
          source_type, source_id, source_event_instance_id, actor_id, device_id,
          reason, occurred_at, idempotency_key, reversal_of_ledger_id
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       ON CONFLICT (idempotency_key) DO NOTHING
+       ON CONFLICT DO NOTHING
        RETURNING *`,
       [
         id,
@@ -127,8 +179,11 @@ export class InventoryLedgerService {
     }
 
     const existing = await client.query<LedgerRow>(
-      'SELECT * FROM edge_inventory_ledger WHERE idempotency_key = $1',
-      [input.idempotencyKey],
+      `SELECT * FROM edge_inventory_ledger
+       WHERE idempotency_key = $1 OR id = $2
+       ORDER BY (idempotency_key = $1) DESC
+       LIMIT 1`,
+      [input.idempotencyKey, id],
     );
     const row = existing.rows[0];
     if (!row || !this.sameMovement(row, input)) {
@@ -184,6 +239,7 @@ export class InventoryLedgerService {
 
   private sameMovement(row: LedgerRow, input: LedgerInput): boolean {
     return (
+      (input.id === undefined || row.id === input.id) &&
       row.event_id === input.eventId &&
       row.inventory_location_id === input.inventoryLocationId &&
       row.sku_id === input.skuId &&
@@ -195,6 +251,7 @@ export class InventoryLedgerService {
       row.actor_id === (input.actorId ?? null) &&
       row.device_id === (input.deviceId ?? null) &&
       row.reason === (input.reason ?? null) &&
+      row.occurred_at.toISOString() === new Date(input.occurredAt).toISOString() &&
       row.reversal_of_ledger_id === (input.reversalOfLedgerId ?? null)
     );
   }

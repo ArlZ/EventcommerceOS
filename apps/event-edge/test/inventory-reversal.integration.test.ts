@@ -134,4 +134,40 @@ describeIntegration('inventory manual movement audit safety', () => {
     );
     expect(stock[0]!.on_hand).toBe('0');
   });
+  it('turns a ledger ID collision into an application conflict without aborting stock truth', async () => {
+    await ledger.postManual({
+      id: 'manual-ledger-shared-id',
+      eventId: inventoryEventId,
+      inventoryLocationId: mainLocationId,
+      skuId: beerSkuId,
+      movementType: 'RECEIPT',
+      quantityDeltaBase: '10',
+      actorId: operatorActorId,
+      reason: 'first movement',
+      occurredAt: '2026-08-14T08:00:00.000Z',
+      idempotencyKey: 'manual-ledger-first-key',
+    });
+
+    await expect(
+      ledger.postManual({
+        id: 'manual-ledger-shared-id',
+        eventId: inventoryEventId,
+        inventoryLocationId: mainLocationId,
+        skuId: beerSkuId,
+        movementType: 'WASTAGE',
+        quantityDeltaBase: '-2',
+        actorId: operatorActorId,
+        reason: 'conflicting movement',
+        occurredAt: '2026-08-14T08:01:00.000Z',
+        idempotencyKey: 'manual-ledger-second-key',
+      }),
+    ).rejects.toThrow(/idempotency key was reused with different movement content/);
+
+    const stock = await database.query<{ on_hand: string }>(
+      `SELECT on_hand::text FROM edge_inventory_stock_projection
+       WHERE event_id = $1 AND inventory_location_id = $2 AND sku_id = $3`,
+      [inventoryEventId, mainLocationId, beerSkuId],
+    );
+    expect(stock[0]!.on_hand).toBe('10');
+  });
 });
