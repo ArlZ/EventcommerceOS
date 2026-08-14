@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AuthenticatedDevicePrincipal } from '@event-commerce/contracts';
 import { EdgePaymentsController } from '../src/payments/payments.controller';
 import { EdgePaymentsService, parseEdgeInitiatePayment } from '../src/payments/payments.service';
 import {
@@ -7,6 +8,16 @@ import {
   parseEdgeExternalTerminalConfirmation,
   TerminalPaymentsService,
 } from '../src/payments/terminal-payments.service';
+
+const devicePrincipal: AuthenticatedDevicePrincipal = {
+  principalType: 'DEVICE',
+  credentialId: '12345678-1234-4234-8234-123456789abc',
+  organisationId: 'org-1',
+  eventId: 'event-1',
+  salesLocationId: 'bar-1',
+  deviceId: 'device-1',
+};
+const deviceRequest = { securityPrincipal: devicePrincipal };
 
 describe('Edge payment boundary', () => {
   afterEach(() => {
@@ -96,7 +107,7 @@ describe('Edge payment boundary', () => {
     ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
-  it('rejects M-PESA phone data and wrong merchant references on Sabi at the Edge controller', () => {
+  it('rejects M-PESA phone data and wrong merchant references on Sabi at the authenticated Edge controller', () => {
     const initiate = vi.fn();
     const controller = new EdgePaymentsController(
       { initiate } as unknown as EdgePaymentsService,
@@ -114,12 +125,20 @@ describe('Edge payment boundary', () => {
       accountReference: 'attempt-card-1',
     };
 
-    expect(() => controller.initiate({ ...cardRequest, customerPhone: '254700000000' })).toThrow(
-      'customerPhone is only accepted for the M-PESA provider',
-    );
-    expect(() => controller.initiate({ ...cardRequest, accountReference: 'order-card-1' })).toThrow(
-      'Pesapal Sabi accountReference must equal paymentAttemptId',
-    );
+    expect(() =>
+      controller.initiate(deviceRequest, { ...cardRequest, customerPhone: '254700000000' }),
+    ).toThrow('customerPhone is only accepted for the M-PESA provider');
+    expect(() =>
+      controller.initiate(deviceRequest, { ...cardRequest, accountReference: 'order-card-1' }),
+    ).toThrow('Pesapal Sabi accountReference must equal paymentAttemptId');
+    expect(() =>
+      controller.initiate(
+        {
+          securityPrincipal: { ...devicePrincipal, eventId: 'another-event' },
+        },
+        cardRequest,
+      ),
+    ).toThrow('Device credential cannot initiate payment for another event');
     expect(initiate).not.toHaveBeenCalled();
   });
 
