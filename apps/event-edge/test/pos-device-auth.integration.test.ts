@@ -226,7 +226,7 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('allows an assigned active device to initiate payment and records the attempt at Edge', async () => {
+  it('allows an assigned active device to initiate payment and records POS ownership at Edge', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(cloudPaymentView()), {
         status: 200,
@@ -243,11 +243,11 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
     expect(response.body.status).toBe('PENDING');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    const cache = await database.query<{ event_id: string }>(
-      'SELECT event_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1',
+    const cache = await database.query<{ event_id: string; device_id: string }>(
+      'SELECT event_id,device_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1',
       ['security-attempt'],
     );
-    expect(cache[0]?.event_id).toBe(DEFAULT_DEVICE_EVENT_ID);
+    expect(cache[0]).toEqual({ event_id: DEFAULT_DEVICE_EVENT_ID, device_id: deviceId });
   });
 
   it('prevents a device from reconciling another event payment attempt', async () => {
@@ -265,6 +265,31 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
       .post('/payments/attempts/other-attempt/reconcile')
       .set(posDeviceHeaders(deviceId))
       .send({})
+      .expect(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('prevents another POS in the same event from reading or reconciling owned payment history', async () => {
+    const peerDevice = 'pos-security-peer';
+    await provisionPosDevice(database, peerDevice);
+    await database.query(
+      `INSERT INTO edge_payment_attempt_cache(
+         payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
+         amount_minor,currency,status,device_id
+       ) VALUES ('owned-attempt','owned-payment',$1,'owned-order','fake','owned-idem',10000,'KES','UNKNOWN',$2)`,
+      [DEFAULT_DEVICE_EVENT_ID, deviceId],
+    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await request(app.getHttpServer())
+      .post('/payments/attempts/owned-attempt/reconcile')
+      .set(posDeviceHeaders(peerDevice))
+      .send({})
+      .expect(401);
+    await request(app.getHttpServer())
+      .get('/payments/orders/owned-order')
+      .set(posDeviceHeaders(peerDevice))
       .expect(401);
     expect(fetchMock).not.toHaveBeenCalled();
   });
