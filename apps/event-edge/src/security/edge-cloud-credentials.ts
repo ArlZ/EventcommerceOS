@@ -3,14 +3,14 @@ export interface EdgeCloudCredentials {
   headers: Record<string, string>;
 }
 
-export function edgeCloudCredentials(batchEdgeId: string): EdgeCloudCredentials {
+export function edgeCloudCredentials(expectedEdgeId?: string): EdgeCloudCredentials {
   const edgeId = process.env.EDGE_ID?.trim();
   const token = process.env.EDGE_CLOUD_SYNC_TOKEN?.trim();
   if (!edgeId) throw new Error('EDGE_ID is required for authenticated Cloud transport');
   if (!token || token.length < 32) {
     throw new Error('EDGE_CLOUD_SYNC_TOKEN is required for authenticated Cloud transport');
   }
-  if (batchEdgeId !== edgeId) {
+  if (expectedEdgeId !== undefined && expectedEdgeId !== edgeId) {
     throw new Error('batch edgeId does not match configured EDGE_ID');
   }
   return {
