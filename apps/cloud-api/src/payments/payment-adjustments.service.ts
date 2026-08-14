@@ -187,7 +187,8 @@ export class PaymentAdjustmentsService {
         kind === 'REFUND'
           ? provider.capabilities().refunds && typeof provider.refund === 'function'
           : provider.capabilities().reversals && typeof provider.reverse === 'function';
-      if (!supported) throw new Error(`Provider ${provider.id} does not support ${kind.toLowerCase()}s`);
+      if (!supported)
+        throw new Error(`Provider ${provider.id} does not support ${kind.toLowerCase()}s`);
 
       const reserved = await client.query<ReservedRow>(
         `SELECT (
@@ -315,8 +316,7 @@ export class PaymentAdjustmentsService {
   }
 
   private select(kind: AdjustmentKind): string {
-    const approving =
-      kind === 'REFUND' ? 'approving_actor_id' : 'NULL::text AS approving_actor_id';
+    const approving = kind === 'REFUND' ? 'approving_actor_id' : 'NULL::text AS approving_actor_id';
     return `SELECT id,payment_id,provider_id,source_provider_reference,amount_minor::text,currency,
                    reason,requesting_actor_id,${approving},provider_reference,failure_code,
                    idempotency_key,status,created_at,updated_at
@@ -349,10 +349,7 @@ export class PaymentAdjustmentsService {
     return result.rows[0];
   }
 
-  private async loadByIdDb(
-    kind: AdjustmentKind,
-    id: string,
-  ): Promise<AdjustmentRow | undefined> {
+  private async loadByIdDb(kind: AdjustmentKind, id: string): Promise<AdjustmentRow | undefined> {
     const rows = await this.db.query<AdjustmentRow>(`${this.select(kind)} WHERE id=$1`, [id]);
     return rows[0];
   }
