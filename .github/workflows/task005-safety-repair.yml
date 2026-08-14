@@ -1,0 +1,38 @@
+name: Task005SafetyRepair
+
+on:
+  push:
+    branches:
+      - "task/005-inventory-ledger-alerts"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: task/005-inventory-ledger-alerts
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: python scripts/task005_safety_repair.py
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec prettier --write
+          apps/event-edge/src/inventory/inventory-ledger.service.ts
+          apps/event-edge/src/inventory/inventory-transfer.service.ts
+          apps/event-edge/test/inventory-transfer.integration.test.ts
+          apps/event-edge/test/inventory-reversal.integration.test.ts
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Harden Task 005 stock and transfer idempotency"
+          git push origin HEAD:task/005-inventory-ledger-alerts
