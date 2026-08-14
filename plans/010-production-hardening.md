@@ -1,6 +1,6 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: implementation in progress
+Status: **feature-complete at code/review level; release blocked by security + permanent CI**
 Base: Task 009 (`codex/task-009-event-close`)
 
 ## Objective
@@ -29,7 +29,7 @@ The required suite models:
 - provider timeout with explicit uncertainty;
 - sudden product demand spike;
 - concurrent sales and replenishment transfers;
-- notification-provider outage;
+- operational notification-provider outage independent of payment truth;
 - slow Cloud database/dependency;
 - application-level WAN failover;
 - a combined peak scenario materially above the intended pilot topology.
@@ -62,34 +62,63 @@ The modeled suite fails if any of these occur:
 - a duplicate business effect occurs;
 - recovery ends with undrained sync backlog;
 - payment uncertainty remains unresolved after the configured recovery window;
+- completed payment effects do not equal committed modeled sales;
 - physical, Edge and Cloud inventory do not converge;
 - Cloud order/inventory projections do not converge to durable event truth;
 - modeled local p95 interaction exceeds 150 ms or local commit p95 exceeds 250 ms.
 
 The latency assertions are **model regression checks only**. Real hardware must independently prove the SLOs.
 
+## Executed evidence
+
+A strict TypeScript 5.8.3 compile of the simulator source passed in the available execution environment using the repository's core strictness settings.
+
+The deterministic required suite was executed with fixed seeds/timestamp and passed **12/12 scenarios**. The combined above-pilot scenario produced:
+
+- 10 bars × 5 registers;
+- 4,200 committed modeled orders;
+- 600 modeled orders/minute throughput;
+- max sync backlog 3,385;
+- 1,233 payment attempts entering uncertainty;
+- 1,010 duplicate sync deliveries;
+- 577 duplicate provider signals;
+- zero duplicate business effects;
+- zero unresolved payments after recovery;
+- zero remaining sync backlog;
+- converged physical/Edge/Cloud inventory.
+
+Full deterministic baseline: `docs/SIMULATION_BASELINE_2026-08-14.md`.
+
 ## Security/release review
 
-Documented separately in `docs/RELEASE_SECURITY_REVIEW.md`. High-risk boundaries reviewed:
+Documented in `docs/RELEASE_SECURITY_REVIEW.md`.
 
-- payment initiation/idempotency and UNKNOWN handling;
-- provider callbacks/webhooks;
-- manual payment evidence;
-- administrative auth/RBAC;
-- device registration/revocation trust boundary;
-- sync replay/conflict handling;
-- privileged inventory and close actions;
-- secrets/card-data boundary;
-- public endpoint abuse/rate limiting;
-- backup/restore and operational evidence.
+Release-blocking findings include:
+
+- Cloud payment mutation/read surfaces lack production authentication;
+- Cloud sync ingestion/device-health surfaces lack authenticated Edge identity;
+- admin role/organisation context currently trusts caller-supplied headers;
+- device registration/revocation is not production-grade end-to-end;
+- rate limiting/abuse controls are not wired globally;
+- backup/restore evidence has not been executed;
+- dependency/SCA evidence is incomplete;
+- permanent GitHub Actions still fails before step 1 and therefore provides no code validation signal.
+
+Current security disposition: **NO-GO for internet-exposed production or a live-money pilot**.
+
+## Validation limitation
+
+The local execution environment has Node.js 22 and TypeScript 5.8.3, but cannot reach the npm registry to activate/download pnpm. Therefore the full workspace build/lint/Vitest/dependency-audit commands could not be substituted locally.
+
+The permanent GitHub TypeScript/Android workflow was retried again during Task 010 and both jobs still completed with zero executed steps. No stack is eligible for merge until those jobs actually run and pass.
 
 ## Pilot graduation rule
 
-Task 010 must not mark the product "festival ready". The maximum recommendation from automated evidence is **controlled pilot candidate**, and only after permanent CI executes successfully.
+Task 010 must not mark the product "festival ready". After the security blockers and permanent CI are closed, the maximum recommendation from automated evidence is **controlled pilot candidate**.
 
 Graduation to a larger event requires all of:
 
-- green permanent TypeScript + Android gates;
+- green permanent TypeScript + Android gates on the exact release commit;
 - no open P0/P1 security findings;
 - supported-device local latency evidence meeting SLOs;
 - 100-order offline/restart durability test with zero loss;
