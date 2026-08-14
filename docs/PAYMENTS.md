@@ -53,9 +53,9 @@ Key pattern:
 PAYMENT:{order_id}:{payment_slot}:{client_attempt_id}
 ```
 
-Cloud persists the payment and `CREATED` attempt before provider initiation. Replaying a completed idempotency key returns the original business effect.
+Cloud persists the payment and `CREATED` attempt before provider initiation. Replaying the same idempotency key returns the existing durable attempt and never steals ownership of an in-flight provider call.
 
-A particularly dangerous case is a process crash after a provider request may have been transmitted but before its result is persisted. If a retry finds the durable attempt still in ambiguous `CREATED` state, the system does not blindly send a second provider request. It moves the attempt to `UNKNOWN`/reconciliation instead.
+A particularly dangerous case is a process crash after a provider request may have been transmitted but before its result is persisted. An immediate concurrent/retry request must not mutate the shared `CREATED` attempt because the original owner may still be waiting for the provider. Instead, a stale-`CREATED` watchdog treats an attempt that remains unresolved beyond the initiation safety window as `UNKNOWN`/manual review. It is never blindly re-initiated.
 
 ## M-PESA flow
 
@@ -65,8 +65,9 @@ A particularly dangerous case is a process crash after a provider request may ha
 4. Cloud invokes the M-PESA adapter.
 5. A successful initiation produces `PENDING`; transport ambiguity produces `UNKNOWN`.
 6. M-PESA callbacks are schema-validated, correlated and deduplicated, but are treated as reconciliation signals rather than sufficient settlement truth on their own.
-7. Cloud uses the provider status-query path to resolve authoritative payment truth.
-8. The resolved provider-neutral state returns Edge -> POS. `SUCCEEDED` closes the same local order; definitive `FAILED` reopens it for another payment decision.
+7. Cloud uses the provider status-query path to resolve authoritative payment truth. `PENDING` and `UNKNOWN` attempts remain scheduled for bounded reconciliation even if no callback arrives.
+8. Event Edge applies legal payment-state transitions rather than last-write-wins; terminal truth cannot be regressed by a late response, and conflicting provider references force explicit uncertainty.
+9. The resolved provider-neutral state returns Edge -> POS. `SUCCEEDED` closes the same local order; definitive `FAILED` reopens it for another payment decision.
 
 Do not encourage or automatically initiate another customer payment while the prior attempt is `PENDING` or `UNKNOWN`.
 
@@ -77,6 +78,7 @@ Do not encourage or automatically initiate another customer payment while the pr
 Cloud reconciliation:
 - stores an explicit reconciliation job;
 - queries provider status when a provider reference exists;
+- also polls durable `PENDING`/`INITIATED` attempts when callback delivery is absent;
 - retries with bounded exponential backoff;
 - resolves automatically when provider truth becomes clear;
 - moves unresolved or conflicting cases to manual review rather than inventing failure.
@@ -113,17 +115,27 @@ There must not be a generic unaudited manual-success button.
 
 ## Refunds and reversals
 
-Refunds/reversals are separate immutable records with:
+Refunds/reversals are separate durable records with immutable intent fields:
 - original payment link;
+- provider and original provider transaction reference;
 - integer amount and currency;
 - reason;
 - requesting actor;
 - approving actor where policy requires;
-- provider reference;
 - idempotency key;
-- explicit status.
+- explicit processing status and resulting provider reference/failure code.
 
-Task 006 establishes the provider-neutral records and capability boundary. Provider execution is implemented only where a provider safely supports it; original financial history is never overwritten.
+The original payment/attempt history is never overwritten. Cloud serializes adjustments against the original payment and reserves all non-failed refund/reversal value, so concurrent adjustments cannot cumulatively exceed the paid amount.
+
+The same adjustment idempotency key never invokes the provider twice. If a provider call may have been transmitted but its result is not durably recorded, a later stale retry becomes `UNKNOWN` rather than issuing another refund/reversal. A failed adjustment requires a new explicit adjustment intent/idempotency key.
+
+Provider execution is capability-gated. Task 006 supplies the generic orchestration boundary; the M-PESA adapter does not claim refund/reversal support unless that provider path is explicitly implemented and validated.
+
+## Authorization boundary
+
+Payment mutation and operational-read endpoints must ultimately sit behind the platform authentication/RBAC layer defined in `SECURITY_RELIABILITY.md`. Task 006 does not invent a payment-specific shared-secret mechanism because device identity, access tokens, RBAC and supervisor approval are cross-cutting platform controls. Deployment must not expose these internal endpoints publicly before that baseline is wired through the application stack.
+
+The M-PESA callback route is necessarily provider-facing and therefore uses provider-specific validation/reconciliation rules rather than operator authorization.
 
 ## Operational signals
 
@@ -141,7 +153,8 @@ Logs use correlation/order/payment/attempt identifiers and must not contain prov
 ## Payment failure-mode tests
 
 - duplicate initiation request;
-- ambiguous retry after possible provider transmission;
+- simultaneous duplicate initiation while the owner is in flight;
+- stale ambiguous initiation after possible provider transmission;
 - duplicate callback;
 - callback before initiation response;
 - delayed callback;
@@ -149,8 +162,10 @@ Logs use correlation/order/payment/attempt identifiers and must not contain prov
 - malformed callback;
 - callback amount/reference mismatch;
 - provider reports conflicting status;
+- pending attempt with no callback;
+- stale Edge response after terminal success;
 - device/Edge loses connectivity while payment is pending;
 - POS/Edge/Cloud restart with unresolved payment;
-- refund retry;
-- reversal after apparent success;
+- refund retry, including an in-flight duplicate;
+- reversal replay and over-adjustment prevention;
 - provider outage while local ordering remains usable.
