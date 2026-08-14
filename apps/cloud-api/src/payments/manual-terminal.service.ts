@@ -16,6 +16,7 @@ interface AttemptRow extends QueryResultRow {
   amount_minor: string;
   currency: string;
   status: PaymentAttemptState;
+  provider_reference: string | null;
 }
 
 interface ConfirmationRow extends QueryResultRow {
@@ -65,7 +66,7 @@ export class ManualTerminalService {
     return this.db.transaction(async (client) => {
       const attemptResult = await client.query<AttemptRow>(
         `SELECT pa.id,pa.payment_id,p.event_id,p.order_id,pa.provider_id,
-                p.amount_minor::text,p.currency,pa.status
+                p.amount_minor::text,p.currency,pa.status,pa.provider_reference
          FROM payment_attempts pa
          JOIN payments p ON p.id=pa.payment_id
          WHERE pa.id=$1
@@ -74,9 +75,15 @@ export class ManualTerminalService {
       );
       const attempt = attemptResult.rows[0];
       if (!attempt) throw new Error('Payment attempt not found');
-      if (attempt.provider_id !== 'external_terminal') {
+
+      const dedicatedExternal = attempt.provider_id === 'external_terminal';
+      const supervisedSabiDecline =
+        attempt.provider_id === 'pesapal_sabi' &&
+        request.outcome === 'DECLINED' &&
+        attempt.provider_reference === null;
+      if (!dedicatedExternal && !supervisedSabiDecline) {
         throw new Error(
-          'Manual terminal confirmation is only valid for a dedicated external_terminal attempt',
+          'Manual approval requires an external_terminal attempt; integrated Sabi only permits a supervised reference-less DECLINED record',
         );
       }
 
@@ -130,13 +137,20 @@ export class ManualTerminalService {
 
       await client.query(
         `UPDATE payment_attempts
-         SET status=$2,provider_reference=$3,failure_code=$4,resolved_at=now(),updated_at=now()
+         SET status=$2,
+             provider_reference=CASE WHEN provider_id='external_terminal' THEN $3 ELSE provider_reference END,
+             failure_code=$4,
+             resolved_at=now(),updated_at=now()
          WHERE id=$1`,
         [
           attempt.id,
           target,
           request.externalReference,
-          request.outcome === 'DECLINED' ? 'EXTERNAL_TERMINAL_DECLINED' : null,
+          request.outcome === 'DECLINED'
+            ? supervisedSabiDecline
+              ? 'SABI_TERMINAL_DECLINED_MANUAL_EVIDENCE'
+              : 'EXTERNAL_TERMINAL_DECLINED'
+            : null,
         ],
       );
       await client.query(
@@ -156,6 +170,7 @@ export class ManualTerminalService {
           attempt.id,
           JSON.stringify({
             confirmationId: request.confirmationId,
+            paymentProviderId: attempt.provider_id,
             externalProviderId: request.externalProviderId,
             externalReference: request.externalReference,
             amountMinor: request.amountMinor,
