@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EdgePaymentsController } from '../src/payments/payments.controller';
 import { EdgePaymentsService, parseEdgeInitiatePayment } from '../src/payments/payments.service';
+import { DeviceEdgeAuthService } from '../src/security/device-edge-auth.service';
 import {
   assertEdgeInitiatePaymentEnvelope,
   assertNoProhibitedEdgeCardFields,
@@ -96,11 +97,22 @@ describe('Edge payment boundary', () => {
     ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
-  it('rejects M-PESA phone data and wrong merchant references on Sabi at the Edge controller', () => {
+  it('rejects M-PESA phone data and wrong merchant references on Sabi at the authenticated Edge controller', async () => {
     const initiate = vi.fn();
+    const deviceAuth = {
+      authenticate: vi.fn(async () => ({
+        deviceId: 'device-1',
+        eventId: 'event-1',
+        salesLocationId: null,
+        registerId: null,
+        credentialVersion: 1,
+      })),
+      authorizePaymentInitiation: vi.fn(),
+    };
     const controller = new EdgePaymentsController(
       { initiate } as unknown as EdgePaymentsService,
       new TerminalPaymentsService(),
+      deviceAuth as unknown as DeviceEdgeAuthService,
     );
     const cardRequest = {
       eventId: 'event-1',
@@ -114,12 +126,12 @@ describe('Edge payment boundary', () => {
       accountReference: 'attempt-card-1',
     };
 
-    expect(() => controller.initiate({ ...cardRequest, customerPhone: '254700000000' })).toThrow(
-      'customerPhone is only accepted for the M-PESA provider',
-    );
-    expect(() => controller.initiate({ ...cardRequest, accountReference: 'order-card-1' })).toThrow(
-      'Pesapal Sabi accountReference must equal paymentAttemptId',
-    );
+    await expect(
+      controller.initiate({}, { ...cardRequest, customerPhone: '254700000000' }),
+    ).rejects.toThrow('customerPhone is only accepted for the M-PESA provider');
+    await expect(
+      controller.initiate({}, { ...cardRequest, accountReference: 'order-card-1' }),
+    ).rejects.toThrow('Pesapal Sabi accountReference must equal paymentAttemptId');
     expect(initiate).not.toHaveBeenCalled();
   });
 
