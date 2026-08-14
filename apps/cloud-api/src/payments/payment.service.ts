@@ -158,7 +158,8 @@ export class PaymentService {
       if (result.outcome === 'UNKNOWN' || result.outcome === 'ACCEPTED_FOR_PROCESSING') {
         await this.scheduleQueryFailure(
           attemptId,
-          result.reasonCode ?? (result.outcome === 'UNKNOWN' ? 'PROVIDER_QUERY_UNKNOWN' : 'PROVIDER_STILL_PENDING'),
+          result.reasonCode ??
+            (result.outcome === 'UNKNOWN' ? 'PROVIDER_QUERY_UNKNOWN' : 'PROVIDER_STILL_PENDING'),
         );
       }
     } finally {
@@ -216,6 +217,16 @@ export class PaymentService {
         return { attempt: existing, idempotentReplay: true };
       }
 
+      const attemptIdentity = await client.query<{ id: string }>(
+        'SELECT id FROM payment_attempts WHERE id = $1',
+        [input.attemptId],
+      );
+      if (attemptIdentity.rowCount !== 0) {
+        throw new ConflictException(
+          'payment attempt ID was reused under a different idempotency key',
+        );
+      }
+
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `payment:${input.paymentId}`,
       ]);
@@ -237,7 +248,7 @@ export class PaymentService {
         throw new ConflictException('payment is already settled');
       }
 
-      const attemptId = randomUUID();
+      const attemptId = input.attemptId;
       await client.query(
         `INSERT INTO payment_attempts(
            id, payment_id, client_attempt_id, provider, amount_minor, currency,
@@ -275,6 +286,7 @@ export class PaymentService {
 
   private assertIdempotentReplay(existing: AttemptRow, input: InitiatePaymentRequest): void {
     if (
+      existing.id !== input.attemptId ||
       existing.payment_id !== input.paymentId ||
       existing.client_attempt_id !== input.clientAttemptId ||
       existing.provider !== input.provider ||
@@ -483,7 +495,10 @@ export class PaymentService {
     });
   }
 
-  private async claimReconciliation(attemptId: string, claimId: string): Promise<AttemptRow | null> {
+  private async claimReconciliation(
+    attemptId: string,
+    claimId: string,
+  ): Promise<AttemptRow | null> {
     const claimed = await this.database.transaction(async (client) => {
       const result = await client.query<{ attempt_id: string }>(
         `UPDATE payment_attempt_state s SET
