@@ -32,16 +32,24 @@ interface SabiVerificationResponse {
 
 const PROHIBITED_CARD_KEYS = new Set([
   'pan',
+  'primaryaccountnumber',
   'cardnumber',
   'cvv',
   'cvc',
+  'securitycode',
+  'cardsecuritycode',
   'pin',
+  'pinblock',
+  'track',
   'track1',
   'track2',
   'trackdata',
   'magstripe',
   'emv',
   'cryptogram',
+  'expiry',
+  'expirationdate',
+  'cardexpiry',
 ]);
 
 function parseObject(value: unknown): Record<string, unknown> {
@@ -258,19 +266,30 @@ export class PesapalSabiProvider implements PaymentProvider {
         typeof body.merchant_ref === 'string' && body.merchant_ref.trim()
           ? body.merchant_ref.trim()
           : undefined;
+      const verifiedCardOption =
+        typeof body.payment_option === 'string' && isDocumentedCardOption(body.payment_option);
       const completed =
         body.status === 1 &&
         body.posting_status === 0 &&
         body.status_description?.trim().toLowerCase() === 'completed' &&
         body.posting_status_description?.trim().toLowerCase() === 'success';
+      const completeFinancialIdentity =
+        amountMinor !== undefined && currency !== undefined && paymentAttemptId !== undefined && verifiedCardOption;
+      const succeeded = completed && completeFinancialIdentity;
 
       return {
-        status: completed ? 'SUCCEEDED' : 'UNKNOWN',
+        status: succeeded ? 'SUCCEEDED' : 'UNKNOWN',
         providerReference: confirmationCode,
         ...(paymentAttemptId ? { paymentAttemptId } : {}),
         ...(amountMinor !== undefined ? { amountMinor } : {}),
         ...(currency ? { currency } : {}),
-        ...(!completed ? { failureCode: 'PESAPAL_SABI_STATUS_UNPROVEN' } : {}),
+        ...(!succeeded
+          ? {
+              failureCode: completed
+                ? 'PESAPAL_SABI_VERIFICATION_INCOMPLETE'
+                : 'PESAPAL_SABI_STATUS_UNPROVEN',
+            }
+          : {}),
       };
     } catch {
       return {
