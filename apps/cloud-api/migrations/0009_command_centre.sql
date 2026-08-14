@@ -8,7 +8,18 @@ UPDATE sync_order_state state
 SET event_id = COALESCE(NULLIF(source.payload->>'eventId', ''), 'legacy:' || source.device_id),
     sales_location_id = NULLIF(source.payload->>'salesLocationId', ''),
     lines = CASE
-      WHEN jsonb_typeof(source.payload->'lines') = 'array' THEN source.payload->'lines'
+      WHEN jsonb_typeof(source.payload->'lines') = 'array'
+       AND NOT EXISTS (
+         SELECT 1
+         FROM jsonb_array_elements(source.payload->'lines') line
+         WHERE jsonb_typeof(line) <> 'object'
+            OR coalesce(line->>'skuId', '') = ''
+            OR coalesce(line->>'quantity', '') !~ '^[1-9][0-9]*$'
+            OR length(coalesce(line->>'quantity', '')) > 16
+            OR coalesce(line->>'unitPriceMinor', '') !~ '^[0-9]+$'
+            OR length(coalesce(line->>'unitPriceMinor', '')) > 16
+       )
+      THEN source.payload->'lines'
       ELSE '[]'::jsonb
     END,
     occurred_at = source.occurred_at
