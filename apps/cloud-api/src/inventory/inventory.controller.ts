@@ -21,7 +21,9 @@ export class InventoryController {
     const identity = await this.edgeAuth.authenticate(headers);
     const batch = parseInventoryEdgeBatch(body);
     await this.edgeAuth.authorizeInventoryBatch(identity, batch);
-    return this.inventory.ingest(batch);
+    const result = await this.inventory.ingest(batch);
+    await this.edgeAuth.attributeInventoryBatch(identity, batch);
+    return result;
   }
 
   @Get('events/:eventId/operations')
