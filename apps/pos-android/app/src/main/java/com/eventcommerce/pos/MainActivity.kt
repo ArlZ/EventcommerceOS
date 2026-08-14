@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.eventcommerce.pos.data.AppDatabase
+import com.eventcommerce.pos.data.DeviceCredentialStore
 import com.eventcommerce.pos.data.DeviceSyncProvisioningStore
 import com.eventcommerce.pos.data.DeviceSyncStateStore
 import com.eventcommerce.pos.data.LocalPosRepository
@@ -24,18 +25,27 @@ class MainActivity : ComponentActivity() {
   private val repository by lazy { LocalPosRepository(database) }
   private val syncState by lazy { DeviceSyncStateStore(database) }
   private val syncProvisioning by lazy { DeviceSyncProvisioningStore(database) }
+  private val deviceCredentials by lazy { DeviceCredentialStore(applicationContext) }
   private val syncQueue by lazy { SyncQueueStore(database) }
   private val payments by lazy {
-    PaymentCoordinator(repository, ProvisionedEdgePaymentTransport(syncProvisioning))
+    PaymentCoordinator(
+      repository,
+      ProvisionedEdgePaymentTransport(syncProvisioning, deviceCredentials),
+    )
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     lifecycleScope.launch {
       val endpoint = syncProvisioning.endpoint()
-      if (endpoint != null) {
+      val deviceCredential = deviceCredentials.token()
+      if (endpoint != null && deviceCredential != null) {
         DeviceSyncCoordinator(
-          DeviceSyncEngine(database, HttpsDeviceEdgeTransport(endpoint), syncState),
+          DeviceSyncEngine(
+            database,
+            HttpsDeviceEdgeTransport(endpoint, deviceCredential),
+            syncState,
+          ),
         ).run()
       }
     }
