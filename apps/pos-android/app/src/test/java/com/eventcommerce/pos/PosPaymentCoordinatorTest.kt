@@ -13,6 +13,7 @@ import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -83,6 +84,21 @@ class PosPaymentCoordinatorTest {
     assertEquals(2, transport.initiateCalls)
     assertEquals(0, transport.getCalls)
     assertEquals(1, repository.outboxCount(order.id, "ORDER_CLOSED_MPESA"))
+  }
+
+  @Test
+  fun `safe retry after terminal failure creates a new attempt under the same logical payment`() = runBlocking {
+    val order = repository.addItem(repository.ensureDevelopmentMenu().items.first().itemId)
+    val first = coordinator.beginMpesa(order.id)
+    repository.applyPaymentSnapshot(edge(first, PaymentAttemptState.FAILED))
+    repository.resumeOrderAfterFailedPayment(first.attemptId)
+
+    val retry = coordinator.beginMpesa(order.id)
+
+    assertEquals(first.paymentId, retry.paymentId)
+    assertNotEquals(first.attemptId, retry.attemptId)
+    assertNotEquals(first.clientAttemptId, retry.clientAttemptId)
+    assertNotEquals(first.idempotencyKey, retry.idempotencyKey)
   }
 
   @Test
