@@ -108,6 +108,16 @@ export class EdgeCloudAuthService {
     };
   }
 
+  async authorizeEvent(identity: EdgeCloudIdentity, eventId: string): Promise<void> {
+    const rows = await this.database.query<EventOrgRow>(
+      `SELECT id::text FROM events WHERE id=$1 AND organisation_id=$2`,
+      [eventId, identity.organisationId],
+    );
+    if (rows.length !== 1) {
+      throw new UnauthorizedException('Event is outside the Event Edge organisation');
+    }
+  }
+
   async authorizeSyncBatch(identity: EdgeCloudIdentity, batch: EdgeCloudBatch): Promise<void> {
     this.assertEdgeId(identity, batch.edgeId);
     await this.assertEventsBelongToOrganisation(
