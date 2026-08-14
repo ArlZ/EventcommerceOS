@@ -23,7 +23,11 @@ export class CommandCentreController {
       adminContextFromHeaders(headers),
       normalizedEventId,
     );
-    return this.deviceSales.enrich(normalizedEventId, snapshot);
+    try {
+      return await this.deviceSales.enrich(normalizedEventId, snapshot);
+    } catch {
+      return snapshot;
+    }
   }
 
   @Sse('events/:eventId/stream')
