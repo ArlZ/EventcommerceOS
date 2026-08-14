@@ -49,10 +49,15 @@ export class InventoryCountService {
   async create(input: CreateStockCountInput): Promise<StockCountResult> {
     return this.database.transaction(async (client) => {
       await this.authorization.require(client, input.eventId, input.actorId, 'COUNT_MANAGE');
-      const existing = await client.query<CountRow>('SELECT * FROM edge_stock_counts WHERE id = $1', [input.id]);
+      const existing = await client.query<CountRow>('SELECT * FROM edge_stock_counts WHERE id = $1', [
+        input.id,
+      ]);
       if (existing.rowCount === 1) {
         const row = existing.rows[0]!;
-        if (row.event_id !== input.eventId || row.inventory_location_id !== input.inventoryLocationId) {
+        if (
+          row.event_id !== input.eventId ||
+          row.inventory_location_id !== input.inventoryLocationId
+        ) {
           throw new ConflictException('stock count ID was reused with different content');
         }
         return this.result(client, row);
@@ -63,9 +68,16 @@ export class InventoryCountService {
            id, event_id, inventory_location_id, state, opened_by_actor_id,
            opened_at, reason
          ) VALUES ($1,$2,$3,'OPEN',$4,$5,$6)`,
-        [input.id, input.eventId, input.inventoryLocationId, input.actorId, input.openedAt, input.reason],
+        [
+          input.id,
+          input.eventId,
+          input.inventoryLocationId,
+          input.actorId,
+          input.openedAt,
+          input.reason,
+        ],
       );
-      for (const line of input.lines) {
+      for (const line of [...input.lines].sort((a, b) => a.skuId.localeCompare(b.skuId))) {
         await client.query(
           `INSERT INTO edge_stock_count_lines(count_id, sku_id, counted_quantity)
            VALUES ($1,$2,$3)`,
@@ -82,6 +94,16 @@ export class InventoryCountService {
       await this.authorization.require(client, count.event_id, input.actorId, 'COUNT_MANAGE');
       if (count.state === 'CLOSED') return this.result(client, count);
       const lines = await this.lines(client, count.id);
+
+      for (const line of lines) {
+        await this.ledger.lockStock(
+          client,
+          count.event_id,
+          count.inventory_location_id,
+          line.sku_id,
+        );
+      }
+
       for (const line of lines) {
         const expected = await this.ledger.onHand(
           client,
@@ -158,7 +180,10 @@ export class InventoryCountService {
           skuId: line.sku_id,
           countedQuantityBase: line.counted_quantity,
           expectedQuantityBase: expected,
-          varianceBase: expected === null ? null : (BigInt(line.counted_quantity) - BigInt(expected)).toString(),
+          varianceBase:
+            expected === null
+              ? null
+              : (BigInt(line.counted_quantity) - BigInt(expected)).toString(),
         };
       }),
     };
