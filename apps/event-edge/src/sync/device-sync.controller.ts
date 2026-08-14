@@ -18,7 +18,15 @@ export class DeviceSyncController {
   async ingest(@Body() body: unknown): Promise<DeviceSyncAck> {
     const batch = parseDeviceBatch(body);
     const acknowledgement = await this.sync.ingest(batch);
-    const affectedEvents = await this.inventorySales.consume(batch.events);
+    const processableEventIds = new Set(
+      acknowledgement.receipts
+        .filter((receipt) => receipt.status !== 'CONFLICT')
+        .map((receipt) => receipt.eventInstanceId),
+    );
+    const inventoryEvents = batch.events.filter((event) =>
+      processableEventIds.has(event.eventInstanceId),
+    );
+    const affectedEvents = await this.inventorySales.consume(inventoryEvents);
     for (const eventId of affectedEvents) {
       void this.inventoryAlerts.evaluateEvent(eventId).catch(() => undefined);
     }
