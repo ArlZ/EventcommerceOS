@@ -83,6 +83,24 @@ describe('Pesapal Sabi provider', () => {
     );
   });
 
+  it('requires complete verified financial identity before success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({ ...successVerification, currency: undefined, payment_option: undefined }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    );
+    const provider = new PesapalSabiProvider();
+    const result = await provider.parseAndVerifyWebhook(notification(), context());
+
+    expect(result.status).toBe('UNKNOWN');
+    expect(result.failureCode).toBe('PESAPAL_SABI_VERIFICATION_INCOMPLETE');
+    expect(result.providerReference).toBe('CONFIRM-1');
+  });
+
   it('rejects forged notification credentials before applying financial truth', async () => {
     const provider = new PesapalSabiProvider();
     await expect(
@@ -123,7 +141,10 @@ describe('Pesapal Sabi provider', () => {
   it('rejects prohibited raw card fields', async () => {
     const provider = new PesapalSabiProvider();
     await expect(
-      provider.parseAndVerifyWebhook(notification({ cardNumber: '4111111111111111' }), context()),
+      provider.parseAndVerifyWebhook(
+        notification({ primaryAccountNumber: '4111111111111111' }),
+        context(),
+      ),
     ).rejects.toThrow('Prohibited raw card field');
     expect(fetch).not.toHaveBeenCalled();
   });
