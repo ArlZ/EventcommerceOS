@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { SyncModule } from '../sync/sync.module';
 import { ExternalTerminalProvider } from './external-terminal.provider';
+import { HumanPaymentAuthService } from './human-payment-auth.service';
 import { ManualTerminalService } from './manual-terminal.service';
 import { MpesaProvider } from './mpesa.provider';
 import { PaymentAdjustmentsService } from './payment-adjustments.service';
@@ -33,6 +34,7 @@ import { PesapalSabiProvider } from './pesapal-sabi.provider';
     ManualTerminalService,
     PaymentRailService,
     PaymentMachineAuthService,
+    HumanPaymentAuthService,
   ],
   exports: [PaymentsService, PaymentAdjustmentsService, ManualTerminalService, PaymentRailService],
 })
