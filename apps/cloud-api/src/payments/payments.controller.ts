@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import { ManualTerminalService } from './manual-terminal.service';
 import { PaymentAdjustmentsService } from './payment-adjustments.service';
 import {
   parseExternalTerminalConfirmation,
@@ -6,6 +7,7 @@ import {
   parseRefundPaymentRequest,
   parseReversePaymentRequest,
 } from './payment-validation';
+import { PaymentRailService } from './payment-rail.service';
 import { PaymentsService } from './payments.service';
 
 @Controller('payments')
@@ -13,6 +15,8 @@ export class PaymentsController {
   constructor(
     @Inject(PaymentsService) private readonly payments: PaymentsService,
     @Inject(PaymentAdjustmentsService) private readonly adjustments: PaymentAdjustmentsService,
+    @Inject(ManualTerminalService) private readonly manualTerminal: ManualTerminalService,
+    @Inject(PaymentRailService) private readonly rails: PaymentRailService,
   ) {}
 
   @Post('initiate')
@@ -22,7 +26,7 @@ export class PaymentsController {
 
   @Post('manual-terminal-confirmations')
   confirmExternalTerminal(@Body() body: unknown) {
-    return this.payments.confirmExternalTerminal(parseExternalTerminalConfirmation(body));
+    return this.manualTerminal.confirm(parseExternalTerminalConfirmation(body));
   }
 
   @Post('refunds')
@@ -51,7 +55,7 @@ export class PaymentsController {
 
   @Get('providers/availability')
   railAvailability() {
-    return this.payments.railAvailability();
+    return this.rails.availability();
   }
 
   @Get(':paymentId/history')
@@ -61,7 +65,7 @@ export class PaymentsController {
 
   @Get(':paymentId/manual-terminal-confirmations')
   manualTerminalHistory(@Param('paymentId') paymentId: string) {
-    return this.payments.manualTerminalHistory(paymentId);
+    return this.manualTerminal.history(paymentId);
   }
 
   @Get('orders/:orderId')
