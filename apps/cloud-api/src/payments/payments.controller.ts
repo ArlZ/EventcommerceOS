@@ -1,14 +1,25 @@
-import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { ManualTerminalService } from './manual-terminal.service';
 import { PaymentAdjustmentsService } from './payment-adjustments.service';
-import {
-  parseExternalTerminalConfirmation,
-  parseInitiatePaymentRequest,
-  parseRefundPaymentRequest,
-  parseReversePaymentRequest,
-} from './payment-validation';
+import { PaymentMachineAuthService } from './payment-machine-auth.service';
+import { parseInitiatePaymentRequest } from './payment-validation';
 import { PaymentRailService } from './payment-rail.service';
 import { PaymentsService } from './payments.service';
+
+type HeadersRecord = Record<string, string | string[] | undefined>;
+
+function humanAuthRequired(): never {
+  throw new ForbiddenException('Human authentication and authorization are required for this payment operation');
+}
 
 @Controller('payments')
 export class PaymentsController {
@@ -17,33 +28,36 @@ export class PaymentsController {
     @Inject(PaymentAdjustmentsService) private readonly adjustments: PaymentAdjustmentsService,
     @Inject(ManualTerminalService) private readonly manualTerminal: ManualTerminalService,
     @Inject(PaymentRailService) private readonly rails: PaymentRailService,
+    @Inject(PaymentMachineAuthService) private readonly machineAuth: PaymentMachineAuthService,
   ) {}
 
   @Post('initiate')
-  initiate(@Body() body: unknown) {
-    return this.payments.initiate(parseInitiatePaymentRequest(body));
+  async initiate(@Headers() headers: HeadersRecord, @Body() body: unknown) {
+    const request = parseInitiatePaymentRequest(body);
+    await this.machineAuth.authorizeInitiation(headers, request.eventId);
+    return this.payments.initiate(request);
   }
 
   @Post('manual-terminal-confirmations')
-  confirmExternalTerminal(@Body() body: unknown) {
-    return this.manualTerminal.confirm(parseExternalTerminalConfirmation(body));
+  confirmExternalTerminal() {
+    return humanAuthRequired();
   }
 
   @Post('refunds')
-  refund(@Body() body: unknown) {
-    return this.adjustments.refund(parseRefundPaymentRequest(body));
+  refund() {
+    return humanAuthRequired();
   }
 
   @Post('reversals')
-  reverse(@Body() body: unknown) {
-    return this.adjustments.reverse(parseReversePaymentRequest(body));
+  reverse() {
+    return humanAuthRequired();
   }
 
   @Post('providers/:providerId/callback')
   async callback(
     @Param('providerId') providerId: string,
     @Body() body: unknown,
-    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Headers() headers: HeadersRecord,
   ) {
     const result = await this.payments.ingestProviderCallback(providerId, body, { headers });
     if (providerId.trim().toLowerCase() === 'pesapal_sabi') {
@@ -53,32 +67,38 @@ export class PaymentsController {
   }
 
   @Post('attempts/:paymentAttemptId/reconcile')
-  reconcile(@Param('paymentAttemptId') paymentAttemptId: string) {
+  async reconcile(
+    @Headers() headers: HeadersRecord,
+    @Param('paymentAttemptId') paymentAttemptId: string,
+  ) {
+    await this.machineAuth.authorizeAttempt(headers, paymentAttemptId);
     return this.payments.reconcileAttempt(paymentAttemptId);
   }
 
   @Get('providers/availability')
-  railAvailability() {
+  async railAvailability(@Headers() headers: HeadersRecord) {
+    await this.machineAuth.authenticate(headers);
     return this.rails.availability();
   }
 
   @Get(':paymentId/history')
-  history(@Param('paymentId') paymentId: string) {
-    return this.adjustments.history(paymentId);
+  history() {
+    return humanAuthRequired();
   }
 
   @Get(':paymentId/manual-terminal-confirmations')
-  manualTerminalHistory(@Param('paymentId') paymentId: string) {
-    return this.manualTerminal.history(paymentId);
+  manualTerminalHistory() {
+    return humanAuthRequired();
   }
 
   @Get('orders/:orderId')
-  byOrder(@Param('orderId') orderId: string) {
+  async byOrder(@Headers() headers: HeadersRecord, @Param('orderId') orderId: string) {
+    await this.machineAuth.authorizeOrder(headers, orderId);
     return this.payments.byOrder(orderId);
   }
 
   @Get('events/:eventId/health')
-  health(@Param('eventId') eventId: string) {
-    return this.payments.health(eventId);
+  health() {
+    return humanAuthRequired();
   }
 }
