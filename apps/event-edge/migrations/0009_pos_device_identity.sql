@@ -32,3 +32,9 @@ CREATE TABLE IF NOT EXISTS edge_pos_device_audit (
 );
 CREATE INDEX IF NOT EXISTS edge_pos_device_audit_device_idx
   ON edge_pos_device_audit(device_id,created_at DESC,id DESC);
+
+ALTER TABLE edge_payment_attempt_cache
+  ADD COLUMN IF NOT EXISTS device_id text;
+CREATE INDEX IF NOT EXISTS edge_payment_attempt_cache_device_idx
+  ON edge_payment_attempt_cache(device_id,event_id,order_id)
+  WHERE device_id IS NOT NULL;
