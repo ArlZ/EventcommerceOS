@@ -128,3 +128,35 @@ Automate at minimum:
 ## Completion criteria
 
 Task 005 is complete when Event Edge can derive live stock solely from an append-only ledger, replayed sales cannot duplicate depletion, transfers/counts are auditable state machines, deterministic alerts/replenishment work at location and event level during Cloud loss, Cloud/Control Web can consolidate the resulting operational state, and the full Task 001–004 regression gate plus Task 005 inventory failure suite is green.
+
+## Completion record — 14 August 2026
+
+Implementation is complete for the Task 005 scope. The final inventory slice includes immutable POS sale-line snapshots, integer-base-unit recipe depletion, Event Edge append-only ledger/projections, exact compensating reversals, custody-aware transfers, replay-safe physical counts, deterministic velocity/minutes-of-cover/event-wide/imbalance alerts, safe replenishment recommendations, alert ownership/escalation, isolated notification delivery, durable Edge→Cloud inventory consolidation, and the Control Web operations view.
+
+Reliability hardening added during adversarial review:
+- stock-decision advisory locking so concurrent sale/transfer/count decisions cannot read stale balances;
+- semantic idempotency for ledger, transfer, receipt, count and Cloud replay paths;
+- unresolved Cloud projection conflicts remain terminal reconciliation conflicts on replay;
+- a durable `edge_inventory_sale_inbox` written in the same transaction as persisted closed-sale sync events, closing the crash window between sync durability and inventory consumption;
+- bounded periodic recovery of pending sale inbox items with retry/backoff;
+- inventory consumption only for sync receipts accepted or recognized as semantic duplicates; rejected conflicts cannot change stock;
+- periodic Edge alert/escalation evaluation independent of Cloud forwarding;
+- alert Cloud-outbox no-op suppression and single-source trigger emission;
+- configured stock-imbalance ratio is enforced rather than merely stored.
+
+Verification on implementation head `8be9f8318b68abdd1144732f3e993c9d80a5638d`:
+- `pnpm install --frozen-lockfile` — passed in permanent CI;
+- Cloud and Event Edge migrations through Edge `0007_inventory_sale_inbox.sql` — passed;
+- `pnpm build` — passed;
+- `pnpm lint` — passed;
+- `pnpm typecheck` — passed;
+- `pnpm test` — passed, including Cloud inventory conflict/replay tests and 27 Event Edge tests covering replay, recipe precision, concurrent stock decisions, transfer custody, counts/reversals, alerts/escalation, notification isolation, periodic recovery, durable-sale crash recovery and the sync/inventory conflict boundary;
+- `pnpm format:check` — passed;
+- `pnpm arch:check` — passed;
+- `gradle -p apps/pos-android testDebugUnitTest lintDebug --stacktrace` — passed.
+
+Both the Task 005 validation workflow and the permanent frozen CI workflow passed on that implementation tree. The temporary Task 005 validation workflow is removed before merge; permanent CI remains the repository gate.
+
+Known deferred refinement: a future configuration-management slice should define explicit archive/reactivation semantics for inventory locations omitted from a refreshed event snapshot and exclude archived locations from automated source recommendations. Current configuration refreshes rebuild sales mappings, recipes, alert policy and responsibilities, so this does not alter the Task 005 transaction/ledger invariants, but it should be resolved before supporting live mid-event topology removal.
+
+Recommended next slice: Task 006 — provider-neutral payment domain and M-PESA/Daraja integration, preserving payment-attempt history, provider idempotency, `UNKNOWN` reconciliation, and complete separation between payment-rail availability and local ordering durability.
