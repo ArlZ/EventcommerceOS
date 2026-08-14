@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EdgeDatabaseService } from '../database/database.service';
 import { InventoryModule } from '../inventory/inventory.module';
+import { DeviceEdgeAuthModule } from '../security/device-edge-auth.module';
 import { CloudForwarderService } from './cloud-forwarder.service';
 import { CloudSyncTransport } from './cloud-sync.transport';
 import { DeviceSyncController } from './device-sync.controller';
@@ -8,7 +9,7 @@ import { DeviceSyncService } from './device-sync.service';
 import { HttpCloudSyncTransport } from './http-cloud-sync.transport';
 
 @Module({
-  imports: [InventoryModule],
+  imports: [InventoryModule, DeviceEdgeAuthModule],
   controllers: [DeviceSyncController],
   providers: [
     { provide: CloudSyncTransport, useClass: HttpCloudSyncTransport },
