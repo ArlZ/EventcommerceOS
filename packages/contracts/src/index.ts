@@ -14,4 +14,5 @@ export * from './configuration';
 export * from './event-close';
 export * from './inventory';
 export * from './payment';
+export * from './security';
 export * from './sync';
