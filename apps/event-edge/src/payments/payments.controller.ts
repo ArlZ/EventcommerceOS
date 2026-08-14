@@ -3,6 +3,7 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  Headers,
   Inject,
   Param,
   Post,
@@ -47,9 +48,13 @@ export class EdgePaymentsController {
   }
 
   @Post('manual-terminal-confirmations')
-  confirmExternalTerminal(@Body() body: unknown) {
+  confirmExternalTerminal(
+    @Headers('authorization') operatorAuthorization: string,
+    @Body() body: unknown,
+  ) {
     return this.terminalPayments.confirmExternalTerminal(
       parseEdgeExternalTerminalConfirmation(body),
+      operatorAuthorization,
     );
   }
 
