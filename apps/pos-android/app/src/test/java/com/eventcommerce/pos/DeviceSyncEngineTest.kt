@@ -103,6 +103,25 @@ class DeviceSyncEngineTest {
   }
 
   @Test
+  fun `background sync sends only the bounded unacknowledged batch`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repeat(25) { repository.addItem(menu.items.first().itemId) }
+    val totalEvents = repository.allOutboxEvents().size
+    var sentCount = 0
+    val transport = DeviceEdgeTransport { deviceId, events ->
+      sentCount = events.size
+      DeviceEdgeAck(deviceId, events.maxOf { it.sequence }, 0)
+    }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    val first = engine.syncOnce(batchSize = 10)
+
+    assertEquals(10, sentCount)
+    assertEquals(10, first.attempted)
+    assertEquals(totalEvents - 10, first.remaining)
+  }
+
+  @Test
   fun `retry delay is bounded and HTTPS transport rejects cleartext endpoint`() {
     assertEquals(500L, deviceRetryDelayMs(1, random = { 0.0 }))
     assertEquals(30_000L, deviceRetryDelayMs(30, random = { 1.0 }))
