@@ -60,6 +60,7 @@ try {
       [edgeId, organisationId, actor],
     );
     output.push(`EDGE_ID=${edgeId}`);
+    output.push(`EDGE_ORGANISATION_ID=${organisationId}`);
     output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
     output.push('Store this one-time credential in the Edge runtime secret store; Cloud retains only its digest.');
   } else {
@@ -90,6 +91,7 @@ try {
         [edgeId, row.organisation_id, version, actor],
       );
       output.push(`EDGE_ID=${edgeId}`);
+      output.push(`EDGE_ORGANISATION_ID=${row.organisation_id}`);
       output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
       output.push(
         'The previous credential is invalid immediately. Update the Edge secret; durable Cloud outboxes will retry while sync is paused.',
