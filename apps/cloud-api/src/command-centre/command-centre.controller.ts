@@ -3,6 +3,7 @@ import type { MessageEvent } from '@nestjs/common';
 import type { Observable } from 'rxjs';
 import { adminContextFromHeaders } from '../configuration/admin-context';
 import { uuid } from '../configuration/validation';
+import { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
 import { CommandCentreService } from './command-centre.service';
 import { parseInventoryAlertAction } from './command-centre-validation';
 
@@ -10,14 +11,19 @@ type HeadersRecord = Record<string, string | string[] | undefined>;
 
 @Controller('command-centre')
 export class CommandCentreController {
-  constructor(private readonly commandCentre: CommandCentreService) {}
+  constructor(
+    private readonly commandCentre: CommandCentreService,
+    private readonly deviceSales: CommandCentreDeviceSalesService,
+  ) {}
 
   @Get('events/:eventId')
-  snapshot(@Headers() headers: HeadersRecord, @Param('eventId') eventId: string) {
-    return this.commandCentre.snapshot(
+  async snapshot(@Headers() headers: HeadersRecord, @Param('eventId') eventId: string) {
+    const normalizedEventId = uuid(eventId, 'eventId');
+    const snapshot = await this.commandCentre.snapshot(
       adminContextFromHeaders(headers),
-      uuid(eventId, 'eventId'),
+      normalizedEventId,
     );
+    return this.deviceSales.enrich(normalizedEventId, snapshot);
   }
 
   @Sse('events/:eventId/stream')
