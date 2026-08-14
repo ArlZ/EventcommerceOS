@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { EdgeCloudAck, EdgeCloudBatch, SyncEventEnvelope } from '@event-commerce/contracts';
@@ -70,22 +70,23 @@ export class CloudSyncService {
       }
 
       for (const status of batch.deviceStatuses) {
-        const deviceKey = `${identity.organisationId}:${status.deviceId}`;
-        await client.query(
+        const deviceState = await client.query(
           `INSERT INTO sync_device_state(
-             device_key, device_id, last_seen_at, last_sequence_seen, edge_accepted_through_sequence,
+             device_id, last_seen_at, last_sequence_seen, edge_accepted_through_sequence,
              edge_backlog_count, last_cloud_delivery_at, edge_id, organisation_id
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-           ON CONFLICT (device_key) DO UPDATE SET
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           ON CONFLICT (device_id) DO UPDATE SET
              last_seen_at = GREATEST(sync_device_state.last_seen_at, EXCLUDED.last_seen_at),
              last_sequence_seen = GREATEST(sync_device_state.last_sequence_seen, EXCLUDED.last_sequence_seen),
              edge_accepted_through_sequence = GREATEST(sync_device_state.edge_accepted_through_sequence, EXCLUDED.edge_accepted_through_sequence),
              edge_backlog_count = EXCLUDED.edge_backlog_count,
              last_cloud_delivery_at = COALESCE(EXCLUDED.last_cloud_delivery_at, sync_device_state.last_cloud_delivery_at),
              edge_id = EXCLUDED.edge_id,
-             organisation_id = EXCLUDED.organisation_id`,
+             organisation_id = EXCLUDED.organisation_id
+           WHERE sync_device_state.organisation_id IS NULL
+              OR sync_device_state.organisation_id = EXCLUDED.organisation_id
+           RETURNING device_id`,
           [
-            deviceKey,
             status.deviceId,
             status.lastSeenAt,
             status.lastSequenceSeen,
@@ -96,6 +97,11 @@ export class CloudSyncService {
             identity.organisationId,
           ],
         );
+        if (deviceState.rowCount !== 1) {
+          throw new ConflictException(
+            `device ${status.deviceId} is already attributed to another organisation`,
+          );
+        }
       }
 
       return { accepted, duplicates, conflicts };
