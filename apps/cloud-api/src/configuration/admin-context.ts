@@ -23,16 +23,20 @@ export function adminContextFromHeaders(
   const organisationId = singleHeader(headers['x-organisation-id']);
 
   if (!actorId || !isUuid(actorId)) {
-    throw new UnauthorizedException('x-actor-id must be a UUID');
+    throw new UnauthorizedException('authenticated actor id must be a UUID');
   }
   if (role !== 'ADMIN' && role !== 'PLATFORM_ADMIN') {
     throw new ForbiddenException('Administrative role required');
   }
-  if (organisationRequired && (!organisationId || !isUuid(organisationId))) {
-    throw new UnauthorizedException('x-organisation-id must be a UUID');
+  if (
+    organisationRequired &&
+    role !== 'PLATFORM_ADMIN' &&
+    (!organisationId || !isUuid(organisationId))
+  ) {
+    throw new UnauthorizedException('organisation-scoped administrative session required');
   }
   if (organisationId && !isUuid(organisationId)) {
-    throw new UnauthorizedException('x-organisation-id must be a UUID');
+    throw new UnauthorizedException('authenticated organisation id must be a UUID');
   }
 
   return { actorId, role, ...(organisationId ? { organisationId } : {}) };
