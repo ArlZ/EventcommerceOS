@@ -8,7 +8,7 @@ The public Sabi wireless contract is terminal-originated: a Pesapal terminal sen
 
 ## Non-negotiable invariants
 
-1. Raw PAN, CVV/CVC, PIN, track/magstripe data, EMV blobs, cryptograms and cardholder authentication secrets never enter Event Commerce OS request models, memory, logs or persistence through our payment interfaces.
+1. Raw PAN, CVV/CVC, PIN, track/magstripe data, EMV blobs, cryptograms and cardholder authentication secrets never enter Event Commerce OS request models, logs or persistence through our payment interfaces.
 2. Pesapal-specific payloads remain inside the provider adapter and webhook boundary.
 3. Provider secrets are runtime-only and never shipped to POS/Event Edge.
 4. A Sabi notification is not settlement truth by itself. The confirmation code must be independently verified with Pesapal before a payment can become `SUCCEEDED`.
@@ -16,8 +16,8 @@ The public Sabi wireless contract is terminal-originated: a Pesapal terminal sen
 6. Amount, currency and merchant reference are correlated against the immutable payment attempt. Mismatch becomes reconciliation/manual review, never last-write-wins.
 7. Duplicate notification/retry has one business effect.
 8. Provider timeout or ambiguous verification is `UNKNOWN`, not failure.
-9. Manual external-terminal confirmation is append-only, reference-bearing, permission-gated and audited.
-10. Manual fallback must never be used to overwrite an ambiguous in-flight integrated attempt; operators must reconcile/resolve the ambiguous attempt first to avoid a double charge.
+9. Manual terminal evidence is append-only, reference-bearing, permission-gated and audited.
+10. Manual approval must never overwrite an integrated attempt. `UNKNOWN` integrated truth must be reconciled first. A reference-less Sabi attempt may be manually marked `DECLINED` only by an authorized supervisor when the physical terminal visibly declined and no provider confirmation code was issued; a later verified success must surface as a conflict.
 11. Electronic rail availability is reported independently from POS/local ordering availability.
 12. No PCI-compliance claim is made for Event Commerce OS. The provider/deployment PCI boundary is documented explicitly.
 
@@ -58,11 +58,13 @@ Add a provider-neutral manual terminal confirmation record with:
 - append-only audit event;
 - a dedicated `PAYMENT_MANUAL_CONFIRM` permission.
 
-The service rejects blank/reused references for different attempts, amount/currency mismatches, unauthorized actors, and confirmation against non-manual or already ambiguous integrated attempts.
+A manual `APPROVED` outcome is valid only for a dedicated `external_terminal` attempt. The service rejects blank/reused references for different attempts, amount/currency mismatches, unauthorized actors, and any attempt already in `UNKNOWN`/terminal truth.
+
+Because Pesapal's public wireless documentation describes completed-payment notifications but does not publish the restricted wired decline contract, an authorized supervisor may record `DECLINED` evidence against a still-reference-less `pesapal_sabi` attempt when the physical terminal visibly declines. That evidence does not become the Pesapal provider reference. If a delayed verified success later arrives, it must produce explicit `CONFLICTING_PROVIDER_TRUTH` manual review.
 
 ### 5. Event Edge and Android POS flow
 
-Make the existing POS -> Edge payment transport provider-neutral instead of requiring an M-PESA phone for every payment. Add a card-terminal choice that creates a `pesapal_sabi` attempt and shows the merchant reference/operator guidance without any card-entry UI. Keep local order durability independent of rail availability. Surface terminal/manual pending/unknown truth using the existing payment status model.
+Make the existing POS -> Edge payment transport provider-neutral instead of requiring an M-PESA phone for every payment. Add a card-terminal choice that creates a `pesapal_sabi` attempt and shows the merchant reference/operator guidance without any card-entry UI. Keep local order durability independent of rail availability. Surface terminal/manual pending/unknown truth using the existing payment status model. Proxy controlled manual-terminal confirmation and rail-health operations through Event Edge.
 
 ### 6. Payment rail health
 
@@ -86,10 +88,11 @@ Automate at minimum:
 8. provider status/verification path retains confirmation code for reconciliation;
 9. manual fallback permission denied for unauthorized actor;
 10. manual fallback idempotent replay has one business effect and an immutable audit trail;
-11. manual fallback cannot silently replace an unresolved integrated card attempt;
-12. terminal/provider outage does not block local order building;
-13. prohibited card-field names/data do not appear in serialized application payment models or log fixtures;
-14. Android card flow survives restart and preserves unresolved state.
+11. manual approval cannot replace an integrated card attempt;
+12. supervised Sabi decline evidence followed by delayed verified success -> explicit conflict/manual review;
+13. terminal/provider outage does not block local order building;
+14. prohibited card-field names/data do not appear in serialized application payment models or durable POS fixtures;
+15. Android card flow survives restart and preserves unresolved state.
 
 ## Provider/deployment constraints
 
@@ -100,6 +103,6 @@ Automate at minimum:
 
 ## Completion criteria
 
-Task 007 is complete for the documented public Sabi surface when terminal-originated card success is authenticated and independently verified, deferred references correlate safely, manual external-terminal confirmation is permissioned/audited/idempotent, Android/Edge flows are provider-neutral, prohibited card data cannot enter our application models, rail health is distinct from POS health, docs state the PCI/deployment boundary, and the permanent repository gates plus card-terminal failure suite are green.
+Task 007 is complete for the documented public Sabi surface when terminal-originated card success is authenticated and independently verified, deferred references correlate safely, manual external-terminal confirmation is permissioned/audited/idempotent, supervised Sabi decline evidence is narrowly controlled, Android/Edge flows are provider-neutral, prohibited card data cannot enter our application contracts/persistence, rail health is distinct from POS health, docs state the PCI/deployment boundary, and the permanent repository gates plus card-terminal failure suite are green.
 
 Full POS-driven wired Sabi initiation is not considered implemented until Pesapal grants the restricted API documentation; the repository must continue to state that limitation rather than fabricate support.
