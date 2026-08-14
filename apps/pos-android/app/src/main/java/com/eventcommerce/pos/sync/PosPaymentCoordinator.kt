@@ -8,26 +8,32 @@ class PosPaymentCoordinator(
   private val repository: LocalPosRepository,
   private val transport: PaymentEdgeTransport,
 ) {
+  suspend fun beginMpesa(orderId: String): LocalPaymentAttempt = repository.beginMpesaPayment(orderId)
+
+  suspend fun relayMpesa(attemptId: String, payerMsisdn: String): LocalPaymentAttempt {
+    val local = requireNotNull(repository.paymentAttempt(attemptId)) { "payment attempt not found" }
+    require(local.state == PaymentAttemptState.INITIATED || local.state == PaymentAttemptState.UNKNOWN) {
+      "payment attempt is not eligible for initiation relay"
+    }
+    if (local.state == PaymentAttemptState.UNKNOWN) {
+      require(local.providerRequestId == null) {
+        "provider already accepted this attempt; refresh status instead of sending another prompt"
+      }
+      val discovered = runCatching { transport.getAttempt(local) }.getOrNull()
+      if (discovered != null) return repository.applyPaymentSnapshot(discovered)
+    }
+    return relayInitiation(local, payerMsisdn)
+  }
+
   suspend fun startMpesa(orderId: String, payerMsisdn: String): LocalPaymentAttempt {
-    val attempt = repository.beginMpesaPayment(orderId)
-    return relayInitiation(attempt, payerMsisdn)
+    val attempt = beginMpesa(orderId)
+    return relayMpesa(attempt.attemptId, payerMsisdn)
   }
 
   suspend fun resumeUnknownInitiation(
     attemptId: String,
     payerMsisdn: String,
-  ): LocalPaymentAttempt {
-    val local = requireNotNull(repository.paymentAttempt(attemptId)) { "payment attempt not found" }
-    require(local.state == PaymentAttemptState.UNKNOWN) { "only an unknown payment can be resumed" }
-    require(local.providerRequestId == null) {
-      "provider already accepted this attempt; refresh status instead of sending another prompt"
-    }
-    // First ask Edge by stable attempt ID. If Edge/Cloud already knows it, adopt that truth and
-    // do not need the payer phone at all.
-    val discovered = runCatching { transport.getAttempt(local) }.getOrNull()
-    if (discovered != null) return repository.applyPaymentSnapshot(discovered)
-    return relayInitiation(local, payerMsisdn)
-  }
+  ): LocalPaymentAttempt = relayMpesa(attemptId, payerMsisdn)
 
   suspend fun refreshUnresolved(): List<LocalPaymentAttempt> {
     val results = mutableListOf<LocalPaymentAttempt>()
