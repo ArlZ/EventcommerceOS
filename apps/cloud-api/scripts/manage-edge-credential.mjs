@@ -37,6 +37,7 @@ function digest(value) {
 
 const client = new Client({ connectionString });
 await client.connect();
+const output = [];
 
 try {
   await client.query('BEGIN');
@@ -65,66 +66,63 @@ try {
        ) VALUES ($1,$2,'PROVISIONED',1,$3)`,
       [edgeId, organisationId, actor],
     );
-    await client.query('COMMIT');
-    console.log(`EDGE_ID=${edgeId}`);
-    console.log(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
-    console.log('Store the credential in the Edge runtime secret store now; Cloud retains only its digest.');
-    process.exit(0);
-  }
-
-  const existing = await client.query(
-    `SELECT organisation_id::text,credential_version,status
-     FROM edge_sync_clients WHERE edge_id=$1 FOR UPDATE`,
-    [edgeId],
-  );
-  const row = existing.rows[0];
-  if (!row) throw new Error('Event Edge does not exist');
-
-  if (action === 'rotate') {
-    if (row.status !== 'ACTIVE') throw new Error('Revoked Event Edge cannot be rotated; provision a new identity');
-    const credential = newCredential();
-    const version = Number(row.credential_version) + 1;
-    await client.query(
-      `UPDATE edge_sync_clients
-       SET credential_sha256=$2,credential_version=$3,updated_at=now(),last_authenticated_at=NULL
-       WHERE edge_id=$1`,
-      [edgeId, digest(credential), version],
+    output.push(`EDGE_ID=${edgeId}`);
+    output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
+    output.push('Store the credential in the Edge runtime secret store now; Cloud retains only its digest.');
+  } else {
+    const existing = await client.query(
+      `SELECT organisation_id::text,credential_version,status
+       FROM edge_sync_clients WHERE edge_id=$1 FOR UPDATE`,
+      [edgeId],
     );
-    await client.query(
-      `INSERT INTO edge_sync_client_audit(
-         edge_id,organisation_id,action,credential_version,actor
-       ) VALUES ($1,$2,'ROTATED',$3,$4)`,
-      [edgeId, row.organisation_id, version, actor],
-    );
-    await client.query('COMMIT');
-    console.log(`EDGE_ID=${edgeId}`);
-    console.log(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
-    console.log('The previous credential is invalid immediately. Store the new credential securely.');
-    process.exit(0);
+    const row = existing.rows[0];
+    if (!row) throw new Error('Event Edge does not exist');
+
+    if (action === 'rotate') {
+      if (row.status !== 'ACTIVE') {
+        throw new Error('Revoked Event Edge cannot be rotated; provision a new identity');
+      }
+      const credential = newCredential();
+      const version = Number(row.credential_version) + 1;
+      await client.query(
+        `UPDATE edge_sync_clients
+         SET credential_sha256=$2,credential_version=$3,updated_at=now(),last_authenticated_at=NULL
+         WHERE edge_id=$1`,
+        [edgeId, digest(credential), version],
+      );
+      await client.query(
+        `INSERT INTO edge_sync_client_audit(
+           edge_id,organisation_id,action,credential_version,actor
+         ) VALUES ($1,$2,'ROTATED',$3,$4)`,
+        [edgeId, row.organisation_id, version, actor],
+      );
+      output.push(`EDGE_ID=${edgeId}`);
+      output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
+      output.push('The previous credential is invalid immediately. Store the new credential securely.');
+    } else if (row.status === 'REVOKED') {
+      output.push(`Event Edge ${edgeId} is already revoked.`);
+    } else {
+      await client.query(
+        `UPDATE edge_sync_clients SET status='REVOKED',revoked_at=now(),updated_at=now()
+         WHERE edge_id=$1`,
+        [edgeId],
+      );
+      await client.query(
+        `INSERT INTO edge_sync_client_audit(
+           edge_id,organisation_id,action,credential_version,actor
+         ) VALUES ($1,$2,'REVOKED',$3,$4)`,
+        [edgeId, row.organisation_id, row.credential_version, actor],
+      );
+      output.push(`Event Edge ${edgeId} revoked.`);
+    }
   }
 
-  if (row.status === 'REVOKED') {
-    await client.query('ROLLBACK');
-    console.log(`Event Edge ${edgeId} is already revoked.`);
-    process.exit(0);
-  }
-
-  await client.query(
-    `UPDATE edge_sync_clients SET status='REVOKED',revoked_at=now(),updated_at=now()
-     WHERE edge_id=$1`,
-    [edgeId],
-  );
-  await client.query(
-    `INSERT INTO edge_sync_client_audit(
-       edge_id,organisation_id,action,credential_version,actor
-     ) VALUES ($1,$2,'REVOKED',$3,$4)`,
-    [edgeId, row.organisation_id, row.credential_version, actor],
-  );
   await client.query('COMMIT');
-  console.log(`Event Edge ${edgeId} revoked.`);
 } catch (error) {
   await client.query('ROLLBACK').catch(() => undefined);
   throw error;
 } finally {
   await client.end();
 }
+
+for (const line of output) console.log(line);
