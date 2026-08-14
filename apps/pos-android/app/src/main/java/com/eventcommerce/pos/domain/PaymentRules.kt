@@ -14,6 +14,7 @@ object PaymentRules {
     PaymentAttemptState.CREATED to setOf(
       PaymentAttemptState.INITIATED,
       PaymentAttemptState.PENDING,
+      PaymentAttemptState.SUCCEEDED,
       PaymentAttemptState.FAILED,
       PaymentAttemptState.UNKNOWN,
     ),
