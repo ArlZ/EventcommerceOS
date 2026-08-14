@@ -31,7 +31,10 @@ export class PaymentReconciliationService implements OnModuleInit, OnModuleDestr
   async tick(): Promise<void> {
     if (this.shuttingDown || this.activeTick) return;
 
-    const work = this.runTick();
+    const work = this.runTick().catch(() => {
+      // Reconciliation is a background repair loop. Database/provider shutdown or one
+      // unexpected attempt must never create an unhandled rejection or crash the API.
+    });
     this.activeTick = work;
     try {
       await work;
