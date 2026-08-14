@@ -9,3 +9,4 @@ export function asEntityId(value: string): EntityId {
 export * from './inventory';
 export * from './inventory-imbalance';
 export * from './money';
+export * from './payment';
