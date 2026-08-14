@@ -7,6 +7,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "db:migrate": "node scripts/migrate.mjs",
+    "pos-device": "node scripts/manage-pos-device.mjs",
     "lint": "eslint src test --max-warnings=0 --rule '@typescript-eslint/consistent-type-imports: off'",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
