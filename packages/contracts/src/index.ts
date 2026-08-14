@@ -11,6 +11,7 @@ export function makeHealthResponse(service: string, now: Date = new Date()): Hea
 
 export * from './command-centre';
 export * from './configuration';
+export * from './event-close';
 export * from './inventory';
 export * from './payment';
 export * from './sync';
