@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { adminContextFromHeaders } from '../configuration/admin-context';
 import { uuid } from '../configuration/validation';
+import { CredentialAdministrationPolicyService } from './credential-administration-policy.service';
 import { SecurityRoute } from './security-route';
 import { CloudSecurityService } from './security.service';
 import {
@@ -23,7 +24,10 @@ type HeadersRecord = Record<string, string | string[] | undefined>;
 
 @Controller('security')
 export class SecurityController {
-  constructor(private readonly security: CloudSecurityService) {}
+  constructor(
+    private readonly security: CloudSecurityService,
+    private readonly credentialPolicy: CredentialAdministrationPolicyService,
+  ) {}
 
   @Post('bootstrap/operator')
   @SecurityRoute('BOOTSTRAP')
@@ -77,31 +81,39 @@ export class SecurityController {
   }
 
   @Post('credentials/:kind/:credentialId/revoke')
-  revokeCredential(
+  async revokeCredential(
     @Headers() headers: HeadersRecord,
     @Param('kind') kindValue: string,
     @Param('credentialId') credentialId: string,
     @Body() body: unknown,
   ) {
+    const context = adminContextFromHeaders(headers);
+    const kind = credentialKind(kindValue);
+    const id = uuid(credentialId, 'credentialId');
+    await this.credentialPolicy.assertCanRevoke(context, kind, id);
     return this.security.revokeCredential(
-      adminContextFromHeaders(headers),
-      credentialKind(kindValue),
-      uuid(credentialId, 'credentialId'),
+      context,
+      kind,
+      id,
       parseCredentialMutation(body, false),
     );
   }
 
   @Post('credentials/:kind/:credentialId/rotate')
-  rotateCredential(
+  async rotateCredential(
     @Headers() headers: HeadersRecord,
     @Param('kind') kindValue: string,
     @Param('credentialId') credentialId: string,
     @Body() body: unknown,
   ) {
+    const context = adminContextFromHeaders(headers);
+    const kind = credentialKind(kindValue);
+    const id = uuid(credentialId, 'credentialId');
+    await this.credentialPolicy.assertCanRotate(context, kind, id);
     return this.security.rotateCredential(
-      adminContextFromHeaders(headers),
-      credentialKind(kindValue),
-      uuid(credentialId, 'credentialId'),
+      context,
+      kind,
+      id,
       parseCredentialMutation(body, true),
     );
   }
