@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import request from 'supertest';
+import request, { type Test as SupertestCall } from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
@@ -28,10 +28,7 @@ function paymentRequest(eventId = DEFAULT_SYNC_EVENT_ID) {
   };
 }
 
-function applyHeaders(
-  call: request.Test,
-  headers: Record<string, string>,
-): request.Test {
+function applyHeaders(call: SupertestCall, headers: Record<string, string>): SupertestCall {
   let result = call;
   for (const [key, value] of Object.entries(headers)) result = result.set(key, value);
   return result;
@@ -142,12 +139,16 @@ describeIntegration('Cloud payment machine authentication', () => {
       .expect(201);
 
     await applyHeaders(
-      request(app.getHttpServer()).post(`/payments/attempts/${paymentRequest().paymentAttemptId}/reconcile`),
+      request(app.getHttpServer()).post(
+        `/payments/attempts/${paymentRequest().paymentAttemptId}/reconcile`,
+      ),
       otherHeaders,
     ).expect(401);
 
     await applyHeaders(
-      request(app.getHttpServer()).post(`/payments/attempts/${paymentRequest().paymentAttemptId}/reconcile`),
+      request(app.getHttpServer()).post(
+        `/payments/attempts/${paymentRequest().paymentAttemptId}/reconcile`,
+      ),
       primaryHeaders,
     ).expect(201);
   });
