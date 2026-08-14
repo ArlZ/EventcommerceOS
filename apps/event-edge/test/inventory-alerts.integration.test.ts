@@ -85,6 +85,15 @@ describeIntegration('inventory alerts and replenishment operations', () => {
     expect(local!.suggestedSourceLocationId).toBe(warehouseLocationId);
     expect(local!.suggestedTransferQuantityBase).toBe('112');
     expect(active.some((alert) => alert.alertType === 'EVENT_WIDE_STOCKOUT_RISK')).toBe(false);
+    expect(active.some((alert) => alert.alertType === 'STOCK_IMBALANCE')).toBe(true);
+
+    await database.query(
+      `UPDATE edge_inventory_alert_config SET imbalance_ratio = 100
+       WHERE id = 'alert-main-beer'`,
+    );
+    await alerts.evaluateEvent(inventoryEventId, new Date('2026-08-14T08:00:30.000Z'));
+    active = (await alerts.list(inventoryEventId)).filter((alert) => alert.state !== 'RESOLVED');
+    expect(active.some((alert) => alert.alertType === 'STOCK_IMBALANCE')).toBe(false);
 
     await ledger.postManual({
       id: 'warehouse-wastage',

@@ -4,6 +4,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 import {
   blendedVelocityPerMinute,
   evaluateStockRisk,
+  isStockImbalanced,
   minutesOfCover,
   recommendedTransferQuantity,
   requireAlertTransition,
@@ -144,7 +145,6 @@ export class InventoryAlertService {
         input.occurredAt,
       );
       const updated = await this.alert(client, alert.id, false);
-      await this.queueCloud(client, updated);
       return this.map(updated);
     });
   }
@@ -299,7 +299,17 @@ export class InventoryAlertService {
       await this.resolveOtherLocalRisk(config.event_id, locationId, config.sku_id, localTypes, now);
     }
 
-    if (localType && suggested > 0n) {
+    const imbalanced =
+      source !== null &&
+      isStockImbalanced({
+        destinationAvailableBase: onHand,
+        destinationInboundBase: inbound,
+        sourceAvailableBase: BigInt(source.available),
+        sourceSafetyStockBase: BigInt(source.safety_stock),
+        minimumRatio: Number(config.imbalance_ratio),
+      });
+
+    if (localType && suggested > 0n && imbalanced) {
       await this.upsertAlert({
         dedupeKey: `STOCK_IMBALANCE:${config.event_id}:${locationId}:${config.sku_id}`,
         type: 'STOCK_IMBALANCE',
@@ -467,7 +477,15 @@ export class InventoryAlertService {
              minutes_of_cover = $4, suggested_source_location_id = $5,
              suggested_transfer_quantity = $6, responsible_actor_id = $7,
              details = $8::jsonb, updated_at = now()
-           WHERE id = $1`,
+           WHERE id = $1 AND (
+             severity IS DISTINCT FROM $2 OR
+             available_quantity IS DISTINCT FROM $3::bigint OR
+             minutes_of_cover IS DISTINCT FROM $4::numeric OR
+             suggested_source_location_id IS DISTINCT FROM $5 OR
+             suggested_transfer_quantity IS DISTINCT FROM $6::bigint OR
+             responsible_actor_id IS DISTINCT FROM $7 OR
+             details IS DISTINCT FROM $8::jsonb
+           )`,
           [
             existing.rows[0]!.id,
             input.severity,
@@ -525,7 +543,6 @@ export class InventoryAlertService {
           'opened',
         );
       }
-      await this.queueCloud(client, alert);
     });
   }
 
@@ -561,7 +578,6 @@ export class InventoryAlertService {
         'inventory risk cleared',
         now.toISOString(),
       );
-      await this.queueCloud(client, await this.alert(client, alert.id, false));
     });
   }
 
@@ -623,14 +639,6 @@ export class InventoryAlertService {
       `INSERT INTO edge_inventory_alert_history(id, alert_id, from_state, to_state, actor_id, reason, occurred_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [randomUUID(), alertId, from, to, actorId, reason ?? null, occurredAt],
-    );
-  }
-
-  private async queueCloud(client: PoolClient, alert: AlertDbRow): Promise<void> {
-    await client.query(
-      `INSERT INTO edge_inventory_cloud_outbox(id, event_type, aggregate_type, aggregate_id, payload)
-       VALUES ($1,'INVENTORY_ALERT_UPSERTED','INVENTORY_ALERT',$2,$3::jsonb)`,
-      [randomUUID(), alert.id, JSON.stringify(this.map(alert))],
     );
   }
 

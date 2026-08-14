@@ -9,6 +9,7 @@ import { InventoryCountService } from './inventory-count.service';
 import { HttpInventoryCloudTransport } from './http-inventory-cloud.transport';
 import { InventoryLedgerService } from './inventory-ledger.service';
 import { InventoryNotificationService } from './inventory-notification.service';
+import { InventoryOperationsLoopService } from './inventory-operations-loop.service';
 import {
   InventoryNotificationTransport,
   StubInventoryNotificationTransport,
@@ -27,6 +28,7 @@ import { InventoryTransferService } from './inventory-transfer.service';
     InventoryCountService,
     InventoryAlertService,
     InventoryNotificationService,
+    InventoryOperationsLoopService,
     InventoryCloudForwarderService,
     { provide: InventoryCloudTransport, useClass: HttpInventoryCloudTransport },
     { provide: InventoryNotificationTransport, useClass: StubInventoryNotificationTransport },
