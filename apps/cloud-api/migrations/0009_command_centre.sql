@@ -1,9 +1,39 @@
-CREATE INDEX IF NOT EXISTS sync_processed_events_command_centre_event_idx
-  ON sync_processed_events ((payload->>'eventId'), aggregate_type, occurred_at DESC);
+ALTER TABLE sync_order_state
+  ADD COLUMN IF NOT EXISTS event_id text,
+  ADD COLUMN IF NOT EXISTS sales_location_id text,
+  ADD COLUMN IF NOT EXISTS lines jsonb,
+  ADD COLUMN IF NOT EXISTS occurred_at timestamptz;
 
-CREATE INDEX IF NOT EXISTS sync_processed_events_command_centre_device_idx
-  ON sync_processed_events ((payload->>'eventId'), device_id, occurred_at DESC)
-  WHERE aggregate_type = 'ORDER';
+WITH latest_order_event AS (
+  SELECT DISTINCT ON (aggregate_id)
+         aggregate_id,
+         COALESCE(NULLIF(payload->>'eventId', ''), 'legacy:' || device_id) AS business_event_id,
+         NULLIF(payload->>'salesLocationId', '') AS sales_location_id,
+         CASE WHEN jsonb_typeof(payload->'lines') = 'array' THEN payload->'lines' ELSE '[]'::jsonb END AS lines,
+         occurred_at
+  FROM sync_processed_events
+  WHERE aggregate_type = 'ORDER'
+  ORDER BY aggregate_id, sequence DESC
+)
+UPDATE sync_order_state state
+SET event_id = latest.business_event_id,
+    sales_location_id = latest.sales_location_id,
+    lines = latest.lines,
+    occurred_at = latest.occurred_at
+FROM latest_order_event latest
+WHERE state.order_id = latest.aggregate_id
+  AND (state.event_id IS NULL OR state.lines IS NULL OR state.occurred_at IS NULL);
+
+ALTER TABLE sync_order_state
+  ALTER COLUMN event_id SET NOT NULL,
+  ALTER COLUMN lines SET NOT NULL,
+  ALTER COLUMN occurred_at SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS sync_order_state_command_centre_event_idx
+  ON sync_order_state(event_id, state, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS sync_order_state_command_centre_device_idx
+  ON sync_order_state(event_id, device_id, occurred_at DESC);
 
 CREATE INDEX IF NOT EXISTS payments_event_created_idx
   ON payments(event_id, created_at DESC);
