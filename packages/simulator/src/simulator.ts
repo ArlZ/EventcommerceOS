@@ -34,7 +34,6 @@ interface PaymentState {
   createdSecond: number;
   dueSecond: number;
   status: 'PENDING' | 'UNKNOWN' | 'SUCCEEDED';
-  signalApplied: boolean;
 }
 
 interface TransferState {
@@ -69,16 +68,13 @@ function positive(value: number | undefined, fallback: number): number {
   return value === undefined ? fallback : Math.max(0, value);
 }
 
-function lastFaultSecond(config: SimulationConfig): number {
+function lastRecoveryFaultSecond(config: SimulationConfig): number {
   const windows: TimeWindow[] = [
     ...(config.faults.cloudOutages ?? []),
     ...(config.faults.edgeCloudOutages ?? []),
     ...(config.faults.posIsolations ?? []),
-    ...(config.faults.notificationOutages ?? []),
     ...(config.faults.slowDatabase ?? []),
     ...(config.faults.wanFailovers ?? []),
-    ...(config.faults.demandSpikes ?? []),
-    ...(config.faults.replenishment ?? []),
   ];
   const windowEnd = windows.reduce((max, window) => Math.max(max, window.endSecond), 0);
   const restartEnd = (config.faults.edgeRestartSeconds ?? []).reduce(
@@ -133,11 +129,13 @@ export class EventSimulation {
   private readonly appliedPaymentSignals = new Set<string>();
   private readonly transfers: TransferState[] = [];
   private readonly replenishmentUsage = new Set<string>();
+  private readonly replenishmentRemaining = new Map<string, number>();
   private readonly interactionLatencies: number[] = [];
   private readonly localCommitLatencies: number[] = [];
   private readonly dashboardLags: number[] = [];
   private readonly providerCallbackLatencies: number[] = [];
   private generatedOrders = 0;
+  private committedOrderWrites = 0;
   private stockoutAttempts = 0;
   private unknownPaymentsCreated = 0;
   private duplicateSyncDeliveries = 0;
@@ -174,7 +172,7 @@ export class EventSimulation {
 
   run(): ScenarioResult {
     const finalSecond = this.config.durationSeconds + this.config.recoverySeconds;
-    const faultEnd = lastFaultSecond(this.config);
+    const recoveryFaultEnd = lastRecoveryFaultSecond(this.config);
 
     for (let second = 0; second <= finalSecond; second += 1) {
       if (second < this.config.durationSeconds) this.generateTraffic(second);
@@ -183,11 +181,12 @@ export class EventSimulation {
       this.drainLocalQueue(second);
       this.drainEdgeQueue(second);
       this.processPaymentSignals(second);
-      this.observeBacklog(second, faultEnd);
+      this.processOperationalNotifications(second);
+      this.observeBacklog(second, recoveryFaultEnd);
       this.observeConvergence(second);
     }
 
-    const metrics = this.metrics(faultEnd);
+    const metrics = this.metrics(recoveryFaultEnd);
     const assertions = this.assertions(metrics);
     return {
       scenario: this.config.name,
@@ -223,6 +222,7 @@ export class EventSimulation {
 
     this.physicalInventory.set(key, physical - 1);
     const orderId = `order-${++this.sequence}`;
+    this.committedOrderWrites += 1;
     this.durableOrders.add(orderId);
 
     const congestion = Math.max(0, this.config.transactionsPerMinutePerRegister - 10);
@@ -257,7 +257,6 @@ export class EventSimulation {
         createdSecond: second,
         dueSecond: second,
         status: 'SUCCEEDED',
-        signalApplied: true,
       });
       return;
     }
@@ -285,7 +284,6 @@ export class EventSimulation {
       createdSecond: second,
       dueSecond: second + delay,
       status,
-      signalApplied: false,
     });
   }
 
@@ -364,8 +362,7 @@ export class EventSimulation {
   }
 
   private applyAtCloud(mutation: SyncMutation, second: number): void {
-    const alreadyApplied = this.cloudApplied.has(mutation.id);
-    if (alreadyApplied) {
+    if (this.cloudApplied.has(mutation.id)) {
       this.duplicateSyncDeliveries += 1;
       return;
     }
@@ -395,13 +392,6 @@ export class EventSimulation {
         payment.dueSecond = second + 1;
         continue;
       }
-      if ((this.config.faults.notificationOutages ?? []).some((window) => inWindow(second, window))) {
-        this.notificationDeliveryFailures += 1;
-        this.simulatedDependencyErrors += 1;
-        payment.dueSecond = second + 1;
-        continue;
-      }
-
       this.applyPaymentSignal(payment, second);
       if (this.random.chance(rate(this.config.faults.callbackDuplicateRate))) {
         this.duplicateProviderSignals += 1;
@@ -410,10 +400,17 @@ export class EventSimulation {
     }
   }
 
+  private processOperationalNotifications(second: number): void {
+    if (second % 15 !== 0) return;
+    if ((this.config.faults.notificationOutages ?? []).some((window) => inWindow(second, window))) {
+      this.notificationDeliveryFailures += 1;
+      this.simulatedDependencyErrors += 1;
+    }
+  }
+
   private applyPaymentSignal(payment: PaymentState, second: number): void {
     if (this.appliedPaymentSignals.has(payment.id)) return;
     this.appliedPaymentSignals.add(payment.id);
-    payment.signalApplied = true;
     payment.status = 'SUCCEEDED';
     this.providerCallbackLatencies.push((second - payment.createdSecond) * 1000);
   }
@@ -421,15 +418,20 @@ export class EventSimulation {
   private maybeCreateTransfers(second: number): void {
     for (const plan of this.config.faults.replenishment ?? []) {
       if (!inWindow(second, plan)) continue;
+      const sourceKey = `${plan.skuId}|${plan.startSecond}|${plan.endSecond}`;
+      if (!this.replenishmentRemaining.has(sourceKey)) {
+        this.replenishmentRemaining.set(sourceKey, Math.max(0, plan.sourceStock));
+      }
       for (let barIndex = 0; barIndex < this.config.bars; barIndex += 1) {
         const key = inventoryKey(barIndex, plan.skuId);
         const stock = this.physicalInventory.get(key) ?? 0;
-        const useKey = `${plan.skuId}|${barIndex}|${plan.startSecond}`;
+        const useKey = `${sourceKey}|${barIndex}`;
         if (stock > plan.triggerBelow || this.replenishmentUsage.has(useKey)) continue;
-        const available = Math.max(0, plan.sourceStock);
+        const available = this.replenishmentRemaining.get(sourceKey) ?? 0;
         const quantity = Math.min(available, Math.max(0, plan.transferQuantity));
         if (quantity <= 0) continue;
         this.replenishmentUsage.add(useKey);
+        this.replenishmentRemaining.set(sourceKey, available - quantity);
         this.transfers.push({
           id: `transfer-${++this.sequence}`,
           barIndex,
@@ -469,10 +471,10 @@ export class EventSimulation {
     }
   }
 
-  private observeBacklog(second: number, faultEnd: number): void {
+  private observeBacklog(second: number, recoveryFaultEnd: number): void {
     const backlog = this.localQueue.length + this.edgeQueue.length;
     this.maxSyncBacklog = Math.max(this.maxSyncBacklog, backlog);
-    if (second >= faultEnd && backlog === 0 && this.syncDrainSecond === null) {
+    if (second >= recoveryFaultEnd && backlog === 0 && this.syncDrainSecond === null) {
       this.syncDrainSecond = second;
     }
   }
@@ -480,17 +482,19 @@ export class EventSimulation {
   private observeConvergence(second: number): void {
     if (second < this.config.durationSeconds) return;
     if (this.inventoryConvergenceSecond !== null) return;
-    if (this.inventoryEquals(this.physicalInventory, this.edgeInventory) &&
-        this.inventoryEquals(this.physicalInventory, this.cloudInventory)) {
+    if (
+      this.inventoryEquals(this.physicalInventory, this.edgeInventory) &&
+      this.inventoryEquals(this.physicalInventory, this.cloudInventory)
+    ) {
       this.inventoryConvergenceSecond = second;
     }
   }
 
-  private metrics(faultEnd: number): SimulationMetrics {
+  private metrics(recoveryFaultEnd: number): SimulationMetrics {
     const completedPayments = this.payments.filter((payment) => payment.status === 'SUCCEEDED').length;
     const unknownAtEnd = this.payments.filter((payment) => payment.status !== 'SUCCEEDED').length;
     const backlogAtEnd = this.localQueue.length + this.edgeQueue.length;
-    const lostCommitted = [...this.durableOrders].filter((orderId) => !this.durableOrders.has(orderId)).length;
+    const lostCommitted = Math.max(0, this.committedOrderWrites - this.durableOrders.size);
     const operations = Math.max(1, this.generatedOrders + this.cloudApplied.size + this.payments.length);
     const inventoryConverged =
       this.inventoryEquals(this.physicalInventory, this.edgeInventory) &&
@@ -510,7 +514,9 @@ export class EventSimulation {
       maxSyncBacklog: this.maxSyncBacklog,
       syncBacklogAtEnd: backlogAtEnd,
       syncDrainSeconds:
-        this.syncDrainSecond === null ? null : Math.max(0, this.syncDrainSecond - faultEnd),
+        this.syncDrainSecond === null
+          ? null
+          : Math.max(0, this.syncDrainSecond - recoveryFaultEnd),
       throughputPerMinute:
         this.durableOrders.size / Math.max(1 / 60, this.config.durationSeconds / 60),
       interactionLatencyMs: percentile(this.interactionLatencies),
@@ -569,6 +575,12 @@ export class EventSimulation {
         description: 'Injected payment uncertainty resolves without creating another charge.',
         passed: metrics.unknownPaymentsAtEnd === 0,
         observed: `${metrics.unknownPaymentsAtEnd} unresolved at end from ${metrics.unknownPaymentsCreated} uncertain attempts`,
+      },
+      {
+        id: 'PAYMENT_EFFECT_COUNT',
+        description: 'Every committed modeled sale has exactly one completed payment effect by recovery end.',
+        passed: metrics.completedPayments === metrics.committedOrders,
+        observed: `${metrics.completedPayments} completed payments for ${metrics.committedOrders} committed orders`,
       },
       {
         id: 'INVENTORY_CONVERGENCE',
