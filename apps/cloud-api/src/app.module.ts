@@ -1,5 +1,11 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  type NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { HumanContextMiddleware } from './auth/human-context.middleware';
 import { CommandCentreModule } from './command-centre/command-centre.module';
 import { ConfigurationModule } from './configuration/configuration.module';
 import { DatabaseModule } from './database/database.module';
@@ -22,4 +28,8 @@ import { HealthModule } from './system/health.module';
     EventCloseModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(HumanContextMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}
