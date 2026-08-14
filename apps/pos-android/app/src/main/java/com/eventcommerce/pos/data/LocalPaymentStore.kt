@@ -5,6 +5,7 @@ import com.eventcommerce.pos.domain.LocalPaymentAttempt
 import com.eventcommerce.pos.domain.OrderRules
 import com.eventcommerce.pos.domain.OrderState
 import com.eventcommerce.pos.domain.PaymentAttemptState
+import com.eventcommerce.pos.domain.PaymentRules
 import java.util.UUID
 
 class LocalPaymentStore(
@@ -62,17 +63,21 @@ class LocalPaymentStore(
   }
 
   suspend fun applyEdgeSnapshot(snapshot: LocalPaymentAttempt): LocalPaymentAttempt {
-    val existing = requireNotNull(dao.attempt(snapshot.attemptId)) { "local payment attempt not found" }
-    requireImmutableMatch(existing, snapshot)
-    val updated = existing.copy(
-      state = snapshot.state.name,
-      maskedPayerReference = snapshot.maskedPayerReference ?: existing.maskedPayerReference,
-      providerRequestId = snapshot.providerRequestId ?: existing.providerRequestId,
-      providerReceiptReference = snapshot.providerReceiptReference ?: existing.providerReceiptReference,
-      reconciliationRequired = snapshot.reconciliationRequired,
-      updatedAtEpochMs = maxOf(existing.updatedAtEpochMs, snapshot.updatedAtEpochMs, clock()),
-    )
     db.withTransaction {
+      val existing = requireNotNull(dao.attempt(snapshot.attemptId)) { "local payment attempt not found" }
+      requireImmutableMatch(existing, snapshot)
+      requireProviderReferencesCompatible(existing, snapshot)
+
+      val currentState = PaymentAttemptState.valueOf(existing.state)
+      PaymentRules.requireTransition(currentState, snapshot.state)
+      val updated = existing.copy(
+        state = snapshot.state.name,
+        maskedPayerReference = snapshot.maskedPayerReference ?: existing.maskedPayerReference,
+        providerRequestId = snapshot.providerRequestId ?: existing.providerRequestId,
+        providerReceiptReference = snapshot.providerReceiptReference ?: existing.providerReceiptReference,
+        reconciliationRequired = PaymentRules.isUnresolved(snapshot.state),
+        updatedAtEpochMs = maxOf(existing.updatedAtEpochMs, snapshot.updatedAtEpochMs, clock()),
+      )
       dao.update(updated)
       if (snapshot.state == PaymentAttemptState.SUCCESS) {
         // LocalOrderStore uses a nested Room transaction; Room joins the existing transaction,
@@ -80,20 +85,25 @@ class LocalPaymentStore(
         orders.closeConfirmedMpesa(existing.orderId, existing.attemptId)
       }
     }
-    return requireNotNull(attempt(existing.attemptId))
+    return requireNotNull(attempt(snapshot.attemptId))
   }
 
   suspend fun markTransportUnknown(attemptId: String, maskedPayerReference: String?): LocalPaymentAttempt {
-    val existing = requireNotNull(dao.attempt(attemptId)) { "local payment attempt not found" }
-    if (existing.state !in UNRESOLVED_STATES) return map(existing)
-    val updated = existing.copy(
-      state = PaymentAttemptState.UNKNOWN.name,
-      maskedPayerReference = maskedPayerReference ?: existing.maskedPayerReference,
-      reconciliationRequired = true,
-      updatedAtEpochMs = clock(),
-    )
-    dao.update(updated)
-    return map(updated)
+    db.withTransaction {
+      val existing = requireNotNull(dao.attempt(attemptId)) { "local payment attempt not found" }
+      val currentState = PaymentAttemptState.valueOf(existing.state)
+      if (!PaymentRules.isUnresolved(currentState)) return@withTransaction
+      PaymentRules.requireTransition(currentState, PaymentAttemptState.UNKNOWN)
+      dao.update(
+        existing.copy(
+          state = PaymentAttemptState.UNKNOWN.name,
+          maskedPayerReference = maskedPayerReference ?: existing.maskedPayerReference,
+          reconciliationRequired = true,
+          updatedAtEpochMs = clock(),
+        ),
+      )
+    }
+    return requireNotNull(attempt(attemptId))
   }
 
   suspend fun attempt(attemptId: String): LocalPaymentAttempt? = dao.attempt(attemptId)?.let(::map)
@@ -124,6 +134,22 @@ class LocalPaymentStore(
         existing.amountMinor == snapshot.amountMinor &&
         existing.currency == snapshot.currency
     ) { "Edge payment snapshot conflicts with local immutable identity" }
+  }
+
+  private fun requireProviderReferencesCompatible(
+    existing: PaymentAttemptEntity,
+    snapshot: LocalPaymentAttempt,
+  ) {
+    require(
+      existing.providerRequestId == null ||
+        snapshot.providerRequestId == null ||
+        existing.providerRequestId == snapshot.providerRequestId
+    ) { "Edge payment snapshot conflicts with provider request identity" }
+    require(
+      existing.providerReceiptReference == null ||
+        snapshot.providerReceiptReference == null ||
+        existing.providerReceiptReference == snapshot.providerReceiptReference
+    ) { "Edge payment snapshot conflicts with provider receipt identity" }
   }
 
   private fun map(row: PaymentAttemptEntity): LocalPaymentAttempt = LocalPaymentAttempt(
