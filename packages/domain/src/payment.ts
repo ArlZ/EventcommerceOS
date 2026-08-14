@@ -63,7 +63,7 @@ export interface ReversalRecord {
 }
 
 const ALLOWED_TRANSITIONS: Readonly<Record<PaymentAttemptState, readonly PaymentAttemptState[]>> = {
-  CREATED: ['INITIATED', 'PENDING', 'FAILED', 'UNKNOWN'],
+  CREATED: ['INITIATED', 'PENDING', 'SUCCEEDED', 'FAILED', 'UNKNOWN'],
   INITIATED: ['PENDING', 'SUCCEEDED', 'FAILED', 'UNKNOWN'],
   PENDING: ['SUCCEEDED', 'FAILED', 'UNKNOWN'],
   UNKNOWN: ['PENDING', 'SUCCEEDED', 'FAILED'],
