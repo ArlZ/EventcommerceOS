@@ -29,7 +29,7 @@ export class EdgePaymentsController {
     if (request.providerId === 'pesapal_sabi' && request.accountReference !== request.paymentAttemptId) {
       throw new Error('Pesapal Sabi accountReference must equal paymentAttemptId');
     }
-    return this.payments.initiate(request);
+    return this.payments.initiate(request, identity.deviceId);
   }
 
   @Post('manual-terminal-confirmations')
