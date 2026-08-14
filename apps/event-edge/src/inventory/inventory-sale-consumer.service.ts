@@ -32,6 +32,12 @@ interface ParsedSale {
   lines: SaleLine[];
 }
 
+interface SaleMovement {
+  skuId: string;
+  type: 'SALE' | 'RECIPE_CONSUMPTION';
+  quantity: bigint;
+}
+
 @Injectable()
 export class InventorySaleConsumerService {
   constructor(
@@ -97,15 +103,20 @@ export class InventorySaleConsumerService {
         [parsed.eventId],
       );
       const knownSkuIds = new Set(configuredSkus.rows.map((row) => row.sku_id));
-      const movements = new Map<string, { skuId: string; type: 'SALE' | 'RECIPE_CONSUMPTION'; quantity: bigint }>();
+      const movements = new Map<string, SaleMovement>();
 
       for (const line of parsed.lines) {
         const components = recipeBySold.get(line.skuId) ?? [];
         if (components.length === 0) {
           if (!knownSkuIds.has(line.skuId)) {
-            await this.exception(client, 'UNCONFIGURED_SALE_SKU', event, parsed.eventId, parsed.salesLocationId, {
-              skuId: line.skuId,
-            });
+            await this.exception(
+              client,
+              'UNCONFIGURED_SALE_SKU',
+              event,
+              parsed.eventId,
+              parsed.salesLocationId,
+              { skuId: line.skuId },
+            );
             return parsed.eventId;
           }
           this.addMovement(movements, line.skuId, 'SALE', line.quantity);
@@ -113,10 +124,14 @@ export class InventorySaleConsumerService {
         }
         for (const component of components) {
           if (!knownSkuIds.has(component.component_sku_id)) {
-            await this.exception(client, 'UNCONFIGURED_RECIPE_COMPONENT', event, parsed.eventId, parsed.salesLocationId, {
-              soldSkuId: line.skuId,
-              componentSkuId: component.component_sku_id,
-            });
+            await this.exception(
+              client,
+              'UNCONFIGURED_RECIPE_COMPONENT',
+              event,
+              parsed.eventId,
+              parsed.salesLocationId,
+              { soldSkuId: line.skuId, componentSkuId: component.component_sku_id },
+            );
             return parsed.eventId;
           }
           this.addMovement(
@@ -128,7 +143,14 @@ export class InventorySaleConsumerService {
         }
       }
 
-      for (const movement of movements.values()) {
+      const orderedMovements = [...movements.values()].sort((a, b) => {
+        const sku = a.skuId.localeCompare(b.skuId);
+        return sku !== 0 ? sku : a.type.localeCompare(b.type);
+      });
+      for (const skuId of [...new Set(orderedMovements.map((movement) => movement.skuId))]) {
+        await this.ledger.lockStock(client, parsed.eventId, inventoryLocationId, skuId);
+      }
+      for (const movement of orderedMovements) {
         await this.ledger.insert(client, {
           eventId: parsed.eventId,
           inventoryLocationId,
@@ -149,9 +171,9 @@ export class InventorySaleConsumerService {
   }
 
   private addMovement(
-    movements: Map<string, { skuId: string; type: 'SALE' | 'RECIPE_CONSUMPTION'; quantity: bigint }>,
+    movements: Map<string, SaleMovement>,
     skuId: string,
-    type: 'SALE' | 'RECIPE_CONSUMPTION',
+    type: SaleMovement['type'],
     quantity: bigint,
   ): void {
     const key = `${type}:${skuId}`;
@@ -163,9 +185,16 @@ export class InventorySaleConsumerService {
   private parse(event: SyncEventEnvelope): ParsedSale | null {
     const payload = event.payload;
     const eventId = typeof payload.eventId === 'string' ? payload.eventId.trim() : '';
-    const salesLocationId = typeof payload.salesLocationId === 'string' ? payload.salesLocationId.trim() : '';
+    const salesLocationId =
+      typeof payload.salesLocationId === 'string' ? payload.salesLocationId.trim() : '';
     const orderId = typeof payload.orderId === 'string' ? payload.orderId.trim() : '';
-    if (!eventId || !salesLocationId || !orderId || !Array.isArray(payload.lines) || payload.lines.length === 0) {
+    if (
+      !eventId ||
+      !salesLocationId ||
+      !orderId ||
+      !Array.isArray(payload.lines) ||
+      payload.lines.length === 0
+    ) {
       return null;
     }
     const lines: SaleLine[] = [];
@@ -174,7 +203,14 @@ export class InventorySaleConsumerService {
       const row = raw as Record<string, unknown>;
       const skuId = typeof row.skuId === 'string' ? row.skuId.trim() : '';
       const quantity = row.quantity;
-      if (!skuId || typeof quantity !== 'number' || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+      if (
+        !skuId ||
+        typeof quantity !== 'number' ||
+        !Number.isSafeInteger(quantity) ||
+        quantity <= 0
+      ) {
+        return null;
+      }
       lines.push({ skuId, quantity: BigInt(quantity) });
     }
     return { eventId, salesLocationId, orderId, lines };
@@ -193,7 +229,14 @@ export class InventorySaleConsumerService {
          id, exception_type, event_id, sales_location_id, source_event_instance_id, details
        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb)
        ON CONFLICT DO NOTHING`,
-      [randomUUID(), type, eventId, salesLocationId, event.eventInstanceId, JSON.stringify(details)],
+      [
+        randomUUID(),
+        type,
+        eventId,
+        salesLocationId,
+        event.eventInstanceId,
+        JSON.stringify(details),
+      ],
     );
   }
 }
