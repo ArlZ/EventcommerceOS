@@ -75,6 +75,7 @@ describeIntegration('inventory periodic operations loop', () => {
     );
     expect(Number(escalation[0]!.count)).toBeGreaterThanOrEqual(1);
   });
+
   it('recovers a persisted sale after a crash between sync durability and inventory consumption', async () => {
     await receipt(ledger, mainLocationId, beerSkuId, 100n, 'crash-window-main');
     const sale = closedSale({
@@ -86,8 +87,9 @@ describeIntegration('inventory periodic operations loop', () => {
     await database.query(
       `INSERT INTO edge_processed_device_events(
          event_instance_id, event_id, event_type, aggregate_type, aggregate_id,
-         event_version, device_id, sequence, occurred_at, idempotency_key, payload, envelope
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`,
+         event_version, device_id, sequence, occurred_at, idempotency_key, payload, envelope,
+         received_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13)`,
       [
         sale.eventInstanceId,
         sale.eventId,
@@ -101,6 +103,7 @@ describeIntegration('inventory periodic operations loop', () => {
         sale.idempotencyKey,
         JSON.stringify(sale.payload),
         JSON.stringify(sale),
+        sale.occurredAt,
       ],
     );
 
