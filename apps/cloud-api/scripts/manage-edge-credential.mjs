@@ -19,15 +19,8 @@ function required(name) {
 
 const edgeId = required('EDGE_ID');
 const actor = required('EDGE_CREDENTIAL_ACTOR');
-const suppliedCredential = process.env.EDGE_CLOUD_SYNC_TOKEN?.trim();
 
 function newCredential() {
-  if (suppliedCredential) {
-    if (suppliedCredential.length < 32) {
-      throw new Error('EDGE_CLOUD_SYNC_TOKEN must be at least 32 characters when supplied');
-    }
-    return suppliedCredential;
-  }
   return randomBytes(32).toString('base64url');
 }
 
@@ -68,7 +61,7 @@ try {
     );
     output.push(`EDGE_ID=${edgeId}`);
     output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
-    output.push('Store the credential in the Edge runtime secret store now; Cloud retains only its digest.');
+    output.push('Store this one-time credential in the Edge runtime secret store; Cloud retains only its digest.');
   } else {
     const existing = await client.query(
       `SELECT organisation_id::text,credential_version,status
@@ -98,7 +91,9 @@ try {
       );
       output.push(`EDGE_ID=${edgeId}`);
       output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
-      output.push('The previous credential is invalid immediately. Store the new credential securely.');
+      output.push(
+        'The previous credential is invalid immediately. Update the Edge secret; durable Cloud outboxes will retry while sync is paused.',
+      );
     } else if (row.status === 'REVOKED') {
       output.push(`Event Edge ${edgeId} is already revoked.`);
     } else {
