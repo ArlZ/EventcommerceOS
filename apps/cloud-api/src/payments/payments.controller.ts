@@ -8,8 +8,6 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
-import { ManualTerminalService } from './manual-terminal.service';
-import { PaymentAdjustmentsService } from './payment-adjustments.service';
 import { PaymentMachineAuthService } from './payment-machine-auth.service';
 import { parseInitiatePaymentRequest } from './payment-validation';
 import { PaymentRailService } from './payment-rail.service';
@@ -18,15 +16,15 @@ import { PaymentsService } from './payments.service';
 type HeadersRecord = Record<string, string | string[] | undefined>;
 
 function humanAuthRequired(): never {
-  throw new ForbiddenException('Human authentication and authorization are required for this payment operation');
+  throw new ForbiddenException(
+    'Human authentication and authorization are required for this payment operation',
+  );
 }
 
 @Controller('payments')
 export class PaymentsController {
   constructor(
     @Inject(PaymentsService) private readonly payments: PaymentsService,
-    @Inject(PaymentAdjustmentsService) private readonly adjustments: PaymentAdjustmentsService,
-    @Inject(ManualTerminalService) private readonly manualTerminal: ManualTerminalService,
     @Inject(PaymentRailService) private readonly rails: PaymentRailService,
     @Inject(PaymentMachineAuthService) private readonly machineAuth: PaymentMachineAuthService,
   ) {}
