@@ -52,7 +52,7 @@ Default token lifetime is 15 minutes. `OPERATOR_ACCESS_TOKEN_TTL_SECONDS` may be
 
 Cloud rechecks the current operator account on every authenticated request, so account revocation, credential rotation and session revocation take effect immediately for Cloud actions even when the token has not expired.
 
-Event Edge cannot learn a Cloud-side revocation while physically disconnected. Offline Edge authorization is therefore bounded by token expiry. This is an explicit availability/security tradeoff: the platform does not require WAN introspection for local inventory control.
+Event Edge deliberately verifies operator tokens locally and does not introspect Cloud on each request. Event Edge authorization is therefore bounded by token expiry whether or not WAN is currently available. This is an explicit availability/security tradeoff that preserves WAN-independent local inventory control; Cloud actions remain immediately revocable because Cloud rechecks current account state on every request.
 
 ## Key lifecycle
 
