@@ -5,6 +5,7 @@ import type {
   PaymentRailAvailabilityStatus,
   PaymentRailAvailabilityView,
 } from '@event-commerce/contracts';
+import { edgeCloudCredentials } from '../security/edge-cloud-credentials';
 
 const PROHIBITED_CARD_KEYS = new Set([
   'pan',
@@ -140,10 +141,17 @@ export function parseEdgeExternalTerminalConfirmation(
 export class TerminalPaymentsService {
   async confirmExternalTerminal(
     request: ConfirmExternalTerminalPaymentRequest,
+    operatorAuthorization: string,
   ): Promise<ExternalTerminalConfirmationView> {
+    if (!operatorAuthorization.startsWith('Bearer ') || operatorAuthorization.length > 4096) {
+      throw new Error('Operator bearer access token is required for manual terminal confirmation');
+    }
     const response = await fetch(this.cloudUrl('/payments/manual-terminal-confirmations'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        authorization: operatorAuthorization,
+      },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(this.timeoutMs()),
     });
@@ -155,9 +163,10 @@ export class TerminalPaymentsService {
 
   async railAvailability(): Promise<PaymentRailAvailabilityView[]> {
     try {
+      const credentials = edgeCloudCredentials();
       const response = await fetch(this.cloudUrl('/payments/providers/availability'), {
         method: 'GET',
-        headers: { accept: 'application/json' },
+        headers: { ...credentials.headers, accept: 'application/json' },
         signal: AbortSignal.timeout(this.timeoutMs()),
       });
       if (!response.ok) throw new Error(`cloud payment rail health returned HTTP ${response.status}`);
