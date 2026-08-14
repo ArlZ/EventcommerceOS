@@ -3,6 +3,7 @@ import type { InitiatePaymentRequest, PaymentAttemptView } from '@event-commerce
 import { canTransitionPaymentAttempt, paymentAttemptIsTerminal } from '@event-commerce/domain';
 import type { QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
+import { edgeCloudRequestCredentials } from '../security/edge-cloud-credentials';
 
 interface CachedAttemptRow extends QueryResultRow {
   payment_attempt_id: string;
@@ -100,7 +101,7 @@ export class EdgePaymentsService {
     try {
       const response = await fetch(this.cloudUrl('/payments/initiate'), {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: edgeCloudRequestCredentials().headers,
         body: JSON.stringify(request),
         signal: AbortSignal.timeout(this.timeoutMs()),
       });
@@ -135,7 +136,7 @@ export class EdgePaymentsService {
         this.cloudUrl(`/payments/attempts/${encodeURIComponent(paymentAttemptId)}/reconcile`),
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: edgeCloudRequestCredentials().headers,
           signal: AbortSignal.timeout(this.timeoutMs()),
         },
       );
