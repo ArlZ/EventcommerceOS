@@ -1,10 +1,12 @@
-import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PaymentRelayService } from './payment-relay.service';
 
 @Injectable()
 export class PaymentRefreshService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private activeTick: Promise<void> | null = null;
+  private shuttingDown = false;
 
   constructor(@Inject(PaymentRelayService) private readonly payments: PaymentRelayService) {}
 
@@ -19,25 +21,33 @@ export class PaymentRefreshService implements OnModuleInit, OnModuleDestroy {
     void this.tick();
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.activeTick;
   }
 
   async tick(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
+    if (this.shuttingDown || this.activeTick) return;
+    const work = this.runTick();
+    this.activeTick = work;
     try {
-      const attemptIds = await this.payments.dueAttemptIds(25);
-      for (const attemptId of attemptIds) {
-        try {
-          await this.payments.refreshAttempt(attemptId);
-        } catch {
-          // A single corrupt/unreachable attempt must not stop the event payment refresh batch.
-        }
-      }
+      await work;
     } finally {
-      this.running = false;
+      if (this.activeTick === work) this.activeTick = null;
+    }
+  }
+
+  private async runTick(): Promise<void> {
+    const attemptIds = await this.payments.dueAttemptIds(25);
+    for (const attemptId of attemptIds) {
+      if (this.shuttingDown) return;
+      try {
+        await this.payments.refreshAttempt(attemptId);
+      } catch {
+        // A single corrupt/unreachable attempt must not stop the event payment refresh batch.
+      }
     }
   }
 }
