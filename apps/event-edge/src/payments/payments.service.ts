@@ -28,14 +28,16 @@ function parseObject(value: unknown): Record<string, unknown> {
 
 function text(record: Record<string, unknown>, key: string): string {
   const value = record[key];
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${key} must be a non-empty string`);
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error(`${key} must be a non-empty string`);
   return value.trim();
 }
 
 function optionalText(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   if (value === undefined) return undefined;
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${key} must be a non-empty string`);
+  if (typeof value !== 'string' || !value.trim())
+    throw new Error(`${key} must be a non-empty string`);
   return value.trim();
 }
 
@@ -157,7 +159,10 @@ export class EdgePaymentsService {
     return rows[0];
   }
 
-  private async cache(view: PaymentAttemptView, idempotencyKey: string): Promise<PaymentAttemptView> {
+  private async cache(
+    view: PaymentAttemptView,
+    idempotencyKey: string,
+  ): Promise<PaymentAttemptView> {
     return this.db.transaction(async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `edge-payment:${view.paymentAttemptId}`,
