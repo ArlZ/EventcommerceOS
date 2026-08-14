@@ -52,6 +52,10 @@ interface ReconciliationJobRow extends QueryResultRow {
   attempt_count: number;
 }
 
+interface IdRow extends QueryResultRow {
+  id: string;
+}
+
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -140,7 +144,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         throw new Error('Payment identity conflicts with existing financial record');
       }
 
-      const inserted = await client.query<{ id: string }>(
+      const inserted = await client.query<IdRow>(
         `INSERT INTO payment_attempts(
            id,payment_id,provider_id,idempotency_key,status,request_fingerprint
          ) VALUES ($1,$2,$3,$4,'CREATED',$5)
@@ -166,15 +170,9 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         throw new Error('Idempotency key was reused for a different payment request');
       }
 
-      if (existing.status === 'CREATED') {
-        await client.query(
-          `UPDATE payment_attempts
-           SET status='UNKNOWN',failure_code='AMBIGUOUS_INITIATION_RETRY',updated_at=now()
-           WHERE id=$1 AND status='CREATED'`,
-          [existing.id],
-        );
-        await this.upsertReconciliationJob(client, existing.id, 'MANUAL_REVIEW');
-      }
+      // A duplicate request must never steal an in-flight provider initiation from the
+      // original owner. If the owner actually crashed, the stale-CREATED watchdog below
+      // moves the attempt to UNKNOWN/manual review after the provider timeout window.
       return false;
     });
 
@@ -213,7 +211,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     const callback = await provider.parseAndVerifyWebhook(payload);
 
     return this.db.transaction(async (client) => {
-      const inserted = await client.query<{ id: string }>(
+      const inserted = await client.query<IdRow>(
         `INSERT INTO payment_provider_events(provider_id,provider_event_key,event_kind,payload)
          VALUES ($1,$2,'CALLBACK',$3::jsonb)
          ON CONFLICT (provider_id,provider_event_key) DO NOTHING
@@ -253,11 +251,16 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   async reconcileAttempt(paymentAttemptId: string): Promise<PaymentAttemptView> {
     const current = await this.loadAttemptById(paymentAttemptId);
     if (!current) throw new Error('Payment attempt not found');
-    if (current.status !== 'UNKNOWN') return attemptView(current);
+    if (!['INITIATED', 'PENDING', 'UNKNOWN'].includes(current.status)) return attemptView(current);
 
     if (!current.provider_reference) {
       await this.db.transaction(async (client) => {
-        await this.upsertReconciliationJob(client, current.id, 'MANUAL_REVIEW');
+        await this.upsertReconciliationJob(
+          client,
+          current.id,
+          'MANUAL_REVIEW',
+          'MISSING_PROVIDER_REFERENCE',
+        );
       });
       return attemptView(current);
     }
@@ -275,13 +278,13 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
     await this.db.transaction(async (client) => {
       const locked = await this.loadAttemptByIdClient(client, paymentAttemptId, true);
-      if (!locked || locked.status !== 'UNKNOWN') return;
-      await this.applyProviderTruth(client, locked, {
-        providerReference: current.provider_reference ?? undefined,
+      if (!locked || !['INITIATED', 'PENDING', 'UNKNOWN'].includes(locked.status)) return;
+      const applied = await this.applyProviderTruth(client, locked, {
+        providerReference: current.provider_reference,
         status: result.status,
         failureCode: result.failureCode,
       });
-      if (result.status === 'UNKNOWN') {
+      if (applied && (result.status === 'PENDING' || result.status === 'UNKNOWN')) {
         await this.scheduleRetry(client, paymentAttemptId, result.failureCode);
       }
     });
@@ -329,6 +332,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async reconcileDue(): Promise<void> {
+    await this.promoteStaleCreatedAttempts();
+
     const due = await this.db.query<ReconciliationJobRow>(
       `SELECT payment_attempt_id,attempt_count
        FROM payment_reconciliation_jobs
@@ -345,6 +350,35 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         });
       }
     }
+  }
+
+  private async promoteStaleCreatedAttempts(): Promise<void> {
+    await this.db.transaction(async (client) => {
+      const stale = await client.query<IdRow>(
+        `SELECT id
+         FROM payment_attempts
+         WHERE status='CREATED'
+           AND updated_at <= now() - interval '60 seconds'
+         ORDER BY updated_at
+         FOR UPDATE SKIP LOCKED
+         LIMIT 20`,
+      );
+
+      for (const row of stale.rows) {
+        await client.query(
+          `UPDATE payment_attempts
+           SET status='UNKNOWN',failure_code='AMBIGUOUS_INITIATION_CRASH',updated_at=now()
+           WHERE id=$1 AND status='CREATED'`,
+          [row.id],
+        );
+        await this.upsertReconciliationJob(
+          client,
+          row.id,
+          'MANUAL_REVIEW',
+          'AMBIGUOUS_INITIATION_CRASH',
+        );
+      }
+    });
   }
 
   private async applyInitiationResult(
@@ -367,20 +401,32 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
          WHERE id=$1`,
         [paymentAttemptId, result.status, result.providerReference ?? null, result.failureCode ?? null],
       );
-      if (result.status === 'UNKNOWN') {
+
+      if (['INITIATED', 'PENDING', 'UNKNOWN'].includes(result.status)) {
         await this.upsertReconciliationJob(
           client,
           paymentAttemptId,
           result.providerReference ? 'PENDING' : 'MANUAL_REVIEW',
+          result.providerReference ? result.failureCode : 'MISSING_PROVIDER_REFERENCE',
         );
+      } else if (result.status === 'FAILED') {
+        await this.upsertReconciliationJob(client, paymentAttemptId, 'RESOLVED');
       }
     });
 
-    if (result.providerReference) await this.applyUnmatchedCallbacks(result.providerReference);
+    if (result.providerReference) {
+      const attempt = await this.loadAttemptById(paymentAttemptId);
+      if (attempt) {
+        await this.applyUnmatchedCallbacks(attempt.provider_id, result.providerReference);
+      }
+    }
   }
 
-  private async applyUnmatchedCallbacks(providerReference: string): Promise<void> {
-    const attempt = await this.loadAttemptByProviderReference('mpesa', providerReference);
+  private async applyUnmatchedCallbacks(
+    providerId: string,
+    providerReference: string,
+  ): Promise<void> {
+    const attempt = await this.loadAttemptByProviderReference(providerId, providerReference);
     if (!attempt) return;
     const events = await this.db.query<{
       id: string;
@@ -484,7 +530,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       [current.id, truth.status, truth.providerReference ?? null, truth.failureCode ?? null],
     );
 
-    if (truth.status === 'UNKNOWN') {
+    if (truth.status === 'UNKNOWN' || truth.status === 'PENDING') {
       await this.upsertReconciliationJob(client, current.id, 'PENDING', truth.failureCode);
     } else if (truth.status === 'SUCCEEDED' || truth.status === 'FAILED') {
       await this.upsertReconciliationJob(client, current.id, 'RESOLVED');
