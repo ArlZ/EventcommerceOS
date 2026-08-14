@@ -19,6 +19,7 @@ import {
   type ProviderInitiationResult,
   type ProviderStatusResult,
   type ProviderTruthState,
+  type ProviderWebhookContext,
   type VerifiedProviderCallback,
 } from './payment-provider';
 
@@ -212,9 +213,13 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   async ingestProviderCallback(
     providerId: string,
     payload: unknown,
+    context?: ProviderWebhookContext,
   ): Promise<{ status: 'APPLIED' | 'DUPLICATE' | 'UNMATCHED' | 'CONFLICT' }> {
     const provider = this.provider(providerId);
-    const callback = await provider.parseAndVerifyWebhook(payload);
+    if (!provider.capabilities().asynchronousCallbacks) {
+      throw new Error(`Provider ${provider.id} does not accept asynchronous callbacks`);
+    }
+    const callback = await provider.parseAndVerifyWebhook(payload, context);
 
     return this.db.transaction(async (client) => {
       const inserted = await client.query<IdRow>(
@@ -226,6 +231,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           provider.id,
           callback.providerEventKey,
           JSON.stringify({
+            paymentAttemptId: callback.paymentAttemptId ?? null,
             providerReference: callback.providerReference ?? null,
             status: callback.status,
             amountMinor: callback.amountMinor ?? null,
@@ -235,15 +241,20 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         ],
       );
       if (inserted.rows.length === 0) return { status: 'DUPLICATE' as const };
-      if (!callback.providerReference) return { status: 'UNMATCHED' as const };
+      if (!callback.paymentAttemptId && !callback.providerReference) {
+        return { status: 'UNMATCHED' as const };
+      }
 
-      const attempt = await this.loadAttemptByProviderReferenceClient(
-        client,
-        provider.id,
-        callback.providerReference,
-        true,
-      );
+      const attempt = callback.paymentAttemptId
+        ? await this.loadAttemptByIdClient(client, callback.paymentAttemptId, true)
+        : await this.loadAttemptByProviderReferenceClient(
+            client,
+            provider.id,
+            callback.providerReference!,
+            true,
+          );
       if (!attempt) return { status: 'UNMATCHED' as const };
+      if (attempt.provider_id !== provider.id) return { status: 'CONFLICT' as const };
 
       await client.query(
         `UPDATE payment_provider_events SET payment_attempt_id=$1 WHERE id=$2::bigint`,
@@ -259,6 +270,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     if (!current) throw new Error('Payment attempt not found');
     if (!['INITIATED', 'PENDING', 'UNKNOWN'].includes(current.status)) return attemptView(current);
 
+    const provider = this.provider(current.provider_id);
     if (!current.provider_reference) {
       await this.db.transaction(async (client) => {
         await this.upsertReconciliationJob(
@@ -270,10 +282,21 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       });
       return attemptView(current);
     }
+    if (!provider.capabilities().queryStatus) {
+      await this.db.transaction(async (client) => {
+        await this.upsertReconciliationJob(
+          client,
+          current.id,
+          'MANUAL_REVIEW',
+          'PROVIDER_STATUS_QUERY_UNSUPPORTED',
+        );
+      });
+      return attemptView(current);
+    }
 
     let result: ProviderStatusResult;
     try {
-      result = await this.provider(current.provider_id).queryStatus(current.provider_reference);
+      result = await provider.queryStatus(current.provider_reference);
     } catch {
       result = {
         status: 'UNKNOWN',
@@ -286,8 +309,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       const locked = await this.loadAttemptByIdClient(client, paymentAttemptId, true);
       if (!locked || !['INITIATED', 'PENDING', 'UNKNOWN'].includes(locked.status)) return;
       const applied = await this.applyProviderTruth(client, locked, {
-        providerReference: current.provider_reference,
+        paymentAttemptId: result.paymentAttemptId,
+        providerReference: result.providerReference ?? current.provider_reference,
         status: result.status,
+        amountMinor: result.amountMinor,
+        currency: result.currency,
         failureCode: result.failureCode,
       });
       if (applied && (result.status === 'PENDING' || result.status === 'UNKNOWN')) {
@@ -442,6 +468,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     const events = await this.db.query<{
       id: string;
       payload: {
+        paymentAttemptId?: string | null;
         status: ProviderTruthState;
         providerReference?: string | null;
         amountMinor?: number | null;
@@ -464,6 +491,9 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
         const payload = event.payload;
         const callback: VerifiedProviderCallback = {
           providerEventKey: `stored:${event.id}`,
+          ...(typeof payload.paymentAttemptId === 'string'
+            ? { paymentAttemptId: payload.paymentAttemptId }
+            : {}),
           providerReference,
           status: payload.status,
           ...(typeof payload.amountMinor === 'number' ? { amountMinor: payload.amountMinor } : {}),
@@ -484,9 +514,55 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     current: AttemptRow,
     truth: Pick<
       VerifiedProviderCallback,
-      'status' | 'providerReference' | 'amountMinor' | 'currency' | 'failureCode'
+      | 'paymentAttemptId'
+      | 'status'
+      | 'providerReference'
+      | 'amountMinor'
+      | 'currency'
+      | 'failureCode'
     >,
   ): Promise<boolean> {
+    if (truth.paymentAttemptId !== undefined && truth.paymentAttemptId !== current.id) {
+      await this.upsertReconciliationJob(
+        client,
+        current.id,
+        'MANUAL_REVIEW',
+        'PROVIDER_MERCHANT_REFERENCE_MISMATCH',
+      );
+      if (!paymentAttemptIsTerminal(current.status)) {
+        await client.query(
+          `UPDATE payment_attempts
+           SET status='UNKNOWN',failure_code='PROVIDER_MERCHANT_REFERENCE_MISMATCH',updated_at=now()
+           WHERE id=$1`,
+          [current.id],
+        );
+      }
+      return false;
+    }
+
+    if (
+      current.provider_reference !== null &&
+      truth.providerReference !== undefined &&
+      truth.providerReference !== null &&
+      current.provider_reference !== truth.providerReference
+    ) {
+      await this.upsertReconciliationJob(
+        client,
+        current.id,
+        'MANUAL_REVIEW',
+        'PROVIDER_REFERENCE_MISMATCH',
+      );
+      if (!paymentAttemptIsTerminal(current.status)) {
+        await client.query(
+          `UPDATE payment_attempts
+           SET status='UNKNOWN',failure_code='PROVIDER_REFERENCE_MISMATCH',updated_at=now()
+           WHERE id=$1`,
+          [current.id],
+        );
+      }
+      return false;
+    }
+
     if (
       (truth.amountMinor !== undefined && truth.amountMinor !== Number(current.amount_minor)) ||
       (truth.currency !== undefined && truth.currency !== current.currency)
