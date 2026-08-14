@@ -14,6 +14,7 @@ data class LocalPaymentAttempt(
   val paymentId: String,
   val attemptId: String,
   val clientAttemptId: String,
+  val idempotencyKey: String,
   val eventId: String,
   val orderId: String,
   val provider: String,
