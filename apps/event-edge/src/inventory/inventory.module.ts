@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { InventoryAlertService } from './inventory-alert.service';
 import { InventoryAuthorizationService } from './inventory-authorization.service';
+import { InventoryCloudForwarderService } from './inventory-cloud-forwarder.service';
+import { InventoryCloudTransport } from './inventory-cloud.transport';
 import { InventoryConfigurationService } from './inventory-configuration.service';
 import { InventoryController } from './inventory.controller';
 import { InventoryCountService } from './inventory-count.service';
+import { HttpInventoryCloudTransport } from './http-inventory-cloud.transport';
 import { InventoryLedgerService } from './inventory-ledger.service';
 import { InventoryNotificationService } from './inventory-notification.service';
 import {
@@ -24,8 +27,10 @@ import { InventoryTransferService } from './inventory-transfer.service';
     InventoryCountService,
     InventoryAlertService,
     InventoryNotificationService,
+    InventoryCloudForwarderService,
+    { provide: InventoryCloudTransport, useClass: HttpInventoryCloudTransport },
     { provide: InventoryNotificationTransport, useClass: StubInventoryNotificationTransport },
   ],
-  exports: [InventorySaleConsumerService, InventoryAlertService],
+  exports: [InventorySaleConsumerService, InventoryAlertService, InventoryCloudForwarderService],
 })
 export class InventoryModule {}
