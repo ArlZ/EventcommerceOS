@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
@@ -35,7 +35,12 @@ export class PaymentWebhookService {
   ) {}
 
   async ingest(input: ProviderWebhookInput): Promise<WebhookIngestResult> {
-    const observation = await this.provider.parseAndVerifyWebhook(input);
+    let observation: ProviderWebhookObservation;
+    try {
+      observation = await this.provider.parseAndVerifyWebhook(input);
+    } catch {
+      throw new BadRequestException('invalid payment provider callback');
+    }
     return this.database.transaction(async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `payment-observation:${this.provider.code}:${observation.observationKey}`,
