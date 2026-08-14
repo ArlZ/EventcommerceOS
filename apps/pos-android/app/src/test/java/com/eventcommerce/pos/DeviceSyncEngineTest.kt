@@ -122,6 +122,24 @@ class DeviceSyncEngineTest {
   }
 
   @Test
+  fun `conflict persists safe prefix and enters retry backoff path`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repeat(3) { repository.addItem(menu.items.first().itemId) }
+    val events = repository.allOutboxEvents().sortedBy { it.sequence }
+    val safePrefix = events.first().sequence
+    val transport = DeviceEdgeTransport { deviceId, _ ->
+      DeviceEdgeAck(deviceId, safePrefix, 2, hasConflict = true)
+    }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    assertThrows(IllegalStateException::class.java) { runBlocking { engine.syncOnce() } }
+    val health = state.health()
+    assertEquals(safePrefix, health.acknowledgedThroughSequence)
+    assertEquals(2, health.edgeBacklogCount)
+    assertEquals("Edge reconciliation required before sync can advance", health.lastError)
+  }
+
+  @Test
   fun `retry delay is bounded and HTTPS transport rejects cleartext endpoint`() {
     assertEquals(500L, deviceRetryDelayMs(1, random = { 0.0 }))
     assertEquals(30_000L, deviceRetryDelayMs(30, random = { 1.0 }))
