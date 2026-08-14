@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.eventcommerce.pos.data.AndroidKeystoreDeviceSecretStore
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.DeviceSyncProvisioningStore
 import com.eventcommerce.pos.data.DeviceSyncStateStore
@@ -26,7 +27,8 @@ class MainActivity : ComponentActivity() {
   private val database by lazy { AppDatabase.get(applicationContext) }
   private val repository by lazy { LocalPosRepository(database) }
   private val syncState by lazy { DeviceSyncStateStore(database) }
-  private val syncProvisioning by lazy { DeviceSyncProvisioningStore(database) }
+  private val deviceSecrets by lazy { AndroidKeystoreDeviceSecretStore(applicationContext) }
+  private val syncProvisioning by lazy { DeviceSyncProvisioningStore(database, deviceSecrets) }
   private val syncQueue by lazy { SyncQueueStore(database) }
   private var paymentCoordinator by mutableStateOf<PosPaymentCoordinator?>(null)
 
