@@ -3,9 +3,12 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type { EdgeCloudAck, EdgeCloudBatch, SyncEventEnvelope } from '@event-commerce/contracts';
 import { DatabaseService } from '../database/database.service';
+import type { EdgeSyncIdentity } from './edge-sync-auth.service';
 
 interface ExistingEventRow extends QueryResultRow {
   same_envelope: boolean;
+  edge_id: string | null;
+  organisation_id: string | null;
 }
 
 interface SequenceRow extends QueryResultRow {
@@ -46,7 +49,7 @@ interface OrderProjectionPayload {
 export class CloudSyncService {
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
-  async ingest(batch: EdgeCloudBatch): Promise<EdgeCloudAck> {
+  async ingest(batch: EdgeCloudBatch, identity: EdgeSyncIdentity): Promise<EdgeCloudAck> {
     const result = await this.database.transaction(async (client) => {
       const accepted: string[] = [];
       const duplicates: string[] = [];
@@ -60,7 +63,7 @@ export class CloudSyncService {
       }
 
       for (const event of batch.events) {
-        const outcome = await this.processEvent(client, event);
+        const outcome = await this.processEvent(client, event, identity);
         if (outcome === 'ACCEPTED') accepted.push(event.eventInstanceId);
         else if (outcome === 'DUPLICATE') duplicates.push(event.eventInstanceId);
         else conflicts.push(event.eventInstanceId);
@@ -70,14 +73,16 @@ export class CloudSyncService {
         await client.query(
           `INSERT INTO sync_device_state(
              device_id, last_seen_at, last_sequence_seen, edge_accepted_through_sequence,
-             edge_backlog_count, last_cloud_delivery_at
-           ) VALUES ($1,$2,$3,$4,$5,$6)
+             edge_backlog_count, last_cloud_delivery_at, edge_id, organisation_id
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
            ON CONFLICT (device_id) DO UPDATE SET
              last_seen_at = GREATEST(sync_device_state.last_seen_at, EXCLUDED.last_seen_at),
              last_sequence_seen = GREATEST(sync_device_state.last_sequence_seen, EXCLUDED.last_sequence_seen),
              edge_accepted_through_sequence = GREATEST(sync_device_state.edge_accepted_through_sequence, EXCLUDED.edge_accepted_through_sequence),
              edge_backlog_count = EXCLUDED.edge_backlog_count,
-             last_cloud_delivery_at = COALESCE(EXCLUDED.last_cloud_delivery_at, sync_device_state.last_cloud_delivery_at)`,
+             last_cloud_delivery_at = COALESCE(EXCLUDED.last_cloud_delivery_at, sync_device_state.last_cloud_delivery_at),
+             edge_id = EXCLUDED.edge_id,
+             organisation_id = EXCLUDED.organisation_id`,
           [
             status.deviceId,
             status.lastSeenAt,
@@ -85,6 +90,8 @@ export class CloudSyncService {
             status.edgeAcceptedThroughSequence,
             status.edgeBacklogCount,
             status.lastCloudDeliveryAt,
+            identity.edgeId,
+            identity.organisationId,
           ],
         );
       }
@@ -100,51 +107,29 @@ export class CloudSyncService {
     };
   }
 
-  async deviceHealth(): Promise<
-    Array<{
-      deviceId: string;
-      lastSeenAt: string;
-      lastSequenceSeen: number;
-      edgeAcceptedThroughSequence: number;
-      edgeBacklogCount: number;
-      lastCloudDeliveryAt: string | null;
-    }>
-  > {
-    const rows = await this.database.query<{
-      device_id: string;
-      last_seen_at: Date;
-      last_sequence_seen: string;
-      edge_accepted_through_sequence: string;
-      edge_backlog_count: number;
-      last_cloud_delivery_at: Date | null;
-    }>(
-      `SELECT device_id, last_seen_at, last_sequence_seen::text, edge_accepted_through_sequence::text,
-              edge_backlog_count, last_cloud_delivery_at
-       FROM sync_device_state ORDER BY last_seen_at DESC`,
-    );
-    return rows.map((row) => ({
-      deviceId: row.device_id,
-      lastSeenAt: row.last_seen_at.toISOString(),
-      lastSequenceSeen: Number.parseInt(row.last_sequence_seen, 10),
-      edgeAcceptedThroughSequence: Number.parseInt(row.edge_accepted_through_sequence, 10),
-      edgeBacklogCount: row.edge_backlog_count,
-      lastCloudDeliveryAt: row.last_cloud_delivery_at?.toISOString() ?? null,
-    }));
-  }
-
   private async processEvent(
     client: PoolClient,
     event: SyncEventEnvelope,
+    identity: EdgeSyncIdentity,
   ): Promise<'ACCEPTED' | 'DUPLICATE' | 'CONFLICT'> {
     const envelope = JSON.stringify(event);
     const byInstance = await client.query<ExistingEventRow>(
-      `SELECT (envelope = $2::jsonb) AS same_envelope
+      `SELECT (envelope = $2::jsonb) AS same_envelope,edge_id,organisation_id::text
        FROM sync_processed_events WHERE event_instance_id = $1`,
       [event.eventInstanceId, envelope],
     );
     if (byInstance.rowCount === 1) {
-      if (byInstance.rows[0]!.same_envelope) return 'DUPLICATE';
-      await this.exception(client, 'EVENT_INSTANCE_REUSE', event, {});
+      const existing = byInstance.rows[0]!;
+      if (
+        existing.same_envelope &&
+        (existing.organisation_id === null || existing.organisation_id === identity.organisationId)
+      ) {
+        return 'DUPLICATE';
+      }
+      await this.exception(client, 'EVENT_INSTANCE_REUSE', event, {
+        existingEdgeId: existing.edge_id,
+        authenticatedEdgeId: identity.edgeId,
+      });
       return 'CONFLICT';
     }
 
@@ -155,6 +140,7 @@ export class CloudSyncService {
     if (bySequence.rowCount === 1) {
       await this.exception(client, 'DEVICE_SEQUENCE_REUSE', event, {
         existingEventInstanceId: bySequence.rows[0]!.event_instance_id,
+        authenticatedEdgeId: identity.edgeId,
       });
       return 'CONFLICT';
     }
@@ -162,8 +148,8 @@ export class CloudSyncService {
     await client.query(
       `INSERT INTO sync_processed_events(
          event_instance_id, event_id, event_type, aggregate_type, aggregate_id, event_version,
-         device_id, sequence, occurred_at, idempotency_key, payload, envelope
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`,
+         device_id, sequence, occurred_at, idempotency_key, payload, envelope, edge_id, organisation_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13,$14)`,
       [
         event.eventInstanceId,
         event.eventId,
@@ -177,6 +163,8 @@ export class CloudSyncService {
         event.idempotencyKey,
         JSON.stringify(event.payload),
         envelope,
+        identity.edgeId,
+        identity.organisationId,
       ],
     );
 
@@ -338,10 +326,10 @@ export class CloudSyncService {
     }
 
     const eventIdValue = event.payload.eventId;
-    const businessEventId =
-      typeof eventIdValue === 'string' && eventIdValue.trim()
-        ? eventIdValue.trim()
-        : `legacy:${event.deviceId}`;
+    if (typeof eventIdValue !== 'string' || !eventIdValue.trim()) {
+      throw new Error('synced eventId is required');
+    }
+    const businessEventId = eventIdValue.trim();
     const salesLocationValue = event.payload.salesLocationId;
     if (
       salesLocationValue !== undefined &&
