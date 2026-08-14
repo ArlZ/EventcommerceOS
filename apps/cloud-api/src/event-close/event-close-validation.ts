@@ -67,11 +67,13 @@ export function parseCashDeclaration(value: unknown): DeclareEventCashRequest {
     'reason',
     'idempotencyKey',
   ]);
+  const deviceId = optionalString(body, 'deviceId');
+  const cashierId = optionalString(body, 'cashierId');
   return {
     declarationId: requiredString(body, 'declarationId'),
     salesLocationId: requiredUuid(body, 'salesLocationId'),
-    ...(optionalString(body, 'deviceId') ? { deviceId: optionalString(body, 'deviceId') } : {}),
-    ...(optionalString(body, 'cashierId') ? { cashierId: optionalString(body, 'cashierId') } : {}),
+    ...(deviceId !== undefined ? { deviceId } : {}),
+    ...(cashierId !== undefined ? { cashierId } : {}),
     currency: currency(requiredString(body, 'currency')),
     declaredMinor: integer(body.declaredMinor, 'declaredMinor', 0),
     reason: requiredString(body, 'reason'),
