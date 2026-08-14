@@ -40,12 +40,16 @@ export class PaymentsController {
   }
 
   @Post('providers/:providerId/callback')
-  callback(
+  async callback(
     @Param('providerId') providerId: string,
     @Body() body: unknown,
     @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
-    return this.payments.ingestProviderCallback(providerId, body, { headers });
+    const result = await this.payments.ingestProviderCallback(providerId, body, { headers });
+    if (providerId.trim().toLowerCase() === 'pesapal_sabi') {
+      return { status: '200', message: 'Ok' };
+    }
+    return result;
   }
 
   @Post('attempts/:paymentAttemptId/reconcile')
