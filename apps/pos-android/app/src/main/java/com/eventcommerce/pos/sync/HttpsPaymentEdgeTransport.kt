@@ -9,11 +9,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-class HttpsPaymentEdgeTransport(syncEndpoint: String) : PaymentEdgeTransport {
+class HttpsPaymentEdgeTransport(
+  syncEndpoint: String,
+  private val bearerToken: String,
+) : PaymentEdgeTransport {
   private val origin: String
 
   init {
     require(syncEndpoint.startsWith("https://")) { "POS payment endpoint must use HTTPS" }
+    require(bearerToken.length >= 32) { "POS payment bearer token is invalid" }
     val uri = URI(syncEndpoint)
     require(uri.host != null) { "POS payment endpoint must have a host" }
     origin = buildString {
@@ -53,6 +57,7 @@ class HttpsPaymentEdgeTransport(syncEndpoint: String) : PaymentEdgeTransport {
         connection.requestMethod = "GET"
         connection.connectTimeout = 5_000
         connection.readTimeout = 5_000
+        authenticate(connection)
         val code = connection.responseCode
         if (code == 404) return@withContext null
         if (code !in 200..299) throw IllegalStateException("Edge payment status returned HTTP $code")
@@ -71,6 +76,7 @@ class HttpsPaymentEdgeTransport(syncEndpoint: String) : PaymentEdgeTransport {
       connection.readTimeout = 5_000
       connection.doOutput = true
       connection.setRequestProperty("Content-Type", "application/json")
+      authenticate(connection)
       connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body) }
       val code = connection.responseCode
       if (code !in 200..299) throw IllegalStateException("Edge payment returned HTTP $code")
@@ -78,6 +84,10 @@ class HttpsPaymentEdgeTransport(syncEndpoint: String) : PaymentEdgeTransport {
     } finally {
       connection.disconnect()
     }
+  }
+
+  private fun authenticate(connection: HttpURLConnection) {
+    connection.setRequestProperty("Authorization", "Bearer $bearerToken")
   }
 
   private fun open(path: String): HttpURLConnection = URL("$origin$path").openConnection() as HttpURLConnection
