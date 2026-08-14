@@ -17,6 +17,7 @@ export const escalationActorId = 'inventory-manager';
 export async function resetInventory(database: EdgeDatabaseService): Promise<void> {
   await database.query(
     `TRUNCATE
+       edge_inventory_sale_inbox,
        edge_inventory_notification_outbox,
        edge_inventory_alert_history,
        edge_inventory_alerts,
@@ -38,6 +39,10 @@ export async function resetInventory(database: EdgeDatabaseService): Promise<voi
        edge_inventory_locations,
        edge_inventory_event_config
      CASCADE`,
+  );
+  await database.query(
+    `DELETE FROM edge_processed_device_events
+     WHERE device_id = 'device-inventory-test' AND event_type = 'ORDER_CLOSED_CASH'`,
   );
 }
 

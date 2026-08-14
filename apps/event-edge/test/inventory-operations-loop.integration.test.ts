@@ -75,4 +75,60 @@ describeIntegration('inventory periodic operations loop', () => {
     );
     expect(Number(escalation[0]!.count)).toBeGreaterThanOrEqual(1);
   });
+  it('recovers a persisted sale after a crash between sync durability and inventory consumption', async () => {
+    await receipt(ledger, mainLocationId, beerSkuId, 100n, 'crash-window-main');
+    const sale = closedSale({
+      eventInstanceId: 'crash-window-sale-301',
+      occurredAt: '2026-08-14T08:00:00.000Z',
+      lines: [{ skuId: beerSkuId, quantity: 2 }],
+    });
+
+    await database.query(
+      `INSERT INTO edge_processed_device_events(
+         event_instance_id, event_id, event_type, aggregate_type, aggregate_id,
+         event_version, device_id, sequence, occurred_at, idempotency_key, payload, envelope
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb)`,
+      [
+        sale.eventInstanceId,
+        sale.eventId,
+        sale.eventType,
+        sale.aggregateType,
+        sale.aggregateId,
+        sale.eventVersion,
+        sale.deviceId,
+        sale.sequence,
+        sale.occurredAt,
+        sale.idempotencyKey,
+        JSON.stringify(sale.payload),
+        JSON.stringify(sale),
+      ],
+    );
+
+    const before = await database.query<{ processed_at: Date | null }>(
+      `SELECT processed_at FROM edge_inventory_sale_inbox
+       WHERE source_event_instance_id = $1`,
+      [sale.eventInstanceId],
+    );
+    expect(before[0]!.processed_at).toBeNull();
+
+    const first = await loop.runOnce(new Date('2026-08-14T08:00:10.000Z'));
+    const second = await loop.runOnce(new Date('2026-08-14T08:00:20.000Z'));
+    expect(first.salesReconciled).toBe(1);
+    expect(second.salesReconciled).toBe(0);
+
+    const movement = await database.query<{ count: string; quantity: string }>(
+      `SELECT count(*)::text AS count, SUM(quantity_delta)::text AS quantity
+       FROM edge_inventory_ledger
+       WHERE source_event_instance_id = $1 AND movement_type = 'SALE'`,
+      [sale.eventInstanceId],
+    );
+    const inbox = await database.query<{ processed_at: Date | null; outcome: string | null }>(
+      `SELECT processed_at, outcome FROM edge_inventory_sale_inbox
+       WHERE source_event_instance_id = $1`,
+      [sale.eventInstanceId],
+    );
+    expect(movement[0]).toEqual({ count: '1', quantity: '-2' });
+    expect(inbox[0]!.processed_at).not.toBeNull();
+    expect(inbox[0]!.outcome).toBe('APPLIED');
+  });
 });

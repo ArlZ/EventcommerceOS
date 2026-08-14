@@ -62,6 +62,7 @@ export class InventorySaleConsumerService {
         await this.exception(client, 'INVALID_SALE_INVENTORY_PAYLOAD', event, null, null, {
           payload: event.payload,
         });
+        await this.markProcessed(client, event.eventInstanceId, 'EXCEPTION');
         return null;
       }
 
@@ -79,6 +80,7 @@ export class InventorySaleConsumerService {
           parsed.salesLocationId,
           {},
         );
+        await this.markProcessed(client, event.eventInstanceId, 'EXCEPTION');
         return parsed.eventId;
       }
       const inventoryLocationId = mapping.rows[0]!.inventory_location_id;
@@ -117,6 +119,7 @@ export class InventorySaleConsumerService {
               parsed.salesLocationId,
               { skuId: line.skuId },
             );
+            await this.markProcessed(client, event.eventInstanceId, 'EXCEPTION');
             return parsed.eventId;
           }
           this.addMovement(movements, line.skuId, 'SALE', line.quantity);
@@ -132,6 +135,7 @@ export class InventorySaleConsumerService {
               parsed.salesLocationId,
               { soldSkuId: line.skuId, componentSkuId: component.component_sku_id },
             );
+            await this.markProcessed(client, event.eventInstanceId, 'EXCEPTION');
             return parsed.eventId;
           }
           this.addMovement(
@@ -166,6 +170,7 @@ export class InventorySaleConsumerService {
           idempotencyKey: `sale:${event.eventInstanceId}:${movement.type}:${movement.skuId}`,
         });
       }
+      await this.markProcessed(client, event.eventInstanceId, 'APPLIED');
       return parsed.eventId;
     });
   }
@@ -214,6 +219,19 @@ export class InventorySaleConsumerService {
       lines.push({ skuId, quantity: BigInt(quantity) });
     }
     return { eventId, salesLocationId, orderId, lines };
+  }
+
+  private async markProcessed(
+    client: PoolClient,
+    eventInstanceId: string,
+    outcome: 'APPLIED' | 'EXCEPTION',
+  ): Promise<void> {
+    await client.query(
+      `UPDATE edge_inventory_sale_inbox
+       SET processed_at = clock_timestamp(), outcome = $2, last_error = NULL
+       WHERE source_event_instance_id = $1`,
+      [eventInstanceId, outcome],
+    );
   }
 
   private async exception(
