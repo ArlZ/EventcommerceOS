@@ -15,8 +15,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     OrderEntity::class,
     OrderItemEntity::class,
     OutboxEventEntity::class,
+    PaymentAttemptEntity::class,
   ],
-  version = 2,
+  version = 3,
   exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun menu(): MenuDao
   abstract fun orders(): OrderDao
   abstract fun pendingEvents(): PendingEventDao
+  abstract fun payments(): PaymentDao
 
   companion object {
     private const val DATABASE_NAME = "event-commerce-pos.db"
@@ -51,6 +53,23 @@ abstract class AppDatabase : RoomDatabase() {
       }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+          """CREATE TABLE IF NOT EXISTS `payment_attempts` (`attemptId` TEXT NOT NULL, `paymentId` TEXT NOT NULL, `clientAttemptId` TEXT NOT NULL, `eventId` TEXT NOT NULL, `orderId` TEXT NOT NULL, `initiationIdempotencyKey` TEXT NOT NULL, `provider` TEXT NOT NULL, `state` TEXT NOT NULL, `amountMinor` INTEGER NOT NULL, `currency` TEXT NOT NULL, `maskedPayerReference` TEXT, `providerRequestId` TEXT, `providerReceiptReference` TEXT, `reconciliationRequired` INTEGER NOT NULL, `createdAtEpochMs` INTEGER NOT NULL, `updatedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`attemptId`))""",
+        )
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_payment_attempts_initiationIdempotencyKey` ON `payment_attempts` (`initiationIdempotencyKey`)",
+        )
+        db.execSQL(
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_payment_attempts_paymentId_clientAttemptId` ON `payment_attempts` (`paymentId`, `clientAttemptId`)",
+        )
+        db.execSQL(
+          "CREATE INDEX IF NOT EXISTS `index_payment_attempts_orderId` ON `payment_attempts` (`orderId`)",
+        )
+      }
+    }
+
     @Volatile private var instance: AppDatabase? = null
 
     fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
@@ -59,7 +78,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     fun create(context: Context, name: String): AppDatabase =
       Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .build()
   }
 }
