@@ -125,7 +125,69 @@ class LocalOrderStore(
     }
   }
 
+  suspend fun suspendForPayment(orderId: String): LocalOrder = mutex.withLock {
+    db.withTransaction {
+      val order = requireNotNull(dao.order(orderId)) { "order not found" }
+      if (order.state == OrderState.PAYMENT_PENDING.name) return@withTransaction snapshot(order)
+      require(order.state == OrderState.OPEN.name) { "M-PESA requires an open order" }
+      require(dao.orderItems(order.id).isNotEmpty()) { "cannot pay an empty order" }
+      OrderRules.requireTransition(OrderState.OPEN, OrderState.PAYMENT_PENDING)
+      val suspended = order.copy(state = OrderState.PAYMENT_PENDING.name, updatedAtEpochMs = clock())
+      dao.updateOrder(suspended)
+      faultInjector.beforeCommit("suspendForPayment")
+      snapshot(suspended)
+    }
+  }
+
+  suspend fun closeConfirmedMpesa(orderId: String, attemptId: String): LocalOrder = mutex.withLock {
+    db.withTransaction {
+      val order = requireNotNull(dao.order(orderId)) { "order not found" }
+      if (order.state == OrderState.CLOSED.name) return@withTransaction snapshot(order)
+      require(order.state == OrderState.PAYMENT_PENDING.name) {
+        "confirmed M-PESA close requires a payment-pending order"
+      }
+      OrderRules.requireTransition(OrderState.PAYMENT_PENDING, OrderState.PAID)
+      val paid = order.copy(state = OrderState.PAID.name, updatedAtEpochMs = clock())
+      dao.updateOrder(paid)
+      OrderRules.requireTransition(OrderState.PAID, OrderState.CLOSED)
+      val closedAt = clock()
+      val closed = paid.copy(
+        state = OrderState.CLOSED.name,
+        updatedAtEpochMs = closedAt,
+        closedAtEpochMs = closedAt,
+      )
+      dao.updateOrder(closed)
+      outbox.appendOrder(
+        "ORDER_CLOSED_MPESA",
+        closed,
+        "mpesa-close:${closed.id}:$attemptId",
+      )
+      faultInjector.beforeCommit("closeConfirmedMpesa")
+      snapshot(closed)
+    }
+  }
+
+  suspend fun resumeAfterFailedPayment(orderId: String): LocalOrder = mutex.withLock {
+    db.withTransaction {
+      require(dao.openOrder() == null) { "finish the current open order before resuming this one" }
+      val order = requireNotNull(dao.order(orderId)) { "order not found" }
+      if (order.state == OrderState.OPEN.name) return@withTransaction snapshot(order)
+      require(order.state == OrderState.PAYMENT_PENDING.name) {
+        "only a payment-pending order can be resumed"
+      }
+      OrderRules.requireTransition(OrderState.PAYMENT_PENDING, OrderState.OPEN)
+      val resumed = order.copy(state = OrderState.OPEN.name, updatedAtEpochMs = clock())
+      dao.updateOrder(resumed)
+      faultInjector.beforeCommit("resumeAfterFailedPayment")
+      snapshot(resumed)
+    }
+  }
+
   suspend fun current(): LocalOrder? = dao.openOrder()?.let { snapshot(it) }
+
+  suspend fun paymentPending(): List<LocalOrder> = dao.paymentPendingOrders().map { snapshot(it) }
+
+  suspend fun order(orderId: String): LocalOrder? = dao.order(orderId)?.let { snapshot(it) }
 
   suspend fun history(limit: Int): List<LocalOrder> =
     dao.closedOrders(limit.coerceIn(1, 100)).map { snapshot(it) }
