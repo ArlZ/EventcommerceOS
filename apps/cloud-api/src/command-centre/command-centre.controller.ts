@@ -50,11 +50,17 @@ export class CommandCentreController {
   ) {
     const normalizedAlertId = alertId.trim();
     if (!normalizedAlertId) throw new BadRequestException('alertId must not be empty');
+    const context = adminContextFromHeaders(headers);
+    const requested = parseInventoryAlertAction(body);
+    const action =
+      requested.action === 'ASSIGN'
+        ? { action: 'ASSIGN' as const, assignedActorId: context.actorId }
+        : requested;
     return this.commandCentre.actOnInventoryAlert(
-      adminContextFromHeaders(headers),
+      context,
       uuid(eventId, 'eventId'),
       normalizedAlertId,
-      parseInventoryAlertAction(body),
+      action,
     );
   }
 }
