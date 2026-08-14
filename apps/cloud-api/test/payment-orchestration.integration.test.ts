@@ -26,7 +26,12 @@ class FakePaymentProvider implements PaymentProvider {
   fixedRequestId: string | null = null;
 
   capabilities() {
-    return { queryStatus: true, refund: false, reverse: false, webhookVerification: 'NONE' as const };
+    return {
+      queryStatus: true,
+      refund: false,
+      reverse: false,
+      webhookVerification: 'NONE' as const,
+    };
   }
 
   async initiate(input: ProviderInitiationInput): Promise<ProviderInitiationResult> {
@@ -139,9 +144,9 @@ describeIntegration('payment orchestration', () => {
 
   it('rejects semantic reuse of one idempotency key without calling the provider again', async () => {
     await payments.initiate(requestInput());
-    await expect(
-      payments.initiate(requestInput({ amountMinor: 30_000 })),
-    ).rejects.toThrow(/idempotency key was reused/);
+    await expect(payments.initiate(requestInput({ amountMinor: 30_000 }))).rejects.toThrow(
+      /idempotency key was reused/,
+    );
     expect(provider.initiationCalls).toHaveLength(1);
   });
 
@@ -276,6 +281,33 @@ describeIntegration('payment orchestration', () => {
     expect(retry.attempt.state).toBe('PENDING');
   });
 
+  it('quarantines reuse of one provider request ID across different payments', async () => {
+    provider.fixedRequestId = 'SHARED-CHECKOUT';
+    const first = await payments.initiate(requestInput());
+    expect(first.attempt.state).toBe('PENDING');
+
+    const second = await payments.initiate(
+      requestInput({
+        eventId: 'payment-event-002',
+        orderId: 'payment-order-002',
+        paymentId: 'payment-002',
+        attemptId: 'attempt-002',
+        clientAttemptId: 'client-attempt-002',
+        idempotencyKey: 'PAYMENT:payment-order-002:full:client-attempt-002',
+      }),
+    );
+
+    expect(second.attempt.state).toBe('UNKNOWN');
+    expect(second.attempt.providerRequestId).toBeNull();
+    expect(second.attempt.reconciliationRequired).toBe(true);
+    const exceptions = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM payment_reconciliation_exceptions
+       WHERE attempt_id = 'attempt-002' AND exception_type = 'PROVIDER_REQUEST_ID_REUSED'`,
+    );
+    expect(exceptions[0]!.count).toBe('1');
+    expect(await payments.dueAttemptIds()).not.toContain('attempt-002');
+  });
+
   it('does not let one provider receipt settle two different payments', async () => {
     const first = await payments.initiate(requestInput());
     provider.queryReceipt = 'SHARED-RECEIPT';
@@ -294,7 +326,8 @@ describeIntegration('payment orchestration', () => {
     );
     await payments.reconcileAttempt(second.attempt.attemptId, 'query-second');
 
-    expect((await payments.getAttempt(second.attempt.attemptId)).state).not.toBe('SUCCESS');
+    expect((await payments.getAttempt(second.attempt.attemptId)).state).toBe('UNKNOWN');
+    expect(await payments.dueAttemptIds()).not.toContain(second.attempt.attemptId);
     const exceptions = await database.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM payment_reconciliation_exceptions
        WHERE attempt_id = 'attempt-002' AND exception_type = 'PROVIDER_RECEIPT_REUSED'`,
