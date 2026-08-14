@@ -18,6 +18,8 @@ import {
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const deviceId = 'pos-security-device';
 const otherEventId = 'event-pos-security-other';
+const previousEdgeId = process.env.EDGE_ID;
+const previousEdgeToken = process.env.EDGE_CLOUD_SYNC_TOKEN;
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -95,6 +97,9 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
 
   beforeAll(async () => {
     process.env.EDGE_FORWARDER_DISABLED = 'true';
+    process.env.EDGE_ID = 'edge-pos-security-test';
+    process.env.EDGE_CLOUD_SYNC_TOKEN =
+      'edge-pos-security-token-0123456789-abcdefghijklmnopqrstuvwxyz';
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     database = moduleRef.get(EdgeDatabaseService);
@@ -117,6 +122,10 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     delete process.env.EDGE_FORWARDER_DISABLED;
+    if (previousEdgeId === undefined) delete process.env.EDGE_ID;
+    else process.env.EDGE_ID = previousEdgeId;
+    if (previousEdgeToken === undefined) delete process.env.EDGE_CLOUD_SYNC_TOKEN;
+    else process.env.EDGE_CLOUD_SYNC_TOKEN = previousEdgeToken;
     await app.close();
   });
 
@@ -242,6 +251,10 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
       .expect(201);
     expect(response.body.status).toBe('PENDING');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: `Bearer ${process.env.EDGE_CLOUD_SYNC_TOKEN}`,
+      'x-edge-id': process.env.EDGE_ID,
+    });
 
     const cache = await database.query<{ event_id: string; device_id: string }>(
       'SELECT event_id,device_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1',
