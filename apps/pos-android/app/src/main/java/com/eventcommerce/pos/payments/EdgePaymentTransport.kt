@@ -10,6 +10,6 @@ data class EdgePaymentState(
 )
 
 interface EdgePaymentTransport {
-  suspend fun initiate(attempt: LocalPaymentAttempt, customerPhone: String): EdgePaymentState
+  suspend fun initiate(attempt: LocalPaymentAttempt, customerPhone: String? = null): EdgePaymentState
   suspend fun reconcile(paymentAttemptId: String): EdgePaymentState
 }
