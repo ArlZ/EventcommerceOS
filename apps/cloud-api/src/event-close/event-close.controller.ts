@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -21,9 +22,13 @@ import {
 type HeadersRecord = Record<string, string | string[] | undefined>;
 
 function revision(value: string): number {
-  if (!/^[1-9][0-9]*$/.test(value)) throw new Error('revision must be a positive integer');
+  if (!/^[1-9][0-9]*$/.test(value)) {
+    throw new BadRequestException('revision must be a positive integer');
+  }
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) throw new Error('revision must be a positive integer');
+  if (!Number.isSafeInteger(parsed)) {
+    throw new BadRequestException('revision must be a positive integer');
+  }
   return parsed;
 }
 
