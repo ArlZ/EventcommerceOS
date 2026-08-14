@@ -109,6 +109,9 @@ export class PaymentService {
         providerRequestId: null,
         providerReceiptReference: null,
       });
+      await this.recordAttemptException(created.attempt.id, 'UNKNOWN_WITHOUT_PROVIDER_REQUEST_ID', {
+        phase: 'provider-initiation-transport',
+      });
       return {
         attempt: await this.snapshot(created.attempt.id),
         idempotentReplay: created.idempotentReplay,
@@ -127,29 +130,78 @@ export class PaymentService {
   }
 
   async reconcileAttempt(attemptId: string, sourceId = `query:${randomUUID()}`): Promise<void> {
-    const current = await this.attempt(attemptId);
-    if (!requiresPaymentReconciliation(current.state)) return;
-    if (!current.provider_request_id || !this.provider.capabilities().queryStatus) return;
+    if (!this.provider.capabilities().queryStatus) return;
+    const claimId = randomUUID();
+    const current = await this.claimReconciliation(attemptId, claimId);
+    if (!current || !current.provider_request_id) return;
 
-    let result: ProviderQueryResult;
     try {
-      result = await this.provider.queryStatus({
-        attemptId,
-        providerRequestId: current.provider_request_id,
-      });
-    } catch {
-      await this.scheduleQueryFailure(attemptId, 'PROVIDER_QUERY_TRANSPORT_ERROR');
-      return;
-    }
+      let result: ProviderQueryResult;
+      try {
+        result = await this.provider.queryStatus({
+          attemptId,
+          providerRequestId: current.provider_request_id,
+        });
+      } catch {
+        await this.scheduleQueryFailure(attemptId, 'PROVIDER_QUERY_TRANSPORT_ERROR');
+        return;
+      }
 
-    await this.applyTransition(attemptId, {
-      target: providerOutcomeToAttemptState(result.outcome),
-      source: 'PROVIDER_QUERY',
-      sourceId,
-      reasonCode: result.reasonCode,
-      providerRequestId: result.providerRequestId,
-      providerReceiptReference: result.providerReceiptReference,
-    });
+      await this.applyTransition(attemptId, {
+        target: providerOutcomeToAttemptState(result.outcome),
+        source: 'PROVIDER_QUERY',
+        sourceId,
+        reasonCode: result.reasonCode,
+        providerRequestId: result.providerRequestId,
+        providerReceiptReference: result.providerReceiptReference,
+      });
+      if (result.outcome === 'UNKNOWN' || result.outcome === 'ACCEPTED_FOR_PROCESSING') {
+        await this.scheduleQueryFailure(
+          attemptId,
+          result.reasonCode ?? (result.outcome === 'UNKNOWN' ? 'PROVIDER_QUERY_UNKNOWN' : 'PROVIDER_STILL_PENDING'),
+        );
+      }
+    } finally {
+      await this.releaseReconciliationClaim(attemptId, claimId);
+    }
+  }
+
+  async dueAttemptIds(limit = 25): Promise<string[]> {
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const rows = await this.database.query<{ attempt_id: string }>(
+      `SELECT s.attempt_id
+       FROM payment_attempt_state s
+       JOIN payment_attempts a ON a.id = s.attempt_id
+       WHERE s.reconciliation_required = true
+         AND a.provider_request_id IS NOT NULL
+         AND (s.next_query_at IS NULL OR s.next_query_at <= clock_timestamp())
+         AND (s.reconciliation_claimed_until IS NULL OR s.reconciliation_claimed_until < clock_timestamp())
+       ORDER BY COALESCE(s.next_query_at, s.updated_at), s.updated_at
+       LIMIT $1`,
+      [boundedLimit],
+    );
+    return rows.map((row) => row.attempt_id);
+  }
+
+  async failStaleUndispatchedAttempts(staleAfterSeconds = 30, limit = 50): Promise<number> {
+    const boundedSeconds = Math.max(5, Math.min(staleAfterSeconds, 300));
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const rows = await this.database.query<{ id: string }>(
+      `SELECT a.id
+       FROM payment_attempts a
+       JOIN payment_attempt_state s ON s.attempt_id = a.id
+       WHERE s.state = 'INITIATED'
+         AND a.dispatch_started_at IS NULL
+         AND a.created_at <= clock_timestamp() - make_interval(secs => $1::double precision)
+       ORDER BY a.created_at
+       LIMIT $2`,
+      [boundedSeconds, boundedLimit],
+    );
+    let changed = 0;
+    for (const row of rows) {
+      if (await this.failUndispatchedAttempt(row.id)) changed += 1;
+    }
+    return changed;
   }
 
   private async createOrFindAttempt(input: InitiatePaymentRequest): Promise<CreateAttemptResult> {
@@ -159,7 +211,10 @@ export class PaymentService {
       ]);
 
       const existing = await this.attemptByIdempotency(client, input.idempotencyKey);
-      if (existing) return { attempt: existing, idempotentReplay: true };
+      if (existing) {
+        this.assertIdempotentReplay(existing, input);
+        return { attempt: existing, idempotentReplay: true };
+      }
 
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `payment:${input.paymentId}`,
@@ -218,6 +273,20 @@ export class PaymentService {
     });
   }
 
+  private assertIdempotentReplay(existing: AttemptRow, input: InitiatePaymentRequest): void {
+    if (
+      existing.payment_id !== input.paymentId ||
+      existing.client_attempt_id !== input.clientAttemptId ||
+      existing.provider !== input.provider ||
+      existing.amount_minor !== input.amountMinor.toString() ||
+      existing.currency !== input.currency ||
+      existing.event_id !== input.eventId ||
+      existing.order_id !== input.orderId
+    ) {
+      throw new ConflictException('idempotency key was reused with different payment content');
+    }
+  }
+
   private async ensurePayment(client: PoolClient, input: InitiatePaymentRequest): Promise<void> {
     const existing = await client.query<PaymentRow>('SELECT * FROM payments WHERE id = $1', [
       input.paymentId,
@@ -246,7 +315,7 @@ export class PaymentService {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `payment-dispatch:${attemptId}`,
       ]);
-      const row = await this.attemptWithClient(client, attemptId);
+      const row = await this.attemptWithClient(client, attemptId, true);
       if (row.dispatch_started_at !== null || row.state !== 'INITIATED') return false;
       const updated = await client.query(
         `UPDATE payment_attempts SET dispatch_started_at = clock_timestamp()
@@ -262,6 +331,20 @@ export class PaymentService {
     attemptId: string,
     result: ProviderInitiationResult,
   ): Promise<void> {
+    if (result.outcome === 'ACCEPTED_FOR_PROCESSING' && !result.providerRequestId) {
+      await this.applyTransition(attemptId, {
+        target: 'UNKNOWN',
+        source: 'PROVIDER_INITIATION',
+        sourceId: `missing-request-id:${attemptId}`,
+        reasonCode: 'PROVIDER_REQUEST_ID_MISSING',
+        providerRequestId: null,
+        providerReceiptReference: null,
+      });
+      await this.recordAttemptException(attemptId, 'UNKNOWN_WITHOUT_PROVIDER_REQUEST_ID', {
+        phase: 'provider-initiation-response',
+      });
+      return;
+    }
     await this.applyTransition(attemptId, {
       target: providerOutcomeToAttemptState(result.outcome),
       source: 'PROVIDER_INITIATION',
@@ -284,6 +367,7 @@ export class PaymentService {
     },
   ): Promise<void> {
     await this.database.transaction(async (client) => {
+      const attempt = await this.attemptWithClient(client, attemptId, true);
       const duplicate = await client.query(
         `SELECT 1 FROM payment_attempt_transitions
          WHERE attempt_id = $1 AND source = $2 AND source_id = $3`,
@@ -291,7 +375,6 @@ export class PaymentService {
       );
       if (duplicate.rowCount === 1) return;
 
-      const attempt = await this.attemptWithClient(client, attemptId, true);
       try {
         requirePaymentAttemptTransition(attempt.state, input.target);
       } catch {
@@ -318,33 +401,70 @@ export class PaymentService {
           );
           return;
         }
+        const owner = await client.query<{ id: string }>(
+          `SELECT id FROM payment_attempts
+           WHERE provider = $1 AND provider_request_id = $2 AND id <> $3`,
+          [attempt.provider, input.providerRequestId, attemptId],
+        );
+        if (owner.rowCount !== 0) {
+          await this.exception(client, attemptId, attempt.provider, 'PROVIDER_REQUEST_ID_REUSED', {
+            providerRequestId: input.providerRequestId,
+            existingAttemptId: owner.rows[0]!.id,
+          });
+          return;
+        }
         await client.query(`UPDATE payment_attempts SET provider_request_id = $2 WHERE id = $1`, [
           attemptId,
           input.providerRequestId,
         ]);
       }
-      if (input.providerReceiptReference && attempt.provider_receipt_reference === null) {
-        await client.query(
-          `UPDATE payment_attempts SET provider_receipt_reference = $2 WHERE id = $1`,
-          [attemptId, input.providerReceiptReference],
-        );
+
+      if (input.providerReceiptReference) {
+        if (
+          attempt.provider_receipt_reference !== null &&
+          attempt.provider_receipt_reference !== input.providerReceiptReference
+        ) {
+          await this.exception(client, attemptId, attempt.provider, 'PROVIDER_RECEIPT_CONFLICT', {
+            currentReceiptReference: attempt.provider_receipt_reference,
+            observedReceiptReference: input.providerReceiptReference,
+          });
+          return;
+        }
+        if (attempt.provider_receipt_reference === null) {
+          const owner = await client.query<{ id: string }>(
+            `SELECT id FROM payment_attempts
+             WHERE provider = $1 AND provider_receipt_reference = $2 AND id <> $3`,
+            [attempt.provider, input.providerReceiptReference, attemptId],
+          );
+          if (owner.rowCount !== 0) {
+            await this.exception(client, attemptId, attempt.provider, 'PROVIDER_RECEIPT_REUSED', {
+              providerReceiptReference: input.providerReceiptReference,
+              existingAttemptId: owner.rows[0]!.id,
+            });
+            return;
+          }
+          await client.query(
+            `UPDATE payment_attempts SET provider_receipt_reference = $2 WHERE id = $1`,
+            [attemptId, input.providerReceiptReference],
+          );
+        }
       }
 
       const reconciliationRequired = requiresPaymentReconciliation(input.target);
-      const nextQueryAt =
-        reconciliationRequired && (input.providerRequestId ?? attempt.provider_request_id)
-          ? new Date(Date.now() + 5_000).toISOString()
-          : null;
+      const hasProviderRequest = Boolean(input.providerRequestId ?? attempt.provider_request_id);
       await client.query(
         `UPDATE payment_attempt_state SET
            state = $2,
            reconciliation_required = $3,
-           next_query_at = $4,
+           next_query_at = CASE
+             WHEN $3 AND $4 THEN clock_timestamp() + interval '5 seconds'
+             ELSE NULL
+           END,
            last_provider_error_code = $5,
            terminal_at = CASE WHEN $3 THEN NULL ELSE COALESCE(terminal_at, clock_timestamp()) END,
            updated_at = clock_timestamp()
          WHERE attempt_id = $1`,
-        [attemptId, input.target, reconciliationRequired, nextQueryAt, input.reasonCode],
+        [attemptId, input.target, reconciliationRequired, hasProviderRequest, input.reasonCode],
       );
       await client.query(
         `INSERT INTO payment_attempt_transitions(
@@ -363,6 +483,39 @@ export class PaymentService {
     });
   }
 
+  private async claimReconciliation(attemptId: string, claimId: string): Promise<AttemptRow | null> {
+    const claimed = await this.database.transaction(async (client) => {
+      const result = await client.query<{ attempt_id: string }>(
+        `UPDATE payment_attempt_state s SET
+           reconciliation_claimed_until = clock_timestamp() + interval '30 seconds',
+           reconciliation_claimed_by = $2,
+           updated_at = clock_timestamp()
+         FROM payment_attempts a
+         WHERE s.attempt_id = $1
+           AND a.id = s.attempt_id
+           AND s.reconciliation_required = true
+           AND a.provider_request_id IS NOT NULL
+           AND (s.reconciliation_claimed_until IS NULL OR s.reconciliation_claimed_until < clock_timestamp())
+         RETURNING s.attempt_id`,
+        [attemptId, claimId],
+      );
+      if (result.rowCount !== 1) return null;
+      return this.attemptWithClient(client, attemptId);
+    });
+    return claimed;
+  }
+
+  private async releaseReconciliationClaim(attemptId: string, claimId: string): Promise<void> {
+    await this.database.query(
+      `UPDATE payment_attempt_state SET
+         reconciliation_claimed_until = NULL,
+         reconciliation_claimed_by = NULL,
+         updated_at = clock_timestamp()
+       WHERE attempt_id = $1 AND reconciliation_claimed_by = $2`,
+      [attemptId, claimId],
+    );
+  }
+
   private async scheduleQueryFailure(attemptId: string, reasonCode: string): Promise<void> {
     await this.database.query(
       `UPDATE payment_attempt_state SET
@@ -373,6 +526,30 @@ export class PaymentService {
        WHERE attempt_id = $1 AND reconciliation_required = true`,
       [attemptId, reasonCode],
     );
+  }
+
+  private async failUndispatchedAttempt(attemptId: string): Promise<boolean> {
+    return this.database.transaction(async (client) => {
+      const attempt = await this.attemptWithClient(client, attemptId, true);
+      if (attempt.state !== 'INITIATED' || attempt.dispatch_started_at !== null) return false;
+      await client.query(
+        `UPDATE payment_attempt_state SET
+           state = 'FAILED', reconciliation_required = false, next_query_at = NULL,
+           reconciliation_claimed_until = NULL, reconciliation_claimed_by = NULL,
+           last_provider_error_code = 'LOCAL_DISPATCH_NEVER_STARTED',
+           terminal_at = clock_timestamp(), updated_at = clock_timestamp()
+         WHERE attempt_id = $1`,
+        [attemptId],
+      );
+      await client.query(
+        `INSERT INTO payment_attempt_transitions(
+           id, attempt_id, from_state, to_state, source, source_id, reason_code, occurred_at
+         ) VALUES ($1,$2,'INITIATED','FAILED','SYSTEM',$3,'LOCAL_DISPATCH_NEVER_STARTED',clock_timestamp())
+         ON CONFLICT (attempt_id, source, source_id) DO NOTHING`,
+        [randomUUID(), attemptId, `undispatched-timeout:${attemptId}`],
+      );
+      return true;
+    });
   }
 
   private async attempt(attemptId: string): Promise<AttemptRow> {
@@ -398,7 +575,7 @@ export class PaymentService {
     idempotencyKey: string,
   ): Promise<AttemptRow | null> {
     const result = await client.query<AttemptRow>(
-      `${this.attemptSql(false).replace('WHERE a.id = $1', 'WHERE a.initiation_idempotency_key = $1')}`,
+      this.attemptSql(false).replace('WHERE a.id = $1', 'WHERE a.initiation_idempotency_key = $1'),
       [idempotencyKey],
     );
     return result.rows[0] ?? null;
@@ -439,6 +616,17 @@ export class PaymentService {
       updatedAt: row.updated_at.toISOString(),
       reconciliationRequired: row.reconciliation_required,
     };
+  }
+
+  private async recordAttemptException(
+    attemptId: string,
+    type: string,
+    details: Record<string, unknown>,
+  ): Promise<void> {
+    const attempt = await this.attempt(attemptId);
+    await this.database.transaction((client) =>
+      this.exception(client, attemptId, attempt.provider, type, details),
+    );
   }
 
   private async exception(
