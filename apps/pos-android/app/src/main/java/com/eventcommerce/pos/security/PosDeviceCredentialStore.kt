@@ -33,7 +33,7 @@ class KeystorePosDeviceCredentialStore(context: Context) : PosDeviceCredentialSt
   override fun read(): String? {
     val encodedCiphertext = preferences.getString(CIPHERTEXT_KEY, null) ?: return null
     val encodedIv = preferences.getString(IV_KEY, null) ?: return null
-    return runCatching {
+    return try {
       val cipher = Cipher.getInstance(TRANSFORMATION)
       cipher.init(
         Cipher.DECRYPT_MODE,
@@ -41,7 +41,7 @@ class KeystorePosDeviceCredentialStore(context: Context) : PosDeviceCredentialSt
         GCMParameterSpec(128, Base64.decode(encodedIv, Base64.NO_WRAP)),
       )
       cipher.doFinal(Base64.decode(encodedCiphertext, Base64.NO_WRAP)).toString(Charsets.UTF_8)
-    }.getOrElse {
+    } catch (_: Exception) {
       // A restored/copied app database or invalidated Keystore key must require explicit reprovisioning.
       clear()
       null
