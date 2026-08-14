@@ -172,7 +172,10 @@ export class ManualTerminalService {
 
   async history(paymentId: string): Promise<ExternalTerminalConfirmationView[]> {
     const rows = await this.db.query<ConfirmationRow>(
-      `${this.selectConfirmation()} c
+      `SELECT c.id,c.payment_attempt_id,c.event_id,c.order_id,c.external_provider_id,
+              c.external_reference,c.amount_minor::text,c.currency,c.outcome,c.actor_id,c.reason,
+              c.idempotency_key,c.created_at
+       FROM payment_manual_terminal_confirmations c
        JOIN payment_attempts pa ON pa.id=c.payment_attempt_id
        WHERE pa.payment_id=$1
        ORDER BY c.created_at`,
