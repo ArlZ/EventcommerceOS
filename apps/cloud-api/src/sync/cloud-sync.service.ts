@@ -16,6 +16,26 @@ interface OrderStateRow extends QueryResultRow {
   device_id: string;
   last_sequence: string;
   state: string;
+  event_id: string;
+  sales_location_id: string | null;
+}
+
+interface OrderLineProjection {
+  skuId: string;
+  quantity: number;
+  unitPriceMinor: number;
+  menuItemId?: string;
+}
+
+interface OrderProjectionPayload {
+  state: string;
+  totalMinor: number;
+  currency: string;
+  eventId: string;
+  salesLocationId: string | null;
+  lines: OrderLineProjection[];
+  linesProvided: boolean;
+  occurredAt: string;
 }
 
 @Injectable()
@@ -164,7 +184,7 @@ export class CloudSyncService {
     client: PoolClient,
     event: SyncEventEnvelope,
   ): Promise<'ACCEPTED' | 'CONFLICT'> {
-    let payload: { state: string; totalMinor: number; currency: string };
+    let payload: OrderProjectionPayload;
     try {
       payload = this.orderPayload(event);
     } catch (error) {
@@ -175,15 +195,17 @@ export class CloudSyncService {
     }
 
     const current = await client.query<OrderStateRow>(
-      `SELECT device_id, last_sequence::text, state
+      `SELECT device_id, last_sequence::text, state, event_id, sales_location_id
        FROM sync_order_state WHERE order_id = $1 FOR UPDATE`,
       [event.aggregateId],
     );
 
     if (current.rowCount === 0) {
       await client.query(
-        `INSERT INTO sync_order_state(order_id, device_id, last_sequence, state, total_minor, currency)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+        `INSERT INTO sync_order_state(
+           order_id, device_id, last_sequence, state, total_minor, currency,
+           event_id, sales_location_id, lines, occurred_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
         [
           event.aggregateId,
           event.deviceId,
@@ -191,6 +213,10 @@ export class CloudSyncService {
           payload.state,
           payload.totalMinor,
           payload.currency,
+          payload.eventId,
+          payload.salesLocationId,
+          JSON.stringify(payload.lines),
+          payload.occurredAt,
         ],
       );
       return 'ACCEPTED';
@@ -206,6 +232,24 @@ export class CloudSyncService {
 
     const lastSequence = Number.parseInt(existing.last_sequence, 10);
     if (event.sequence <= lastSequence) return 'ACCEPTED';
+    if (existing.event_id !== payload.eventId) {
+      await this.exception(client, 'ORDER_EVENT_CONFLICT', event, {
+        existingEventId: existing.event_id,
+        incomingEventId: payload.eventId,
+      });
+      return 'CONFLICT';
+    }
+    if (
+      existing.sales_location_id !== null &&
+      payload.salesLocationId !== null &&
+      existing.sales_location_id !== payload.salesLocationId
+    ) {
+      await this.exception(client, 'ORDER_LOCATION_CONFLICT', event, {
+        existingSalesLocationId: existing.sales_location_id,
+        incomingSalesLocationId: payload.salesLocationId,
+      });
+      return 'CONFLICT';
+    }
     if (!this.safeOrderAdvance(existing.state, payload.state)) {
       await this.exception(client, 'ORDER_STATE_REGRESSION', event, {
         currentState: existing.state,
@@ -217,31 +261,115 @@ export class CloudSyncService {
 
     await client.query(
       `UPDATE sync_order_state
-       SET last_sequence = $2, state = $3, total_minor = $4, currency = $5, updated_at = now()
+       SET last_sequence = $2,
+           state = $3,
+           total_minor = $4,
+           currency = $5,
+           event_id = $6,
+           sales_location_id = COALESCE($7, sales_location_id),
+           lines = CASE WHEN $9 THEN $8::jsonb ELSE lines END,
+           occurred_at = $10,
+           updated_at = now()
        WHERE order_id = $1`,
-      [event.aggregateId, event.sequence, payload.state, payload.totalMinor, payload.currency],
+      [
+        event.aggregateId,
+        event.sequence,
+        payload.state,
+        payload.totalMinor,
+        payload.currency,
+        payload.eventId,
+        payload.salesLocationId,
+        JSON.stringify(payload.lines),
+        payload.linesProvided,
+        payload.occurredAt,
+      ],
     );
     return 'ACCEPTED';
   }
 
-  private orderPayload(event: SyncEventEnvelope): {
-    state: string;
-    totalMinor: number;
-    currency: string;
-  } {
+  private orderPayload(event: SyncEventEnvelope): OrderProjectionPayload {
     const state = event.payload.state;
     const totalMinor = event.payload.totalMinor;
     const currency = event.payload.currency;
-    if (typeof state !== 'string' || !['OPEN', 'CLOSED'].includes(state))
+    if (typeof state !== 'string' || !['OPEN', 'CLOSED'].includes(state)) {
       throw new Error('unsupported synced order state');
-    if (!Number.isSafeInteger(totalMinor) || (totalMinor as number) < 0)
+    }
+    if (!Number.isSafeInteger(totalMinor) || (totalMinor as number) < 0) {
       throw new Error('synced totalMinor must be a non-negative safe integer');
-    if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency))
+    }
+    if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) {
       throw new Error('synced currency is invalid');
-    const payloadOrderId = event.payload.orderId;
-    if (payloadOrderId !== event.aggregateId)
+    }
+    if (event.payload.orderId !== event.aggregateId) {
       throw new Error('payload orderId must equal aggregateId');
-    return { state, totalMinor: totalMinor as number, currency };
+    }
+
+    const eventIdValue = event.payload.eventId;
+    const businessEventId =
+      typeof eventIdValue === 'string' && eventIdValue.trim()
+        ? eventIdValue.trim()
+        : `legacy:${event.deviceId}`;
+    const salesLocationValue = event.payload.salesLocationId;
+    if (
+      salesLocationValue !== undefined &&
+      salesLocationValue !== null &&
+      (typeof salesLocationValue !== 'string' || !salesLocationValue.trim())
+    ) {
+      throw new Error('synced salesLocationId must be a non-empty string when provided');
+    }
+    const salesLocationId =
+      typeof salesLocationValue === 'string' ? salesLocationValue.trim() : null;
+
+    const rawLines = event.payload.lines;
+    const linesProvided = rawLines !== undefined;
+    const lines: OrderLineProjection[] = [];
+    if (linesProvided) {
+      if (!Array.isArray(rawLines)) throw new Error('synced lines must be an array');
+      rawLines.forEach((line, index) => {
+        if (!line || typeof line !== 'object' || Array.isArray(line)) {
+          throw new Error(`synced lines[${index}] must be an object`);
+        }
+        const record = line as Record<string, unknown>;
+        const skuId = record.skuId;
+        const quantity = record.quantity;
+        const unitPriceMinor = record.unitPriceMinor;
+        const menuItemId = record.menuItemId;
+        if (typeof skuId !== 'string' || !skuId.trim()) {
+          throw new Error(`synced lines[${index}].skuId must be non-empty`);
+        }
+        if (!Number.isSafeInteger(quantity) || (quantity as number) <= 0) {
+          throw new Error(`synced lines[${index}].quantity must be a positive safe integer`);
+        }
+        if (!Number.isSafeInteger(unitPriceMinor) || (unitPriceMinor as number) < 0) {
+          throw new Error(
+            `synced lines[${index}].unitPriceMinor must be a non-negative safe integer`,
+          );
+        }
+        if (
+          menuItemId !== undefined &&
+          (typeof menuItemId !== 'string' || !menuItemId.trim())
+        ) {
+          throw new Error(`synced lines[${index}].menuItemId must be non-empty when provided`);
+        }
+        lines.push({
+          skuId: skuId.trim(),
+          quantity: quantity as number,
+          unitPriceMinor: unitPriceMinor as number,
+          ...(typeof menuItemId === 'string' ? { menuItemId: menuItemId.trim() } : {}),
+        });
+      });
+    }
+
+    return {
+      state,
+      totalMinor: totalMinor as number,
+      currency,
+      eventId: businessEventId,
+      salesLocationId,
+      lines,
+      linesProvided,
+      occurredAt: event.occurredAt,
+    };
   }
 
   private safeOrderAdvance(current: string, incoming: string): boolean {
