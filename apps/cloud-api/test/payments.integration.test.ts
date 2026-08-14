@@ -250,11 +250,15 @@ describeIntegration('Cloud payment orchestration', () => {
     expect(jobs[0]?.next_attempt_at.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it('rejects reuse of an idempotency key for a different amount', async () => {
+  it('rejects reuse of an idempotency key for a different request', async () => {
     await payments.initiate(request());
 
     await expect(
-      payments.initiate({ ...request(), amountMinor: 16000, paymentAttemptId: 'attempt-2' }),
+      payments.initiate({
+        ...request(),
+        paymentAttemptId: 'attempt-2',
+        accountReference: 'ORDER-DIFFERENT',
+      }),
     ).rejects.toThrow('Idempotency key was reused for a different payment request');
     expect(provider.initiations).toBe(1);
   });
