@@ -102,8 +102,7 @@ export class MpesaProvider implements PaymentProvider {
     }
 
     const config = this.config();
-    const now = new Date();
-    const requestTimestamp = timestamp(now);
+    const requestTimestamp = timestamp(new Date());
     const password = btoa(`${config.businessShortCode}${config.passkey}${requestTimestamp}`);
 
     try {
@@ -214,7 +213,7 @@ export class MpesaProvider implements PaymentProvider {
     const amount = callbackMetadataValue(metadataItems, 'Amount');
     const receipt = callbackMetadataValue(metadataItems, 'MpesaReceiptNumber');
 
-    const rawEventKey = `${String(merchantRequestId ?? '')}:${checkoutRequestId}:${resultCode}:${String(
+    const providerEventKey = `${String(merchantRequestId ?? '')}:${checkoutRequestId}:${resultCode}:${String(
       receipt ?? '',
     )}`;
 
@@ -223,21 +222,19 @@ export class MpesaProvider implements PaymentProvider {
         throw new Error('Successful M-PESA callback missing valid Amount');
       }
       return {
-        providerEventKey: rawEventKey,
+        providerEventKey,
         providerReference: checkoutRequestId,
         status: 'SUCCEEDED',
         amountMinor: Math.round(amount * 100),
         currency: 'KES',
-        raw: root,
       };
     }
 
     return {
-      providerEventKey: rawEventKey,
+      providerEventKey,
       providerReference: checkoutRequestId,
       status: 'FAILED',
       failureCode: String(resultCode),
-      raw: root,
     };
   }
 
@@ -290,11 +287,7 @@ export class MpesaProvider implements PaymentProvider {
       signal: AbortSignal.timeout(timeoutMs),
     });
     const parsed = (await response.json()) as T;
-    if (!response.ok) {
-      const error = new Error(`M-PESA request failed: ${response.status}`);
-      Object.assign(error, { providerBody: parsed });
-      throw error;
-    }
+    if (!response.ok) throw new Error(`M-PESA request failed: ${response.status}`);
     return parsed;
   }
 }
