@@ -8,8 +8,10 @@ class LocalDeviceState(
 ) {
   private val metadata = db.localMetadata()
 
+  suspend fun existingId(): String? = metadata.find(ID_KEY)?.value
+
   suspend fun id(): String {
-    metadata.find(ID_KEY)?.value?.let { return it }
+    existingId()?.let { return it }
     val created = idFactory()
     metadata.put(LocalMetadataEntity(ID_KEY, created))
     return created

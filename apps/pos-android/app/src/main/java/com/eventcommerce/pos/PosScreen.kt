@@ -186,7 +186,7 @@ fun PosScreen(repository: LocalPosRepository) {
             Text("${closed.id.take(8)} • ${formatMinor(closed.totalMinor, closed.currency)} • CLOSED")
           }
         }
-        Text("Durable outbox events awaiting Task 004 sync: $outboxCount")
+        Text("Durable local outbox events retained: $outboxCount")
       }
     }
   }
