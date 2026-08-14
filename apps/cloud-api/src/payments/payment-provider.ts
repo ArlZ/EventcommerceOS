@@ -53,6 +53,13 @@ export interface ProviderWebhookObservation {
   sanitizedDetails: Readonly<Record<string, string | number | boolean | null>>;
 }
 
+export class InvalidProviderPayloadError extends Error {
+  constructor(message = 'invalid payment provider payload') {
+    super(message);
+    this.name = 'InvalidProviderPayloadError';
+  }
+}
+
 export interface PaymentProvider {
   readonly code: string;
   capabilities(): PaymentProviderCapabilities;
