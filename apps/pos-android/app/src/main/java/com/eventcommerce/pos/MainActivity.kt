@@ -5,6 +5,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.eventcommerce.pos.data.AppDatabase
@@ -15,6 +18,8 @@ import com.eventcommerce.pos.data.SyncQueueStore
 import com.eventcommerce.pos.sync.DeviceSyncCoordinator
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
+import com.eventcommerce.pos.sync.HttpsPaymentEdgeTransport
+import com.eventcommerce.pos.sync.PosPaymentCoordinator
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -23,6 +28,7 @@ class MainActivity : ComponentActivity() {
   private val syncState by lazy { DeviceSyncStateStore(database) }
   private val syncProvisioning by lazy { DeviceSyncProvisioningStore(database) }
   private val syncQueue by lazy { SyncQueueStore(database) }
+  private var paymentCoordinator by mutableStateOf<PosPaymentCoordinator?>(null)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -32,12 +38,15 @@ class MainActivity : ComponentActivity() {
         DeviceSyncCoordinator(
           DeviceSyncEngine(database, HttpsDeviceEdgeTransport(endpoint), syncState),
         ).run()
+        val coordinator = PosPaymentCoordinator(repository, HttpsPaymentEdgeTransport(endpoint))
+        paymentCoordinator = coordinator
+        runCatching { coordinator.refreshUnresolved() }
       }
     }
     setContent {
       Column(modifier = Modifier.fillMaxSize()) {
         SyncStatusLine(syncQueue, syncState, syncProvisioning)
-        PosScreen(repository)
+        PosScreen(repository, paymentCoordinator)
       }
     }
   }
