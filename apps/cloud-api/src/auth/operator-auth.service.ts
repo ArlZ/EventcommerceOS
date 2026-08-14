@@ -5,7 +5,16 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  randomUUID,
+  sign as signBytes,
+  timingSafeEqual,
+  verify as verifyBytes,
+  type KeyObject,
+} from 'node:crypto';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
 
@@ -45,8 +54,15 @@ interface OperatorRow extends QueryResultRow {
   status: 'ACTIVE' | 'REVOKED';
 }
 
+interface SessionVersionRow extends QueryResultRow {
+  session_version: number;
+  role: OperatorRole;
+  organisation_id: string | null;
+  credential_version: number;
+}
+
 interface TokenHeader {
-  alg: 'HS256';
+  alg: 'EdDSA';
   typ: 'JWT';
 }
 
@@ -85,12 +101,6 @@ function decodeJson(value: string): unknown {
   }
 }
 
-function safeEqualText(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left, 'utf8');
-  const rightBytes = Buffer.from(right, 'utf8');
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
-}
-
 function isRole(value: unknown): value is OperatorRole {
   return (
     value === 'OPERATOR' ||
@@ -118,7 +128,11 @@ export class OperatorAuthService {
 
   async createSession(actorId: string, credential: string): Promise<OperatorSessionView> {
     const normalizedActorId = actorId.trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedActorId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        normalizedActorId,
+      )
+    ) {
       throw new BadRequestException('actorId must be a UUID');
     }
     if (credential.length < 32 || credential.length > 512) {
@@ -181,29 +195,7 @@ export class OperatorAuthService {
   }
 
   async authenticateToken(token: string): Promise<OperatorIdentity> {
-    const parts = token.split('.');
-    if (parts.length !== 3) throw new UnauthorizedException('Operator access token is malformed');
-    const [encodedHeader, encodedClaims, signature] = parts as [string, string, string];
-    const expectedSignature = this.signature(`${encodedHeader}.${encodedClaims}`);
-    if (!safeEqualText(signature, expectedSignature)) {
-      throw new UnauthorizedException('Operator access token signature is invalid');
-    }
-
-    const header = decodeJson(encodedHeader);
-    const claims = decodeJson(encodedClaims);
-    if (!header || typeof header !== 'object' || Array.isArray(header)) {
-      throw new UnauthorizedException('Operator access token header is invalid');
-    }
-    const headerRecord = header as Record<string, unknown>;
-    if (headerRecord.alg !== 'HS256' || headerRecord.typ !== 'JWT') {
-      throw new UnauthorizedException('Operator access token algorithm is invalid');
-    }
-    const parsed = this.parseClaims(claims);
-    const now = Math.floor(Date.now() / 1000);
-    if (parsed.exp <= now || parsed.iat > now + 30 || parsed.exp - parsed.iat > 3600) {
-      throw new UnauthorizedException('Operator access token is expired or has invalid lifetime');
-    }
-
+    const parsed = this.verifyToken(token);
     const rows = await this.db.query<OperatorRow>(
       `SELECT actor_id::text,organisation_id::text,role,credential_sha256,
               credential_version,session_version,status
@@ -278,7 +270,7 @@ export class OperatorAuthService {
 
   async revokeOwnSessions(identity: OperatorIdentity): Promise<{ sessionVersion: number }> {
     return this.db.transaction(async (client) => {
-      const updated = await client.query<{ session_version: number; role: OperatorRole; organisation_id: string | null; credential_version: number }>(
+      const updated = await client.query<SessionVersionRow>(
         `UPDATE operator_accounts
          SET session_version=session_version+1,updated_at=now()
          WHERE actor_id=$1 AND session_version=$2 AND status='ACTIVE'
@@ -305,27 +297,68 @@ export class OperatorAuthService {
   }
 
   private sign(claims: TokenClaims): string {
-    const header: TokenHeader = { alg: 'HS256', typ: 'JWT' };
+    const header: TokenHeader = { alg: 'EdDSA', typ: 'JWT' };
     const encodedHeader = jsonPart(header);
     const encodedClaims = jsonPart(claims);
     const body = `${encodedHeader}.${encodedClaims}`;
-    return `${body}.${this.signature(body)}`;
+    const signature = signBytes(null, Buffer.from(body, 'utf8'), this.privateKey()).toString(
+      'base64url',
+    );
+    return `${body}.${signature}`;
   }
 
-  private signature(body: string): string {
-    return createHmac('sha256', this.signingKey()).update(body, 'utf8').digest('base64url');
+  private verifyToken(token: string): TokenClaims {
+    const parts = token.split('.');
+    if (parts.length !== 3) throw new UnauthorizedException('Operator access token is malformed');
+    const [encodedHeader, encodedClaims, signature] = parts as [string, string, string];
+    const header = decodeJson(encodedHeader);
+    if (!header || typeof header !== 'object' || Array.isArray(header)) {
+      throw new UnauthorizedException('Operator access token header is invalid');
+    }
+    const headerRecord = header as Record<string, unknown>;
+    if (headerRecord.alg !== 'EdDSA' || headerRecord.typ !== 'JWT') {
+      throw new UnauthorizedException('Operator access token algorithm is invalid');
+    }
+
+    let verified = false;
+    try {
+      verified = verifyBytes(
+        null,
+        Buffer.from(`${encodedHeader}.${encodedClaims}`, 'utf8'),
+        this.publicKey(),
+        Buffer.from(signature, 'base64url'),
+      );
+    } catch {
+      verified = false;
+    }
+    if (!verified) throw new UnauthorizedException('Operator access token signature is invalid');
+
+    const parsed = this.parseClaims(decodeJson(encodedClaims));
+    const now = Math.floor(Date.now() / 1000);
+    if (parsed.exp <= now || parsed.iat > now + 30 || parsed.exp - parsed.iat > 3600) {
+      throw new UnauthorizedException('Operator access token is expired or has invalid lifetime');
+    }
+    return parsed;
   }
 
-  private signingKey(): Buffer {
-    const encoded = process.env.OPERATOR_TOKEN_SIGNING_KEY?.trim();
-    if (!encoded || !/^[A-Za-z0-9_-]{43,}$/.test(encoded)) {
-      throw new Error('OPERATOR_TOKEN_SIGNING_KEY must be base64url encoded with at least 256 bits');
+  private privateKey(): KeyObject {
+    const encoded = process.env.OPERATOR_TOKEN_SIGNING_PRIVATE_KEY?.trim();
+    if (!encoded) {
+      throw new Error('OPERATOR_TOKEN_SIGNING_PRIVATE_KEY is required');
     }
-    const key = Buffer.from(encoded, 'base64url');
-    if (key.length < 32) {
-      throw new Error('OPERATOR_TOKEN_SIGNING_KEY must contain at least 256 bits');
+    try {
+      return createPrivateKey({
+        key: Buffer.from(encoded, 'base64url'),
+        format: 'der',
+        type: 'pkcs8',
+      });
+    } catch {
+      throw new Error('OPERATOR_TOKEN_SIGNING_PRIVATE_KEY must be a base64url Ed25519 PKCS8 key');
     }
-    return key;
+  }
+
+  private publicKey(): KeyObject {
+    return createPublicKey(this.privateKey());
   }
 
   private ttlSeconds(): number {
