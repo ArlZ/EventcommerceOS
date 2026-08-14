@@ -130,6 +130,22 @@ export class EdgeCloudAuthService {
     await this.assertEventsBelongToOrganisation(identity, batch.events);
   }
 
+  async attributeInventoryBatch(
+    identity: EdgeCloudIdentity,
+    batch: InventoryEdgeBatch,
+  ): Promise<void> {
+    const ids = batch.events.map((event) => event.id);
+    if (ids.length === 0) return;
+    await this.database.query(
+      `UPDATE inventory_edge_events
+       SET edge_id=$1,organisation_id=$2
+       WHERE id = ANY($3::text[])
+         AND edge_id IS NULL
+         AND organisation_id IS NULL`,
+      [identity.edgeId, identity.organisationId, ids],
+    );
+  }
+
   private assertEdgeId(identity: EdgeCloudIdentity, bodyEdgeId: string): void {
     if (bodyEdgeId !== identity.edgeId) {
       throw new UnauthorizedException('Batch edgeId does not match authenticated Event Edge');
