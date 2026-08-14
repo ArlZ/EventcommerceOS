@@ -11,17 +11,18 @@ import {
   paymentAttemptIsTerminal,
   type PaymentAttemptState,
 } from '@event-commerce/domain';
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
 import {
   PAYMENT_PROVIDERS,
   type PaymentProvider,
   type ProviderInitiationResult,
   type ProviderStatusResult,
+  type ProviderTruthState,
   type VerifiedProviderCallback,
 } from './payment-provider';
 
-interface AttemptRow {
+interface AttemptRow extends QueryResultRow {
   id: string;
   payment_id: string;
   event_id: string;
@@ -38,7 +39,7 @@ interface AttemptRow {
   updated_at: Date | string;
 }
 
-interface PaymentRow {
+interface PaymentRow extends QueryResultRow {
   id: string;
   event_id: string;
   order_id: string;
@@ -46,7 +47,7 @@ interface PaymentRow {
   currency: string;
 }
 
-interface ReconciliationJobRow {
+interface ReconciliationJobRow extends QueryResultRow {
   payment_attempt_id: string;
   attempt_count: number;
 }
@@ -115,16 +116,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
   async initiate(request: InitiatePaymentRequest): Promise<PaymentAttemptView> {
     const fingerprint = requestFingerprint(request);
-    const claim = await this.db.transaction(async (client) => {
+    const ownsInitiation = await this.db.transaction(async (client) => {
       await client.query(
-        `INSERT INTO payments(id, event_id, order_id, amount_minor, currency)
+        `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
          VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (id) DO NOTHING`,
         [request.paymentId, request.eventId, request.orderId, request.amountMinor, request.currency],
       );
 
       const payment = await client.query<PaymentRow>(
-        `SELECT id, event_id, order_id, amount_minor, currency FROM payments WHERE id=$1 FOR UPDATE`,
+        `SELECT id,event_id,order_id,amount_minor::text,currency
+         FROM payments WHERE id=$1 FOR UPDATE`,
         [request.paymentId],
       );
       const existingPayment = payment.rows[0];
@@ -152,10 +154,13 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           fingerprint,
         ],
       );
+      if (inserted.rows.length === 1) return true;
 
-      if (inserted.rows.length === 1) return { owner: true as const };
-
-      const existing = await this.loadAttemptByIdempotency(client, request.idempotencyKey, true);
+      const existing = await this.loadAttemptByIdempotencyClient(
+        client,
+        request.idempotencyKey,
+        true,
+      );
       if (!existing) throw new Error('Idempotency conflict without existing payment attempt');
       if (existing.request_fingerprint !== fingerprint) {
         throw new Error('Idempotency key was reused for a different payment request');
@@ -164,17 +169,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       if (existing.status === 'CREATED') {
         await client.query(
           `UPDATE payment_attempts
-           SET status='UNKNOWN', failure_code='AMBIGUOUS_INITIATION_RETRY', updated_at=now()
+           SET status='UNKNOWN',failure_code='AMBIGUOUS_INITIATION_RETRY',updated_at=now()
            WHERE id=$1 AND status='CREATED'`,
           [existing.id],
         );
         await this.upsertReconciliationJob(client, existing.id, 'MANUAL_REVIEW');
       }
-      return { owner: false as const };
+      return false;
     });
 
-    if (!claim.owner) {
-      const replay = await this.loadAttemptByIdempotency(this.db, request.idempotencyKey, false);
+    if (!ownsInitiation) {
+      const replay = await this.loadAttemptByIdempotency(request.idempotencyKey);
       if (!replay) throw new Error('Payment attempt disappeared after idempotent replay');
       return attemptView(replay);
     }
@@ -195,7 +200,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.applyInitiationResult(request.paymentAttemptId, result);
-    const saved = await this.loadAttemptById(this.db, request.paymentAttemptId, false);
+    const saved = await this.loadAttemptById(request.paymentAttemptId);
     if (!saved) throw new Error('Payment attempt disappeared after provider initiation');
     return attemptView(saved);
   }
@@ -209,9 +214,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
     return this.db.transaction(async (client) => {
       const inserted = await client.query<{ id: string }>(
-        `INSERT INTO payment_provider_events(
-           provider_id,provider_event_key,event_kind,payload
-         ) VALUES ($1,$2,'CALLBACK',$3::jsonb)
+        `INSERT INTO payment_provider_events(provider_id,provider_event_key,event_kind,payload)
+         VALUES ($1,$2,'CALLBACK',$3::jsonb)
          ON CONFLICT (provider_id,provider_event_key) DO NOTHING
          RETURNING id::text`,
         [
@@ -229,7 +233,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       if (inserted.rows.length === 0) return { status: 'DUPLICATE' as const };
       if (!callback.providerReference) return { status: 'UNMATCHED' as const };
 
-      const attempt = await this.loadAttemptByProviderReference(
+      const attempt = await this.loadAttemptByProviderReferenceClient(
         client,
         provider.id,
         callback.providerReference,
@@ -237,17 +241,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       );
       if (!attempt) return { status: 'UNMATCHED' as const };
 
-      await client.query(`UPDATE payment_provider_events SET payment_attempt_id=$1 WHERE id=$2::bigint`, [
-        attempt.id,
-        inserted.rows[0]!.id,
-      ]);
+      await client.query(
+        `UPDATE payment_provider_events SET payment_attempt_id=$1 WHERE id=$2::bigint`,
+        [attempt.id, inserted.rows[0]!.id],
+      );
       const applied = await this.applyProviderTruth(client, attempt, callback);
       return { status: applied ? ('APPLIED' as const) : ('CONFLICT' as const) };
     });
   }
 
   async reconcileAttempt(paymentAttemptId: string): Promise<PaymentAttemptView> {
-    const current = await this.loadAttemptById(this.db, paymentAttemptId, false);
+    const current = await this.loadAttemptById(paymentAttemptId);
     if (!current) throw new Error('Payment attempt not found');
     if (current.status !== 'UNKNOWN') return attemptView(current);
 
@@ -270,19 +274,19 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     await this.db.transaction(async (client) => {
-      const locked = await this.loadAttemptById(client, paymentAttemptId, true);
+      const locked = await this.loadAttemptByIdClient(client, paymentAttemptId, true);
       if (!locked || locked.status !== 'UNKNOWN') return;
       await this.applyProviderTruth(client, locked, {
-        providerEventKey: `STATUS:${paymentAttemptId}:${Date.now()}`,
         providerReference: current.provider_reference ?? undefined,
         status: result.status,
         failureCode: result.failureCode,
-        raw: {},
       });
-      if (result.status === 'UNKNOWN') await this.scheduleRetry(client, paymentAttemptId, result.failureCode);
+      if (result.status === 'UNKNOWN') {
+        await this.scheduleRetry(client, paymentAttemptId, result.failureCode);
+      }
     });
 
-    const updated = await this.loadAttemptById(this.db, paymentAttemptId, false);
+    const updated = await this.loadAttemptById(paymentAttemptId);
     if (!updated) throw new Error('Payment attempt disappeared during reconciliation');
     return attemptView(updated);
   }
@@ -326,7 +330,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
   private async reconcileDue(): Promise<void> {
     const due = await this.db.query<ReconciliationJobRow>(
-      `SELECT payment_attempt_id, attempt_count
+      `SELECT payment_attempt_id,attempt_count
        FROM payment_reconciliation_jobs
        WHERE status='PENDING' AND next_attempt_at <= now()
        ORDER BY next_attempt_at
@@ -348,7 +352,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     result: ProviderInitiationResult,
   ): Promise<void> {
     await this.db.transaction(async (client) => {
-      const current = await this.loadAttemptById(client, paymentAttemptId, true);
+      const current = await this.loadAttemptByIdClient(client, paymentAttemptId, true);
       if (!current) throw new Error('Payment attempt not found');
       if (current.status !== 'CREATED') return;
       assertPaymentAttemptTransition(current.status, result.status);
@@ -376,12 +380,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async applyUnmatchedCallbacks(providerReference: string): Promise<void> {
-    const attempt = await this.loadAttemptByProviderReference(this.db, 'mpesa', providerReference, false);
+    const attempt = await this.loadAttemptByProviderReference('mpesa', providerReference);
     if (!attempt) return;
     const events = await this.db.query<{
       id: string;
       payload: {
-        status: PaymentAttemptState;
+        status: ProviderTruthState;
         providerReference?: string | null;
         amountMinor?: number | null;
         currency?: string | null;
@@ -395,24 +399,24 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
        ORDER BY received_at`,
       [attempt.provider_id, providerReference],
     );
+
     for (const event of events) {
       await this.db.transaction(async (client) => {
-        const locked = await this.loadAttemptById(client, attempt.id, true);
+        const locked = await this.loadAttemptByIdClient(client, attempt.id, true);
         if (!locked) return;
         const payload = event.payload;
         const callback: VerifiedProviderCallback = {
           providerEventKey: `stored:${event.id}`,
           providerReference,
           status: payload.status,
-          raw: {},
           ...(typeof payload.amountMinor === 'number' ? { amountMinor: payload.amountMinor } : {}),
           ...(typeof payload.currency === 'string' ? { currency: payload.currency } : {}),
           ...(typeof payload.failureCode === 'string' ? { failureCode: payload.failureCode } : {}),
         };
-        await client.query(`UPDATE payment_provider_events SET payment_attempt_id=$1 WHERE id=$2::bigint`, [
-          locked.id,
-          event.id,
-        ]);
+        await client.query(
+          `UPDATE payment_provider_events SET payment_attempt_id=$1 WHERE id=$2::bigint`,
+          [locked.id, event.id],
+        );
         await this.applyProviderTruth(client, locked, callback);
       });
     }
@@ -430,10 +434,17 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       (truth.amountMinor !== undefined && truth.amountMinor !== Number(current.amount_minor)) ||
       (truth.currency !== undefined && truth.currency !== current.currency)
     ) {
-      await this.upsertReconciliationJob(client, current.id, 'MANUAL_REVIEW', 'PROVIDER_AMOUNT_MISMATCH');
+      await this.upsertReconciliationJob(
+        client,
+        current.id,
+        'MANUAL_REVIEW',
+        'PROVIDER_AMOUNT_MISMATCH',
+      );
       if (!paymentAttemptIsTerminal(current.status)) {
         await client.query(
-          `UPDATE payment_attempts SET status='UNKNOWN',failure_code='PROVIDER_AMOUNT_MISMATCH',updated_at=now() WHERE id=$1`,
+          `UPDATE payment_attempts
+           SET status='UNKNOWN',failure_code='PROVIDER_AMOUNT_MISMATCH',updated_at=now()
+           WHERE id=$1`,
           [current.id],
         );
       }
@@ -441,14 +452,24 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (paymentAttemptIsTerminal(current.status) && current.status !== truth.status) {
-      await this.upsertReconciliationJob(client, current.id, 'MANUAL_REVIEW', 'CONFLICTING_PROVIDER_TRUTH');
+      await this.upsertReconciliationJob(
+        client,
+        current.id,
+        'MANUAL_REVIEW',
+        'CONFLICTING_PROVIDER_TRUTH',
+      );
       return false;
     }
 
     try {
       assertPaymentAttemptTransition(current.status, truth.status);
     } catch {
-      await this.upsertReconciliationJob(client, current.id, 'MANUAL_REVIEW', 'INVALID_PROVIDER_TRANSITION');
+      await this.upsertReconciliationJob(
+        client,
+        current.id,
+        'MANUAL_REVIEW',
+        'INVALID_PROVIDER_TRANSITION',
+      );
       return false;
     }
 
@@ -477,7 +498,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     errorCode?: string,
   ): Promise<void> {
     const existing = await client.query<{ attempt_count: number }>(
-      `SELECT attempt_count FROM payment_reconciliation_jobs WHERE payment_attempt_id=$1 FOR UPDATE`,
+      `SELECT attempt_count FROM payment_reconciliation_jobs
+       WHERE payment_attempt_id=$1 FOR UPDATE`,
       [paymentAttemptId],
     );
     const nextAttempt = (existing.rows[0]?.attempt_count ?? 0) + 1;
@@ -491,7 +513,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
          payment_attempt_id,status,attempt_count,next_attempt_at,last_error_code
        ) VALUES ($1,'PENDING',$2,now()+($3 || ' seconds')::interval,$4)
        ON CONFLICT (payment_attempt_id) DO UPDATE
-       SET status='PENDING',attempt_count=$2,next_attempt_at=now()+($3 || ' seconds')::interval,
+       SET status='PENDING',attempt_count=$2,
+           next_attempt_at=now()+($3 || ' seconds')::interval,
            last_error_code=$4,updated_at=now()`,
       [paymentAttemptId, nextAttempt, String(delaySeconds), errorCode ?? null],
     );
@@ -526,42 +549,66 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
             FROM payment_attempts pa JOIN payments p ON p.id=pa.payment_id`;
   }
 
-  private async loadAttemptById(
-    db: DatabaseService | PoolClient,
-    id: string,
-    forUpdate: boolean,
-  ): Promise<AttemptRow | undefined> {
-    const result = await db.query<AttemptRow>(
-      `${this.attemptSelect()} WHERE pa.id=$1${forUpdate ? ' FOR UPDATE' : ''}`,
-      [id],
-    );
-    return 'rows' in result ? result.rows[0] : result[0];
+  private async loadAttemptById(id: string): Promise<AttemptRow | undefined> {
+    const rows = await this.db.query<AttemptRow>(`${this.attemptSelect()} WHERE pa.id=$1`, [id]);
+    return rows[0];
   }
 
-  private async loadAttemptByIdempotency(
-    db: DatabaseService | PoolClient,
-    key: string,
-    forUpdate: boolean,
-  ): Promise<AttemptRow | undefined> {
-    const result = await db.query<AttemptRow>(
-      `${this.attemptSelect()} WHERE pa.idempotency_key=$1${forUpdate ? ' FOR UPDATE' : ''}`,
+  private async loadAttemptByIdempotency(key: string): Promise<AttemptRow | undefined> {
+    const rows = await this.db.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.idempotency_key=$1`,
       [key],
     );
-    return 'rows' in result ? result.rows[0] : result[0];
+    return rows[0];
   }
 
   private async loadAttemptByProviderReference(
-    db: DatabaseService | PoolClient,
+    providerId: string,
+    providerReference: string,
+  ): Promise<AttemptRow | undefined> {
+    const rows = await this.db.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.provider_id=$1 AND pa.provider_reference=$2`,
+      [providerId, providerReference],
+    );
+    return rows[0];
+  }
+
+  private async loadAttemptByIdClient(
+    client: PoolClient,
+    id: string,
+    forUpdate: boolean,
+  ): Promise<AttemptRow | undefined> {
+    const result = await client.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.id=$1${forUpdate ? ' FOR UPDATE' : ''}`,
+      [id],
+    );
+    return result.rows[0];
+  }
+
+  private async loadAttemptByIdempotencyClient(
+    client: PoolClient,
+    key: string,
+    forUpdate: boolean,
+  ): Promise<AttemptRow | undefined> {
+    const result = await client.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.idempotency_key=$1${forUpdate ? ' FOR UPDATE' : ''}`,
+      [key],
+    );
+    return result.rows[0];
+  }
+
+  private async loadAttemptByProviderReferenceClient(
+    client: PoolClient,
     providerId: string,
     providerReference: string,
     forUpdate: boolean,
   ): Promise<AttemptRow | undefined> {
-    const result = await db.query<AttemptRow>(
+    const result = await client.query<AttemptRow>(
       `${this.attemptSelect()} WHERE pa.provider_id=$1 AND pa.provider_reference=$2${
         forUpdate ? ' FOR UPDATE' : ''
       }`,
       [providerId, providerReference],
     );
-    return 'rows' in result ? result.rows[0] : result[0];
+    return result.rows[0];
   }
 }
