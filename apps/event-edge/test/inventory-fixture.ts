@@ -42,7 +42,8 @@ export async function resetInventory(database: EdgeDatabaseService): Promise<voi
   );
   await database.query(
     `DELETE FROM edge_processed_device_events
-     WHERE device_id = 'device-inventory-test' AND event_type = 'ORDER_CLOSED_CASH'`,
+     WHERE device_id = 'device-inventory-test'
+       AND event_type IN ('ORDER_CLOSED_CASH', 'ORDER_CLOSED_MPESA')`,
   );
 }
 
@@ -157,6 +158,7 @@ export async function receipt(
 
 export function closedSale(options: {
   eventInstanceId: string;
+  eventType?: 'ORDER_CLOSED_CASH' | 'ORDER_CLOSED_MPESA';
   salesLocationId?: string;
   occurredAt?: string;
   lines: Array<{ skuId: string; quantity: number }>;
@@ -165,7 +167,7 @@ export function closedSale(options: {
     schemaVersion: 1,
     eventInstanceId: options.eventInstanceId,
     eventId: `event-${options.eventInstanceId}`,
-    eventType: 'ORDER_CLOSED_CASH',
+    eventType: options.eventType ?? 'ORDER_CLOSED_CASH',
     aggregateType: 'ORDER',
     aggregateId: `order-${options.eventInstanceId}`,
     eventVersion: 2,
