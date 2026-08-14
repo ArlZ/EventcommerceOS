@@ -80,6 +80,7 @@ interface TokenClaims {
 }
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
+const MAX_OPERATOR_TOKEN_LIFETIME_SECONDS = 43_200;
 
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -335,7 +336,11 @@ export class OperatorAuthService {
 
     const parsed = this.parseClaims(decodeJson(encodedClaims));
     const now = Math.floor(Date.now() / 1000);
-    if (parsed.exp <= now || parsed.iat > now + 30 || parsed.exp - parsed.iat > 3600) {
+    if (
+      parsed.exp <= now ||
+      parsed.iat > now + 30 ||
+      parsed.exp - parsed.iat > MAX_OPERATOR_TOKEN_LIFETIME_SECONDS
+    ) {
       throw new UnauthorizedException('Operator access token is expired or has invalid lifetime');
     }
     return parsed;
@@ -363,8 +368,8 @@ export class OperatorAuthService {
 
   private ttlSeconds(): number {
     const value = Number(process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS ?? '900');
-    if (!Number.isSafeInteger(value) || value < 60 || value > 3600) {
-      throw new Error('OPERATOR_ACCESS_TOKEN_TTL_SECONDS must be between 60 and 3600');
+    if (!Number.isSafeInteger(value) || value < 60 || value > MAX_OPERATOR_TOKEN_LIFETIME_SECONDS) {
+      throw new Error('OPERATOR_ACCESS_TOKEN_TTL_SECONDS must be between 60 and 43200');
     }
     return value;
   }
