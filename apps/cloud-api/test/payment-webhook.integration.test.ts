@@ -5,11 +5,8 @@ import { DatabaseService } from '../src/database/database.service';
 import {
   PAYMENT_PROVIDER,
   type PaymentProvider,
-  type ProviderInitiationInput,
   type ProviderInitiationResult,
-  type ProviderQueryInput,
   type ProviderQueryResult,
-  type ProviderWebhookInput,
   type ProviderWebhookObservation,
 } from '../src/payments/payment-provider';
 import { PaymentWebhookService } from '../src/payments/payment-webhook.service';
@@ -38,15 +35,15 @@ class WebhookProvider implements PaymentProvider {
     };
   }
 
-  async initiate(_input: ProviderInitiationInput): Promise<ProviderInitiationResult> {
+  async initiate(): Promise<ProviderInitiationResult> {
     throw new Error('not used');
   }
 
-  async queryStatus(_input: ProviderQueryInput): Promise<ProviderQueryResult> {
+  async queryStatus(): Promise<ProviderQueryResult> {
     throw new Error('not used');
   }
 
-  async parseAndVerifyWebhook(_input: ProviderWebhookInput): Promise<ProviderWebhookObservation> {
+  async parseAndVerifyWebhook(): Promise<ProviderWebhookObservation> {
     return this.observation;
   }
 }
