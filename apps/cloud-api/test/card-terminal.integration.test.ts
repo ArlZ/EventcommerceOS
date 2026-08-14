@@ -145,6 +145,13 @@ describeIntegration('card terminal orchestration', () => {
     idempotencyKey: 'MANUAL:attempt-external-1:receipt-abc-123',
   });
 
+  const grantManualPermission = async () => {
+    await database.query(
+      `INSERT INTO payment_actor_permissions(event_id,actor_id,permission)
+       VALUES ('event-card','supervisor-1','PAYMENT_MANUAL_CONFIRM')`,
+    );
+  };
+
   it('replays card initiation without creating a second provider-side initiation', async () => {
     const first = await payments.initiate(cardRequest());
     const replay = await payments.initiate(cardRequest());
@@ -234,10 +241,7 @@ describeIntegration('card terminal orchestration', () => {
 
   it('records one immutable manual confirmation and audit event across retries', async () => {
     await payments.initiate(externalRequest());
-    await database.query(
-      `INSERT INTO payment_actor_permissions(event_id,actor_id,permission)
-       VALUES ('event-card','supervisor-1','PAYMENT_MANUAL_CONFIRM')`,
-    );
+    await grantManualPermission();
 
     const first = await manual.confirm(confirmation());
     const replay = await manual.confirm(confirmation());
@@ -262,10 +266,7 @@ describeIntegration('card terminal orchestration', () => {
 
   it('rejects reuse of a manual idempotency key for different financial evidence', async () => {
     await payments.initiate(externalRequest());
-    await database.query(
-      `INSERT INTO payment_actor_permissions(event_id,actor_id,permission)
-       VALUES ('event-card','supervisor-1','PAYMENT_MANUAL_CONFIRM')`,
-    );
+    await grantManualPermission();
     await manual.confirm(confirmation());
 
     await expect(
@@ -273,15 +274,66 @@ describeIntegration('card terminal orchestration', () => {
     ).rejects.toThrow('idempotency key was reused');
   });
 
-  it('does not allow manual fallback to overwrite an integrated Sabi attempt', async () => {
+  it('does not allow manual approval to overwrite an integrated Sabi attempt', async () => {
     await payments.initiate(cardRequest());
-    await database.query(
-      `INSERT INTO payment_actor_permissions(event_id,actor_id,permission)
-       VALUES ('event-card','supervisor-1','PAYMENT_MANUAL_CONFIRM')`,
-    );
+    await grantManualPermission();
 
     await expect(
       manual.confirm({ ...confirmation(), paymentAttemptId: 'attempt-card-1', amountMinor: 15000 }),
-    ).rejects.toThrow('dedicated external_terminal attempt');
+    ).rejects.toThrow('Manual approval requires an external_terminal attempt');
+  });
+
+  it('allows only a supervised reference-less Sabi decline and keeps provider reference empty', async () => {
+    await payments.initiate(cardRequest());
+    await grantManualPermission();
+
+    const declined = await manual.confirm({
+      confirmationId: 'sabi-decline-evidence-1',
+      paymentAttemptId: 'attempt-card-1',
+      externalProviderId: 'pesapal-sabi-terminal',
+      externalReference: 'terminal-decline-ref-1',
+      amountMinor: 15000,
+      currency: 'KES',
+      outcome: 'DECLINED',
+      actorId: 'supervisor-1',
+      reason: 'Terminal visibly declined; no confirmation code was issued',
+      idempotencyKey: 'MANUAL:attempt-card-1:terminal-decline-ref-1',
+    });
+
+    expect(declined.outcome).toBe('DECLINED');
+    const attempt = (await payments.byOrder('order-card-1'))[0]!;
+    expect(attempt.status).toBe('FAILED');
+    expect(attempt.providerReference).toBeNull();
+    expect(attempt.failureCode).toBe('SABI_TERMINAL_DECLINED_MANUAL_EVIDENCE');
+  });
+
+  it('surfaces a delayed Sabi success that conflicts with supervised decline evidence', async () => {
+    await payments.initiate(cardRequest());
+    await grantManualPermission();
+    await manual.confirm({
+      confirmationId: 'sabi-decline-evidence-1',
+      paymentAttemptId: 'attempt-card-1',
+      externalProviderId: 'pesapal-sabi-terminal',
+      externalReference: 'terminal-decline-ref-1',
+      amountMinor: 15000,
+      currency: 'KES',
+      outcome: 'DECLINED',
+      actorId: 'supervisor-1',
+      reason: 'Terminal visibly declined; no confirmation code was issued',
+      idempotencyKey: 'MANUAL:attempt-card-1:terminal-decline-ref-1',
+    });
+
+    const late = await payments.ingestProviderCallback('pesapal_sabi', {});
+    expect(late.status).toBe('CONFLICT');
+    const attempt = (await payments.byOrder('order-card-1'))[0]!;
+    expect(attempt.status).toBe('FAILED');
+    const jobs = await database.query<{ status: string; last_error_code: string }>(
+      `SELECT status,last_error_code FROM payment_reconciliation_jobs
+       WHERE payment_attempt_id='attempt-card-1'`,
+    );
+    expect(jobs[0]).toMatchObject({
+      status: 'MANUAL_REVIEW',
+      last_error_code: 'CONFLICTING_PROVIDER_TRUTH',
+    });
   });
 });
