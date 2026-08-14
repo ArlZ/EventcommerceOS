@@ -198,7 +198,7 @@ export class MpesaDarajaProvider implements PaymentProvider {
         reasonCode: responseCode,
       };
     }
-    if (response.status >= 500) {
+    if (response.status === 408 || response.status >= 500) {
       throw new Error('ambiguous M-PESA gateway failure');
     }
     return {
