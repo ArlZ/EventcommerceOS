@@ -1,4 +1,5 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
+import { afterAll } from 'vitest';
 import { OperatorAuthService, type OperatorRole } from '../src/auth/operator-auth.service';
 import { DatabaseService } from '../src/database/database.service';
 
@@ -11,6 +12,13 @@ export const TEST_OPERATOR_VERIFYING_PUBLIC_KEY = TEST_OPERATOR_KEY_PAIR.publicK
   .toString('base64url');
 
 const CREDENTIAL_PREFIX = 'operator-test-credential-0123456789-abcdefghijklmnopqrstuvwxyz';
+
+afterAll(() => {
+  delete process.env.OPERATOR_TOKEN_SIGNING_PRIVATE_KEY;
+  delete process.env.OPERATOR_TOKEN_VERIFYING_PUBLIC_KEY;
+  delete process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS;
+  delete process.env.OPERATOR_TOKEN_SIGNING_KEY;
+});
 
 export function enableOperatorTestSigningKey(): void {
   process.env.OPERATOR_TOKEN_SIGNING_PRIVATE_KEY = TEST_OPERATOR_SIGNING_PRIVATE_KEY;
