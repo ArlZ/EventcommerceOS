@@ -20,6 +20,7 @@ import {
 
 interface RequestLike {
   headers: Record<string, string | string[] | undefined>;
+  body?: unknown;
   ip?: string;
   socket?: { remoteAddress?: string };
   securityPrincipal?: AuthenticatedOperatorPrincipal | AuthenticatedEdgePrincipal;
@@ -104,6 +105,7 @@ export class CloudSecurityGuard implements CanActivate {
     request.securityPrincipal = principal;
     request.headers['x-actor-id'] = principal.actorId;
     request.headers['x-role'] = principal.role;
+    this.overwriteActorFields(request.body, principal.actorId);
     if (principal.role === 'ADMIN') {
       if (!principal.organisationId) {
         throw new UnauthorizedException('ADMIN credential is missing organisation scope');
@@ -117,6 +119,14 @@ export class CloudSecurityGuard implements CanActivate {
       request.headers['x-organisation-id'] = principal.organisationId;
     } else {
       delete request.headers['x-organisation-id'];
+    }
+  }
+
+  private overwriteActorFields(body: unknown, actorId: string): void {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return;
+    const record = body as Record<string, unknown>;
+    for (const key of ['actorId', 'requestingActorId', 'approvingActorId'] as const) {
+      if (key in record) record[key] = actorId;
     }
   }
 
