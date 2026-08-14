@@ -37,6 +37,10 @@ export interface SimulationFaults {
   edgeCloudOutages?: TimeWindow[];
   posIsolations?: PosIsolationWindow[];
   edgeRestartSeconds?: number[];
+  networkLatencyMs?: number;
+  networkLossRate?: number;
+  syncDuplicateRate?: number;
+  syncReorderRate?: number;
   callbackDuplicateRate?: number;
   callbackDelayMinSeconds?: number;
   callbackDelayMaxSeconds?: number;
@@ -75,6 +79,7 @@ export interface SimulationMetrics {
   completedPayments: number;
   unknownPaymentsCreated: number;
   unknownPaymentsAtEnd: number;
+  duplicateSyncDeliveries: number;
   duplicateProviderSignals: number;
   duplicateBusinessEffects: number;
   maxSyncBacklog: number;
