@@ -53,9 +53,9 @@ function currency(value: Record<string, unknown>): string {
   return code;
 }
 
-function assertNoProhibitedCardFields(value: unknown): void {
+export function assertNoProhibitedEdgeCardFields(value: unknown): void {
   if (Array.isArray(value)) {
-    value.forEach(assertNoProhibitedCardFields);
+    value.forEach(assertNoProhibitedEdgeCardFields);
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -64,14 +64,14 @@ function assertNoProhibitedCardFields(value: unknown): void {
     if (PROHIBITED_CARD_KEYS.has(normalized)) {
       throw new Error(`Prohibited raw card field is not accepted: ${key}`);
     }
-    assertNoProhibitedCardFields(child);
+    assertNoProhibitedEdgeCardFields(child);
   }
 }
 
 export function parseEdgeExternalTerminalConfirmation(
   value: unknown,
 ): ConfirmExternalTerminalPaymentRequest {
-  assertNoProhibitedCardFields(value);
+  assertNoProhibitedEdgeCardFields(value);
   const input = record(value);
   const outcome = text(input, 'outcome').toUpperCase();
   if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
@@ -129,7 +129,7 @@ export class TerminalPaymentsService {
   }
 
   private parseConfirmation(value: unknown): ExternalTerminalConfirmationView {
-    assertNoProhibitedCardFields(value);
+    assertNoProhibitedEdgeCardFields(value);
     const input = record(value);
     const outcome = text(input, 'outcome').toUpperCase();
     if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
