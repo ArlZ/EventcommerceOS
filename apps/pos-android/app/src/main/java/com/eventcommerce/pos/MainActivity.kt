@@ -38,9 +38,15 @@ class MainActivity : ComponentActivity() {
         DeviceSyncCoordinator(
           DeviceSyncEngine(database, HttpsDeviceEdgeTransport(endpoint), syncState),
         ).run()
-        val coordinator = PosPaymentCoordinator(repository, HttpsPaymentEdgeTransport(endpoint))
-        paymentCoordinator = coordinator
-        runCatching { coordinator.refreshUnresolved() }
+        val paymentToken = syncProvisioning.paymentBearerToken()
+        if (paymentToken != null) {
+          val coordinator = PosPaymentCoordinator(
+            repository,
+            HttpsPaymentEdgeTransport(endpoint, paymentToken),
+          )
+          paymentCoordinator = coordinator
+          runCatching { coordinator.refreshUnresolved() }
+        }
       }
     }
     setContent {
