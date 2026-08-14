@@ -87,10 +87,12 @@ export interface SimulationMetrics {
   providerCallbackLatencyMs: PercentileMetrics;
   notificationDeliveryFailures: number;
   simulatedDependencyErrors: number;
+  errorRate: number;
   stockoutAttempts: number;
   transfersCreated: number;
   transfersCompleted: number;
   inventoryConverged: boolean;
+  inventoryConvergenceSeconds: number | null;
   edgeCloudConverged: boolean;
 }
 
