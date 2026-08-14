@@ -58,7 +58,7 @@ export class CloudSyncService {
       const deviceIds = [...new Set(batch.events.map((event) => event.deviceId))].sort();
       for (const deviceId of deviceIds) {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-          `sync-device:${deviceId}`,
+          `sync-device:${identity.organisationId}:${deviceId}`,
         ]);
       }
 
@@ -70,12 +70,13 @@ export class CloudSyncService {
       }
 
       for (const status of batch.deviceStatuses) {
+        const deviceKey = `${identity.organisationId}:${status.deviceId}`;
         await client.query(
           `INSERT INTO sync_device_state(
-             device_id, last_seen_at, last_sequence_seen, edge_accepted_through_sequence,
+             device_key, device_id, last_seen_at, last_sequence_seen, edge_accepted_through_sequence,
              edge_backlog_count, last_cloud_delivery_at, edge_id, organisation_id
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-           ON CONFLICT (device_id) DO UPDATE SET
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (device_key) DO UPDATE SET
              last_seen_at = GREATEST(sync_device_state.last_seen_at, EXCLUDED.last_seen_at),
              last_sequence_seen = GREATEST(sync_device_state.last_sequence_seen, EXCLUDED.last_sequence_seen),
              edge_accepted_through_sequence = GREATEST(sync_device_state.edge_accepted_through_sequence, EXCLUDED.edge_accepted_through_sequence),
@@ -84,6 +85,7 @@ export class CloudSyncService {
              edge_id = EXCLUDED.edge_id,
              organisation_id = EXCLUDED.organisation_id`,
           [
+            deviceKey,
             status.deviceId,
             status.lastSeenAt,
             status.lastSequenceSeen,
@@ -134,8 +136,9 @@ export class CloudSyncService {
     }
 
     const bySequence = await client.query<SequenceRow>(
-      'SELECT event_instance_id FROM sync_processed_events WHERE device_id = $1 AND sequence = $2',
-      [event.deviceId, event.sequence],
+      `SELECT event_instance_id FROM sync_processed_events
+       WHERE organisation_id=$1 AND device_id=$2 AND sequence=$3`,
+      [identity.organisationId, event.deviceId, event.sequence],
     );
     if (bySequence.rowCount === 1) {
       await this.exception(client, 'DEVICE_SEQUENCE_REUSE', event, {
