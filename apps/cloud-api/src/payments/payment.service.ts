@@ -67,15 +67,8 @@ export class PaymentService {
     const created = await this.createOrFindAttempt(input);
 
     if (created.idempotentReplay) {
-      if (created.attempt.dispatch_started_at !== null && created.attempt.state === 'INITIATED') {
-        await this.applyTransition(created.attempt.id, {
-          target: 'UNKNOWN',
-          source: 'SYSTEM',
-          sourceId: 'replay-after-provider-dispatch',
-          reasonCode: 'DISPATCH_RESULT_NOT_DURABLE',
-          providerRequestId: created.attempt.provider_request_id,
-          providerReceiptReference: created.attempt.provider_receipt_reference,
-        });
+      if (created.attempt.dispatch_started_at !== null) {
+        await this.markDispatchedInitiatedUnknownIfStillInitiated(created.attempt.id);
       }
       return {
         attempt: await this.snapshot(created.attempt.id),
@@ -321,6 +314,34 @@ export class PaymentService {
        VALUES ($1,$2,$3,$4,$5)`,
       [input.paymentId, input.eventId, input.orderId, input.amountMinor, input.currency],
     );
+  }
+
+  private async markDispatchedInitiatedUnknownIfStillInitiated(attemptId: string): Promise<void> {
+    await this.database.transaction(async (client) => {
+      const current = await this.attemptWithClient(client, attemptId, true);
+      if (current.state !== 'INITIATED' || current.dispatch_started_at === null) return;
+      await client.query(
+        `UPDATE payment_attempt_state SET
+           state = 'UNKNOWN',
+           reconciliation_required = true,
+           next_query_at = CASE
+             WHEN $2::text IS NOT NULL THEN clock_timestamp() + interval '5 seconds'
+             ELSE NULL
+           END,
+           last_provider_error_code = 'DISPATCH_RESULT_NOT_DURABLE',
+           updated_at = clock_timestamp()
+         WHERE attempt_id = $1 AND state = 'INITIATED'`,
+        [attemptId, current.provider_request_id],
+      );
+      await client.query(
+        `INSERT INTO payment_attempt_transitions(
+           id, attempt_id, from_state, to_state, source, source_id, reason_code, occurred_at
+         ) VALUES ($1,$2,'INITIATED','UNKNOWN','SYSTEM','replay-after-provider-dispatch',
+                   'DISPATCH_RESULT_NOT_DURABLE',clock_timestamp())
+         ON CONFLICT (attempt_id, source, source_id) DO NOTHING`,
+        [randomUUID(), attemptId],
+      );
+    });
   }
 
   private async beginProviderDispatch(attemptId: string): Promise<boolean> {
