@@ -6,6 +6,8 @@ import { EdgeDatabaseService } from '../src/database/database.service';
 import { EdgePaymentsService } from '../src/payments/payments.service';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
+const previousEdgeId = process.env.EDGE_ID;
+const previousEdgeToken = process.env.EDGE_CLOUD_SYNC_TOKEN;
 
 function cloudView(status: 'PENDING' | 'SUCCEEDED', providerReference = 'provider-ref') {
   return {
@@ -25,7 +27,7 @@ function cloudView(status: 'PENDING' | 'SUCCEEDED', providerReference = 'provide
   };
 }
 
-function request() {
+function paymentRequest() {
   return {
     eventId: 'event-edge-payment',
     paymentId: 'payment-edge',
@@ -45,6 +47,9 @@ describeIntegration('Edge payment cache safety', () => {
   let payments: EdgePaymentsService;
 
   beforeAll(async () => {
+    process.env.EDGE_ID = 'edge-payment-cache-test';
+    process.env.EDGE_CLOUD_SYNC_TOKEN =
+      'edge-payment-cache-token-0123456789-abcdefghijklmnopqrstuvwxyz';
     moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     database = moduleRef.get(EdgeDatabaseService);
     payments = moduleRef.get(EdgePaymentsService);
@@ -53,10 +58,16 @@ describeIntegration('Edge payment cache safety', () => {
   beforeEach(async () => {
     await database.query('TRUNCATE edge_payment_attempt_cache CASCADE');
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   afterAll(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    if (previousEdgeId === undefined) delete process.env.EDGE_ID;
+    else process.env.EDGE_ID = previousEdgeId;
+    if (previousEdgeToken === undefined) delete process.env.EDGE_CLOUD_SYNC_TOKEN;
+    else process.env.EDGE_CLOUD_SYNC_TOKEN = previousEdgeToken;
     await moduleRef.close();
   });
 
@@ -79,10 +90,10 @@ describeIntegration('Edge payment cache safety', () => {
         ),
     );
 
-    const succeeded = await payments.initiate(request());
+    const succeeded = await payments.initiate(paymentRequest());
     expect(succeeded.status).toBe('SUCCEEDED');
 
-    const stale = await payments.initiate(request());
+    const stale = await payments.initiate(paymentRequest());
     expect(stale.status).toBe('SUCCEEDED');
     expect(stale.providerReference).toBe('provider-ref');
   });
@@ -96,8 +107,8 @@ describeIntegration('Edge payment cache safety', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await payments.initiate(request());
-    await expect(payments.initiate({ ...request(), amountMinor: 16000 })).rejects.toThrow(
+    await payments.initiate(paymentRequest());
+    await expect(payments.initiate({ ...paymentRequest(), amountMinor: 16000 })).rejects.toThrow(
       'payment attempt identity conflicts with Edge cache',
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -122,10 +133,10 @@ describeIntegration('Edge payment cache safety', () => {
         ),
     );
 
-    const pending = await payments.initiate(request());
+    const pending = await payments.initiate(paymentRequest());
     expect(pending.status).toBe('PENDING');
 
-    const conflicted = await payments.initiate(request());
+    const conflicted = await payments.initiate(paymentRequest());
     expect(conflicted.status).toBe('UNKNOWN');
     expect(conflicted.failureCode).toBe('EDGE_PROVIDER_REFERENCE_CONFLICT');
     expect(conflicted.providerReference).toBe('provider-ref-a');
