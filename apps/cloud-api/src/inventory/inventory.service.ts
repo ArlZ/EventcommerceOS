@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
 import type {
@@ -37,7 +37,7 @@ export interface InventoryOperationsView {
 
 @Injectable()
 export class InventoryService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
   async ingest(batch: InventoryEdgeBatch): Promise<InventoryEdgeAck> {
     const acceptedIds: string[] = [];
