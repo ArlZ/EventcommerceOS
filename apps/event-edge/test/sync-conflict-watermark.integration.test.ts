@@ -5,6 +5,11 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { EdgeDatabaseService } from '../src/database/database.service';
+import {
+  DEFAULT_DEVICE_EVENT_ID,
+  posDeviceHeaders,
+  provisionPosDevice,
+} from './pos-device-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -22,8 +27,10 @@ describeIntegration('device conflict acknowledgement safety', () => {
 
   beforeEach(async () => {
     await database.query(
-      'TRUNCATE edge_cloud_outbox, edge_processed_device_events, edge_device_watermarks, edge_reconciliation_exceptions',
+      `TRUNCATE edge_cloud_outbox, edge_processed_device_events, edge_device_watermarks,
+                edge_reconciliation_exceptions,edge_pos_device_audit,edge_pos_devices`,
     );
+    await provisionPosDevice(database, 'edge-conflict-device');
   });
 
   afterAll(async () => {
@@ -44,10 +51,17 @@ describeIntegration('device conflict acknowledgement safety', () => {
       sequence: 1,
       occurredAt: '2026-08-13T18:00:00Z',
       idempotencyKey: 'edge-existing-idem',
-      payload: { orderId: 'edge-order', state: 'OPEN', totalMinor: 10_000, currency: 'KES' },
+      payload: {
+        orderId: 'edge-order',
+        eventId: DEFAULT_DEVICE_EVENT_ID,
+        state: 'OPEN',
+        totalMinor: 10_000,
+        currency: 'KES',
+      },
     };
     await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(original.deviceId))
       .send({ deviceId: original.deviceId, events: [original] })
       .expect(201);
 
@@ -60,6 +74,7 @@ describeIntegration('device conflict acknowledgement safety', () => {
     };
     const conflictResponse = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(conflict.deviceId))
       .send({ deviceId: conflict.deviceId, events: [conflict] })
       .expect(201);
 
@@ -77,6 +92,7 @@ describeIntegration('device conflict acknowledgement safety', () => {
     };
     const stillBlocked = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(next.deviceId))
       .send({ deviceId: next.deviceId, events: [next] })
       .expect(201);
 
@@ -100,6 +116,7 @@ describeIntegration('device conflict acknowledgement safety', () => {
     );
     const afterResolution = await request(app.getHttpServer())
       .post('/sync/device-events')
+      .set(posDeviceHeaders(next.deviceId))
       .send({ deviceId: next.deviceId, events: [next] })
       .expect(201);
 
