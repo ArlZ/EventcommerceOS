@@ -7,6 +7,7 @@ export type PaymentAttemptStatus =
   | 'UNKNOWN';
 
 export interface PaymentAttemptEventPayload {
+  eventId: string;
   paymentId: string;
   paymentAttemptId: string;
   orderId: string;
@@ -21,6 +22,7 @@ export interface PaymentAttemptEventPayload {
 }
 
 export interface InitiatePaymentRequest {
+  eventId: string;
   paymentId: string;
   paymentAttemptId: string;
   orderId: string;
@@ -34,6 +36,7 @@ export interface InitiatePaymentRequest {
 }
 
 export interface PaymentAttemptView {
+  eventId: string;
   paymentId: string;
   paymentAttemptId: string;
   orderId: string;
