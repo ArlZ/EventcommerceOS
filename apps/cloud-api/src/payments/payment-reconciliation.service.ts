@@ -5,7 +5,8 @@ import { PaymentService } from './payment.service';
 @Injectable()
 export class PaymentReconciliationService implements OnModuleInit, OnModuleDestroy {
   private timer: NodeJS.Timeout | null = null;
-  private running = false;
+  private activeTick: Promise<void> | null = null;
+  private shuttingDown = false;
 
   constructor(@Inject(PaymentService) private readonly payments: PaymentService) {}
 
@@ -20,26 +21,37 @@ export class PaymentReconciliationService implements OnModuleInit, OnModuleDestr
     void this.tick();
   }
 
-  onModuleDestroy(): void {
+  async onModuleDestroy(): Promise<void> {
+    this.shuttingDown = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    await this.activeTick;
   }
 
   async tick(): Promise<void> {
-    if (this.running) return;
-    this.running = true;
+    if (this.shuttingDown || this.activeTick) return;
+
+    const work = this.runTick();
+    this.activeTick = work;
     try {
-      await this.payments.failStaleUndispatchedAttempts();
-      const attemptIds = await this.payments.dueAttemptIds(25);
-      for (const attemptId of attemptIds) {
-        try {
-          await this.payments.reconcileAttempt(attemptId);
-        } catch {
-          // One malformed/provider-specific attempt must not stop reconciliation for the event.
-        }
-      }
+      await work;
     } finally {
-      this.running = false;
+      if (this.activeTick === work) this.activeTick = null;
+    }
+  }
+
+  private async runTick(): Promise<void> {
+    await this.payments.failStaleUndispatchedAttempts();
+    if (this.shuttingDown) return;
+
+    const attemptIds = await this.payments.dueAttemptIds(25);
+    for (const attemptId of attemptIds) {
+      if (this.shuttingDown) return;
+      try {
+        await this.payments.reconcileAttempt(attemptId);
+      } catch {
+        // One malformed/provider-specific attempt must not stop reconciliation for the event.
+      }
     }
   }
 }
