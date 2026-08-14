@@ -112,15 +112,14 @@ export class DeviceEdgeAuthService {
       if (typeof eventId !== 'string' || eventId.trim() !== identity.eventId) {
         throw new UnauthorizedException('sync event is outside the POS device event assignment');
       }
-      if (identity.salesLocationId !== null) {
+      if (identity.salesLocationId !== null && event.aggregateType === 'ORDER') {
         const salesLocationId = event.payload.salesLocationId;
         if (
-          salesLocationId !== undefined &&
-          salesLocationId !== null &&
-          (typeof salesLocationId !== 'string' || salesLocationId.trim() !== identity.salesLocationId)
+          typeof salesLocationId !== 'string' ||
+          salesLocationId.trim() !== identity.salesLocationId
         ) {
           throw new UnauthorizedException(
-            'sync event is outside the POS device sales-location assignment',
+            'order sync is outside the POS device sales-location assignment',
           );
         }
       }
