@@ -49,28 +49,38 @@ CREATE TABLE IF NOT EXISTS payment_reconciliation_jobs (
 CREATE TABLE IF NOT EXISTS payment_refunds (
   id text PRIMARY KEY,
   payment_id text NOT NULL REFERENCES payments(id),
+  provider_id text NOT NULL,
+  source_provider_reference text NOT NULL,
   amount_minor bigint NOT NULL CHECK (amount_minor >= 0),
   currency char(3) NOT NULL,
   reason text NOT NULL,
   requesting_actor_id text NOT NULL,
   approving_actor_id text,
   provider_reference text,
+  failure_code text,
   idempotency_key text NOT NULL UNIQUE,
   status text NOT NULL CHECK (status IN ('REQUESTED','PENDING','SUCCEEDED','FAILED','UNKNOWN')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS payment_refunds_payment_idx ON payment_refunds(payment_id, created_at);
+
 CREATE TABLE IF NOT EXISTS payment_reversals (
   id text PRIMARY KEY,
   payment_id text NOT NULL REFERENCES payments(id),
+  provider_id text NOT NULL,
+  source_provider_reference text NOT NULL,
   amount_minor bigint NOT NULL CHECK (amount_minor >= 0),
   currency char(3) NOT NULL,
   reason text NOT NULL,
   requesting_actor_id text NOT NULL,
   provider_reference text,
+  failure_code text,
   idempotency_key text NOT NULL UNIQUE,
   status text NOT NULL CHECK (status IN ('REQUESTED','PENDING','SUCCEEDED','FAILED','UNKNOWN')),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS payment_reversals_payment_idx ON payment_reversals(payment_id, created_at);
