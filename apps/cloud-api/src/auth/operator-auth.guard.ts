@@ -17,13 +17,25 @@ function requestFrom(context: ExecutionContext): OperatorRequest {
   return context.switchToHttp().getRequest<OperatorRequest>();
 }
 
+function attachIdentity(request: OperatorRequest, identity: OperatorIdentity): void {
+  request.operatorIdentity = identity;
+}
+
+function attachLegacyAdminContext(request: OperatorRequest, identity: OperatorIdentity): void {
+  attachIdentity(request, identity);
+  request.headers['x-actor-id'] = identity.actorId;
+  request.headers['x-role'] = identity.role;
+  if (identity.organisationId === null) delete request.headers['x-organisation-id'];
+  else request.headers['x-organisation-id'] = identity.organisationId;
+}
+
 @Injectable()
 export class OperatorGuard implements CanActivate {
   constructor(@Inject(OperatorAuthService) protected readonly auth: OperatorAuthService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = requestFrom(context);
-    request.operatorIdentity = await this.auth.authenticateHeaders(request.headers);
+    attachIdentity(request, await this.auth.authenticateHeaders(request.headers));
     return true;
   }
 }
@@ -36,14 +48,27 @@ export class OperatorAdminGuard implements CanActivate {
     const request = requestFrom(context);
     const identity = await this.auth.authenticateHeaders(request.headers);
     this.auth.requireRole(identity, ['ADMIN', 'PLATFORM_ADMIN']);
-    request.operatorIdentity = identity;
+    attachLegacyAdminContext(request, identity);
+    return true;
+  }
+}
 
-    // Existing admin services accept AdminContext derived from these headers. They are overwritten only
-    // after cryptographic authentication so externally supplied actor/role/organisation headers have no authority.
-    request.headers['x-actor-id'] = identity.actorId;
-    request.headers['x-role'] = identity.role;
-    if (identity.organisationId === null) delete request.headers['x-organisation-id'];
-    else request.headers['x-organisation-id'] = identity.organisationId;
+@Injectable()
+export class LegacyAdminBoundaryGuard implements CanActivate {
+  private readonly protectedControllers = new Set([
+    'ConfigurationController',
+    'CommandCentreController',
+    'EventCloseController',
+  ]);
+
+  constructor(@Inject(OperatorAuthService) private readonly auth: OperatorAuthService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    if (!this.protectedControllers.has(context.getClass().name)) return true;
+    const request = requestFrom(context);
+    const identity = await this.auth.authenticateHeaders(request.headers);
+    this.auth.requireRole(identity, ['ADMIN', 'PLATFORM_ADMIN']);
+    attachLegacyAdminContext(request, identity);
     return true;
   }
 }
