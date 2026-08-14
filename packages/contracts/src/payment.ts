@@ -18,6 +18,7 @@ export interface InitiatePaymentRequest {
   eventId: string;
   orderId: string;
   paymentId: string;
+  attemptId: string;
   clientAttemptId: string;
   idempotencyKey: string;
   provider: PaymentProviderCode;
