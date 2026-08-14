@@ -6,6 +6,7 @@ import { EdgeDatabaseService } from '../src/database/database.service';
 import { EdgePaymentsService } from '../src/payments/payments.service';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
+const TEST_EDGE_TOKEN = 'edge-payment-cloud-test-token-0123456789-abcdefghijklmnopqrstuvwxyz';
 
 function cloudView(status: 'PENDING' | 'SUCCEEDED', providerReference = 'provider-ref') {
   return {
@@ -45,6 +46,8 @@ describeIntegration('Edge payment cache safety', () => {
   let payments: EdgePaymentsService;
 
   beforeAll(async () => {
+    process.env.EDGE_ID = 'edge-payment-test';
+    process.env.EDGE_CLOUD_SYNC_TOKEN = TEST_EDGE_TOKEN;
     moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     database = moduleRef.get(EdgeDatabaseService);
     payments = moduleRef.get(EdgePaymentsService);
@@ -57,27 +60,27 @@ describeIntegration('Edge payment cache safety', () => {
 
   afterAll(async () => {
     vi.restoreAllMocks();
+    delete process.env.EDGE_ID;
+    delete process.env.EDGE_CLOUD_SYNC_TOKEN;
     await moduleRef.close();
   });
 
   it('does not let a late pending response regress cached success', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify(cloudView('SUCCEEDED')), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify(cloudView('PENDING')), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-          }),
-        ),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(cloudView('SUCCEEDED')), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(cloudView('PENDING')), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
 
     const succeeded = await payments.initiate(request());
     expect(succeeded.status).toBe('SUCCEEDED');
@@ -85,6 +88,9 @@ describeIntegration('Edge payment cache safety', () => {
     const stale = await payments.initiate(request());
     expect(stale.status).toBe('SUCCEEDED');
     expect(stale.providerReference).toBe('provider-ref');
+    const firstHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(firstHeaders.authorization).toBe(`Bearer ${TEST_EDGE_TOKEN}`);
+    expect(firstHeaders['x-edge-id']).toBe('edge-payment-test');
   });
 
   it('rejects payment-attempt identity reuse before contacting Cloud', async () => {
