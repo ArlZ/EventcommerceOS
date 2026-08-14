@@ -30,12 +30,12 @@ export type ProviderTruthState = Extract<
 
 export interface VerifiedProviderCallback {
   providerEventKey: string;
-  paymentAttemptId?: string;
-  providerReference?: string;
+  paymentAttemptId?: string | undefined;
+  providerReference?: string | undefined;
   status: ProviderTruthState;
-  amountMinor?: number;
-  currency?: string;
-  failureCode?: string;
+  amountMinor?: number | undefined;
+  currency?: string | undefined;
+  failureCode?: string | undefined;
 }
 
 export interface PaymentProvider {
