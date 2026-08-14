@@ -144,11 +144,11 @@ describeIntegration('event operational close and post-close reconciliation', () 
     );
     await database.query(
       `INSERT INTO payment_refunds(
-         id,payment_id,provider_id,amount_minor,currency,reason,requesting_actor_id,
-         idempotency_key,status,provider_reference,requested_at,resolved_at,updated_at
+         id,payment_id,provider_id,source_provider_reference,amount_minor,currency,reason,
+         requesting_actor_id,provider_reference,idempotency_key,status,created_at,updated_at
        ) VALUES (
-         'refund-1','payment-provider-1','mpesa',4000,'KES','Customer refund',$1,
-         'refund-idem-1','SUCCEEDED','refund-ref-1',now()-interval '3 hours',now()-interval '3 hours',now()-interval '3 hours'
+         'refund-1','payment-provider-1','mpesa','mpesa-ref-1',4000,'KES','Customer refund',$1,
+         'refund-ref-1','refund-idem-1','SUCCEEDED',now()-interval '3 hours',now()-interval '3 hours'
        )`,
       [actorId],
     );
@@ -299,6 +299,11 @@ describeIntegration('event operational close and post-close reconciliation', () 
     expect(amount(preClose.body.sales.voids)).toBe('3000');
     expect(amount(preClose.body.sales.refunds)).toBe('4000');
     expect(amount(preClose.body.sales.netSales)).toBe('50000');
+    expect(preClose.body.paymentMethods).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ methodId: 'cash', currency: 'KES', succeededCount: 1 }),
+      ]),
+    );
     expect(preClose.body.cash.summary).toEqual([
       {
         currency: 'KES',
