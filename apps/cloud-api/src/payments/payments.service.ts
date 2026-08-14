@@ -451,20 +451,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       }
     });
 
-    if (result.providerReference) {
-      const attempt = await this.loadAttemptById(paymentAttemptId);
-      if (attempt) {
-        await this.applyUnmatchedCallbacks(attempt.provider_id, result.providerReference);
-      }
-    }
+    const attempt = await this.loadAttemptById(paymentAttemptId);
+    if (attempt) await this.applyUnmatchedCallbacks(attempt);
   }
 
-  private async applyUnmatchedCallbacks(
-    providerId: string,
-    providerReference: string,
-  ): Promise<void> {
-    const attempt = await this.loadAttemptByProviderReference(providerId, providerReference);
-    if (!attempt) return;
+  private async applyUnmatchedCallbacks(attempt: AttemptRow): Promise<void> {
     const events = await this.db.query<{
       id: string;
       payload: {
@@ -479,9 +470,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       `SELECT id::text,payload
        FROM payment_provider_events
        WHERE provider_id=$1 AND payment_attempt_id IS NULL
-         AND payload->>'providerReference'=$2
+         AND (
+           payload->>'paymentAttemptId'=$2
+           OR ($3::text IS NOT NULL AND payload->>'providerReference'=$3)
+         )
        ORDER BY received_at`,
-      [attempt.provider_id, providerReference],
+      [attempt.provider_id, attempt.id, attempt.provider_reference],
     );
 
     for (const event of events) {
@@ -494,7 +488,9 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           ...(typeof payload.paymentAttemptId === 'string'
             ? { paymentAttemptId: payload.paymentAttemptId }
             : {}),
-          providerReference,
+          ...(typeof payload.providerReference === 'string'
+            ? { providerReference: payload.providerReference }
+            : {}),
           status: payload.status,
           ...(typeof payload.amountMinor === 'number' ? { amountMinor: payload.amountMinor } : {}),
           ...(typeof payload.currency === 'string' ? { currency: payload.currency } : {}),
@@ -693,41 +689,6 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       [key],
     );
     return rows[0];
-  }
-
-  private async loadAttemptByProviderReference(
-    providerId: string,
-    providerReference: string,
-  ): Promise<AttemptRow | undefined> {
-    const rows = await this.db.query<AttemptRow>(
-      `${this.attemptSelect()} WHERE pa.provider_id=$1 AND pa.provider_reference=$2`,
-      [providerId, providerReference],
-    );
-    return rows[0];
-  }
-
-  private async loadAttemptByIdClient(
-    client: PoolClient,
-    id: string,
-    forUpdate: boolean,
-  ): Promise<AttemptRow | undefined> {
-    const result = await client.query<AttemptRow>(
-      `${this.attemptSelect()} WHERE pa.id=$1${forUpdate ? ' FOR UPDATE' : ''}`,
-      [id],
-    );
-    return result.rows[0];
-  }
-
-  private async loadAttemptByIdempotencyClient(
-    client: PoolClient,
-    key: string,
-    forUpdate: boolean,
-  ): Promise<AttemptRow | undefined> {
-    const result = await client.query<AttemptRow>(
-      `${this.attemptSelect()} WHERE pa.idempotency_key=$1${forUpdate ? ' FOR UPDATE' : ''}`,
-      [key],
-    );
-    return result.rows[0];
   }
 
   private async loadAttemptByProviderReferenceClient(
