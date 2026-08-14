@@ -7,10 +7,14 @@ import type {
 
 const PROHIBITED_CARD_KEYS = new Set([
   'pan',
+  'primaryaccountnumber',
   'cardnumber',
   'cvv',
   'cvc',
+  'securitycode',
+  'cardsecuritycode',
   'pin',
+  'pinblock',
   'track',
   'track1',
   'track2',
@@ -21,6 +25,54 @@ const PROHIBITED_CARD_KEYS = new Set([
   'expiry',
   'expirationdate',
   'cardexpiry',
+]);
+
+const INITIATE_FIELDS = new Set([
+  'eventId',
+  'paymentId',
+  'paymentAttemptId',
+  'orderId',
+  'providerId',
+  'idempotencyKey',
+  'amountMinor',
+  'currency',
+  'customerPhone',
+  'accountReference',
+  'description',
+]);
+
+const MANUAL_CONFIRMATION_FIELDS = new Set([
+  'confirmationId',
+  'paymentAttemptId',
+  'externalProviderId',
+  'externalReference',
+  'amountMinor',
+  'currency',
+  'outcome',
+  'actorId',
+  'reason',
+  'idempotencyKey',
+]);
+
+const REFUND_FIELDS = new Set([
+  'refundId',
+  'paymentId',
+  'amountMinor',
+  'currency',
+  'reason',
+  'requestingActorId',
+  'approvingActorId',
+  'idempotencyKey',
+]);
+
+const REVERSAL_FIELDS = new Set([
+  'reversalId',
+  'paymentId',
+  'amountMinor',
+  'currency',
+  'reason',
+  'requestingActorId',
+  'idempotencyKey',
 ]);
 
 export function assertNoProhibitedCardFields(value: unknown): void {
@@ -43,6 +95,13 @@ function object(value: unknown): Record<string, unknown> {
     throw new Error('Payment request must be an object');
   }
   return value as Record<string, unknown>;
+}
+
+function assertOnlyFields(record: Record<string, unknown>, allowed: ReadonlySet<string>): void {
+  const unexpected = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0) {
+    throw new Error(`Unexpected payment request field: ${unexpected.sort()[0]}`);
+  }
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {
@@ -79,6 +138,7 @@ function currency(record: Record<string, unknown>): string {
 export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequest {
   assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, INITIATE_FIELDS);
   const request: InitiatePaymentRequest = {
     eventId: requiredString(record, 'eventId'),
     paymentId: requiredString(record, 'paymentId'),
@@ -102,6 +162,7 @@ export function parseExternalTerminalConfirmation(
 ): ConfirmExternalTerminalPaymentRequest {
   assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, MANUAL_CONFIRMATION_FIELDS);
   const outcome = requiredString(record, 'outcome').toUpperCase();
   if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
     throw new Error('outcome must be APPROVED or DECLINED');
@@ -123,6 +184,7 @@ export function parseExternalTerminalConfirmation(
 export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest {
   assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, REFUND_FIELDS);
   const request: RefundPaymentRequest = {
     refundId: requiredString(record, 'refundId'),
     paymentId: requiredString(record, 'paymentId'),
@@ -140,6 +202,7 @@ export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest 
 export function parseReversePaymentRequest(value: unknown): ReversePaymentRequest {
   assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, REVERSAL_FIELDS);
   return {
     reversalId: requiredString(record, 'reversalId'),
     paymentId: requiredString(record, 'paymentId'),
