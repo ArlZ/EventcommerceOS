@@ -4,7 +4,13 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { OperatorAuthService } from '../src/auth/operator-auth.service';
 import { DatabaseService } from '../src/database/database.service';
+import {
+  enableOperatorTestSigningKey,
+  operatorHeaders,
+  provisionOperator,
+} from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -12,23 +18,19 @@ const eventA = '22222222-2222-4222-8222-222222222222';
 const eventB = '22222222-2222-4222-8222-333333333333';
 const actorId = '33333333-3333-4333-8333-333333333333';
 
-function headers() {
-  return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
-    'x-organisation-id': organisationId,
-  };
-}
-
 describeIntegration('command centre event isolation', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let auth: OperatorAuthService;
+  let headers: Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
+    enableOperatorTestSigningKey();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     database = moduleRef.get(DatabaseService);
+    auth = moduleRef.get(OperatorAuthService);
     await app.init();
   });
 
@@ -67,17 +69,25 @@ describeIntegration('command centre event isolation', () => {
        )`,
       [eventA],
     );
+    await provisionOperator(database, {
+      actorId,
+      organisationId,
+      role: 'ADMIN',
+    });
+    headers = await operatorHeaders(auth, actorId);
   });
 
   afterAll(async () => {
     delete process.env.PAYMENT_RECONCILIATION_DISABLED;
+    delete process.env.OPERATOR_TOKEN_SIGNING_KEY;
+    delete process.env.OPERATOR_ACCESS_TOKEN_TTL_SECONDS;
     await app.close();
   });
 
   it('does not allow an Event A inventory alert to be acted on through Event B', async () => {
     await request(app.getHttpServer())
       .post(`/command-centre/events/${eventB}/inventory-alerts/alert-a/actions`)
-      .set(headers())
+      .set(headers)
       .send({ action: 'ACKNOWLEDGE' })
       .expect(404);
 
@@ -88,7 +98,7 @@ describeIntegration('command centre event isolation', () => {
 
     const eventBSnapshot = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventB}`)
-      .set(headers())
+      .set(headers)
       .expect(200);
     expect(eventBSnapshot.body.inventory.risks).toEqual([]);
   });
