@@ -23,15 +23,19 @@ export interface ProviderStatusResult {
   failureCode?: string;
 }
 
+export type ProviderTruthState = Extract<
+  PaymentAttemptState,
+  'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN'
+>;
+
 export interface VerifiedProviderCallback {
   providerEventKey: string;
   paymentAttemptId?: string;
   providerReference?: string;
-  status: Extract<PaymentAttemptState, 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN'>;
+  status: ProviderTruthState;
   amountMinor?: number;
   currency?: string;
   failureCode?: string;
-  raw: Record<string, unknown>;
 }
 
 export interface PaymentProvider {
