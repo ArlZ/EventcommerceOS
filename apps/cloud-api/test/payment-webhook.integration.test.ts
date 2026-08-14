@@ -131,10 +131,22 @@ describeIntegration('payment webhook trust boundary', () => {
     expect(state[0]!.reconciliation_required).toBe(true);
     expect(state[0]!.next_query_at).not.toBeNull();
 
-    const observations = await database.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM payment_provider_observations',
+    const observations = await database.query<{
+      count: string;
+      provider_receipt_reference: string | null;
+    }>(
+      `SELECT count(*)::text AS count, max(provider_receipt_reference) AS provider_receipt_reference
+       FROM payment_provider_observations`,
     );
-    expect(observations[0]!.count).toBe('1');
+    expect(observations[0]).toEqual({
+      count: '1',
+      provider_receipt_reference: 'RECEIPT-001',
+    });
+
+    const canonical = await database.query<{ provider_receipt_reference: string | null }>(
+      `SELECT provider_receipt_reference FROM payment_attempts WHERE id = 'attempt-webhook-001'`,
+    );
+    expect(canonical[0]!.provider_receipt_reference).toBeNull();
   });
 
   it('does not create money truth for an unknown provider request ID', async () => {
