@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import { EdgePaymentsService, parseEdgeInitiatePayment } from './payments.service';
 import {
+  assertNoProhibitedEdgeCardFields,
   parseEdgeExternalTerminalConfirmation,
   TerminalPaymentsService,
 } from './terminal-payments.service';
@@ -14,6 +15,7 @@ export class EdgePaymentsController {
 
   @Post('initiate')
   initiate(@Body() body: unknown) {
+    assertNoProhibitedEdgeCardFields(body);
     return this.payments.initiate(parseEdgeInitiatePayment(body));
   }
 
