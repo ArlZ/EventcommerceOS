@@ -147,6 +147,20 @@ describeIntegration('M-PESA callback race', () => {
     expect(initiated.attempt.providerRequestId).toBe('checkout-race-001');
     expect(provider.initiateCalls).toBe(1);
 
+    const callbackEvidence = await database.query<{
+      attempt_id: string | null;
+      provider_receipt_reference: string | null;
+    }>(
+      `SELECT attempt_id,provider_receipt_reference
+       FROM payment_provider_observations
+       WHERE provider = 'MPESA' AND observation_key = 'stk:checkout-race-001'`,
+    );
+    expect(callbackEvidence[0]).toEqual({
+      attempt_id: 'attempt-race-001',
+      provider_receipt_reference: 'CALLBACK-RECEIPT',
+    });
+    expect(initiated.attempt.providerReceiptReference).toBeNull();
+
     const unknownCallback = await database.query<{ count: string }>(
       `SELECT count(*)::text AS count FROM payment_reconciliation_exceptions
        WHERE exception_type = 'UNKNOWN_PROVIDER_REQUEST_ID'`,
@@ -156,6 +170,7 @@ describeIntegration('M-PESA callback race', () => {
     await payments.reconcileAttempt('attempt-race-001', 'query-after-early-callback');
     const final = await payments.getAttempt('attempt-race-001');
     expect(final.state).toBe('SUCCESS');
+    expect(final.providerReceiptReference).toBeNull();
     expect(final.reconciliationRequired).toBe(false);
     expect(provider.queryCalls).toBe(1);
     expect(provider.initiateCalls).toBe(1);
