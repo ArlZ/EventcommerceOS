@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { InitiatePaymentRequest } from '@event-commerce/contracts';
 import { DatabaseService } from '../src/database/database.service';
 import {
   PAYMENT_PROVIDER,
@@ -46,7 +47,7 @@ class CountingProvider implements PaymentProvider {
   }
 }
 
-function input(overrides: Record<string, unknown> = {}) {
+function input(overrides: Partial<InitiatePaymentRequest> = {}): InitiatePaymentRequest {
   return {
     eventId: 'logical-payment-event-001',
     orderId: 'logical-payment-order-001',
@@ -54,10 +55,10 @@ function input(overrides: Record<string, unknown> = {}) {
     attemptId: 'logical-attempt-001',
     clientAttemptId: 'logical-client-attempt-001',
     idempotencyKey: 'PAYMENT:logical-payment-order-001:full:logical-client-attempt-001',
-    provider: 'MPESA' as const,
+    provider: 'MPESA',
     amountMinor: 25_000,
     currency: 'KES',
-    payer: { kind: 'MSISDN' as const, value: '254712345678' },
+    payer: { kind: 'MSISDN', value: '254712345678' },
     ...overrides,
   };
 }
