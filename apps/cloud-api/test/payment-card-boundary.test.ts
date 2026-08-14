@@ -44,6 +44,18 @@ describe('payment card-data boundary', () => {
     ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
+  it('rejects transient M-PESA phone data on card-terminal requests', () => {
+    expect(() =>
+      parseInitiatePaymentRequest({ ...initiation(), customerPhone: '254700000000' }),
+    ).toThrow('customerPhone is only accepted for the M-PESA provider');
+  });
+
+  it('requires the Sabi merchant reference to be the immutable payment-attempt id', () => {
+    expect(() =>
+      parseInitiatePaymentRequest({ ...initiation(), accountReference: 'order-card' }),
+    ).toThrow('Pesapal Sabi accountReference must equal paymentAttemptId');
+  });
+
   it('keeps valid terminal initiation and manual-confirmation models reference-only', () => {
     const request = parseInitiatePaymentRequest(initiation());
     const manual = parseExternalTerminalConfirmation({
