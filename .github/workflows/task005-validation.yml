@@ -1,0 +1,58 @@
+name: Task 005 Validation
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  inventory-stack:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
+      EDGE_FORWARDER_DISABLED: 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: event_commerce_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @event-commerce/cloud-api db:migrate
+      - run: pnpm --filter @event-commerce/event-edge db:migrate
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm format:check
+      - run: pnpm arch:check
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - run: gradle -p apps/pos-android testDebugUnitTest lintDebug --stacktrace
