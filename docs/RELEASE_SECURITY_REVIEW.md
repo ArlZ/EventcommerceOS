@@ -114,7 +114,7 @@ Event Edge administrative triggers are role restricted:
 - alert evaluation/escalation: `SUPERVISOR` or higher;
 - notification drain: `ADMIN` or higher.
 
-**Offline revocation caveat:** a disconnected Event Edge cannot learn a Cloud-side account/session revocation until connectivity returns. Offline Edge authority is therefore bounded by the signed token expiry. This is intentional: immediate WAN revocation and WAN-independent local operations cannot both be guaranteed. Cloud-side actions still revoke immediately because Cloud rechecks current account state on every request.
+**Offline revocation caveat:** Event Edge deliberately does not introspect Cloud on each operator action. A valid Edge-side operator token therefore remains usable until its expiry whether or not WAN is currently available. This is intentional: immediate central revocation and WAN-independent local operations cannot both be guaranteed without an online introspection dependency. Cloud-side actions still revoke immediately because Cloud rechecks current account state on every request.
 
 Adversarial tests cover trusted-header spoofing, role escalation, wrong credential, tampered token, session/credential invalidation, cross-organisation access, offline Edge signature verification, actor spoofing and local-permission denial.
 
