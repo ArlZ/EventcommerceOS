@@ -15,6 +15,17 @@ export const responsibleActorId = 'inventory-controller';
 export const escalationActorId = 'inventory-manager';
 
 export async function resetInventory(database: EdgeDatabaseService): Promise<void> {
+  // Some inventory tests first persist device close events through Task 004 sync. The
+  // sync outbox owns an FK to those processed events, so reset it before deleting the
+  // sale-event rows. This preserves the production FK rather than weakening it for tests.
+  await database.query(
+    `DELETE FROM edge_cloud_outbox
+     WHERE event_instance_id IN (
+       SELECT event_instance_id FROM edge_processed_device_events
+       WHERE device_id = 'device-inventory-test'
+         AND event_type IN ('ORDER_CLOSED_CASH', 'ORDER_CLOSED_MPESA')
+     )`,
+  );
   await database.query(
     `TRUNCATE
        edge_inventory_sale_inbox,
@@ -88,106 +99,80 @@ export async function installInventoryFixture(
         eventWideSafetyStock: '50',
         imbalanceRatio: 2,
       },
-      {
-        id: 'alert-warehouse-beer',
-        inventoryLocationId: warehouseLocationId,
-        skuId: beerSkuId,
-        absoluteMinimum: '80',
-        minutesCoverThreshold: 20,
-        targetCoverMinutes: 90,
-        sourceSafetyStock: '80',
-        eventWideSafetyStock: '50',
-        imbalanceRatio: 2,
-      },
-      {
-        id: 'alert-event-beer',
-        skuId: beerSkuId,
-        absoluteMinimum: '0',
-        minutesCoverThreshold: 15,
-        targetCoverMinutes: 60,
-        sourceSafetyStock: '0',
-        eventWideSafetyStock: '50',
-        imbalanceRatio: 2,
-      },
     ],
     responsibilities: [
       {
-        id: 'responsibility-main',
         inventoryLocationId: mainLocationId,
-        responsibleActorId,
+        actorId: responsibleActorId,
         escalationActorId,
-        priority: 10,
-      },
-      {
-        id: 'responsibility-event',
-        responsibleActorId,
-        escalationActorId,
-        priority: 100,
       },
     ],
     permissions: [
-      { actorId: operatorActorId, permission: 'INVENTORY_MOVE' },
-      { actorId: operatorActorId, permission: 'TRANSFER_MANAGE' },
-      { actorId: operatorActorId, permission: 'COUNT_MANAGE' },
-      { actorId: operatorActorId, permission: 'ALERT_MANAGE' },
+      { actorId: operatorActorId, permission: 'MANUAL_MOVEMENT' },
+      { actorId: operatorActorId, permission: 'TRANSFER_CREATE' },
+      { actorId: operatorActorId, permission: 'TRANSFER_ASSIGN' },
+      { actorId: operatorActorId, permission: 'TRANSFER_PICK' },
+      { actorId: operatorActorId, permission: 'TRANSFER_DISPATCH' },
+      { actorId: operatorActorId, permission: 'TRANSFER_RECEIVE' },
+      { actorId: operatorActorId, permission: 'TRANSFER_CANCEL' },
+      { actorId: operatorActorId, permission: 'COUNT_START' },
+      { actorId: operatorActorId, permission: 'COUNT_CLOSE' },
+      { actorId: responsibleActorId, permission: 'ALERT_ACKNOWLEDGE' },
+      { actorId: responsibleActorId, permission: 'ALERT_ASSIGN' },
+      { actorId: escalationActorId, permission: 'ALERT_RESOLVE' },
     ],
   });
 }
 
 export async function receipt(
   ledger: InventoryLedgerService,
-  locationId: string,
+  inventoryLocationId: string,
   skuId: string,
   quantity: bigint,
   suffix: string,
-  occurredAt = '2026-08-14T07:00:00.000Z',
 ): Promise<void> {
   await ledger.postManual({
-    id: `receipt-${suffix}`,
     eventId: inventoryEventId,
-    inventoryLocationId: locationId,
+    inventoryLocationId,
     skuId,
-    movementType: 'RECEIPT',
+    movementType: 'RECEIVE',
     quantityDeltaBase: quantity.toString(),
+    sourceType: 'RECEIPT',
+    sourceId: `receipt-${suffix}`,
     actorId: operatorActorId,
     reason: 'test receipt',
-    occurredAt,
+    occurredAt: '2026-08-14T07:50:00.000Z',
     idempotencyKey: `receipt-${suffix}`,
   });
 }
 
-export function closedSale(options: {
-  eventInstanceId: string;
+export function closedSale(overrides: {
+  eventInstanceId?: string;
   eventType?: 'ORDER_CLOSED_CASH' | 'ORDER_CLOSED_MPESA';
-  salesLocationId?: string;
+  orderId?: string;
   occurredAt?: string;
   lines: Array<{ skuId: string; quantity: number }>;
 }): SyncEventEnvelope {
+  const eventInstanceId = overrides.eventInstanceId ?? 'inventory-sale-event-001';
   return {
-    schemaVersion: 1,
-    eventInstanceId: options.eventInstanceId,
-    eventId: `event-${options.eventInstanceId}`,
-    eventType: options.eventType ?? 'ORDER_CLOSED_CASH',
+    eventInstanceId,
+    eventId: `inventory-sync-${eventInstanceId}`,
+    eventType: overrides.eventType ?? 'ORDER_CLOSED_CASH',
     aggregateType: 'ORDER',
-    aggregateId: `order-${options.eventInstanceId}`,
+    aggregateId: overrides.orderId ?? `order-${eventInstanceId}`,
     eventVersion: 2,
     deviceId: 'device-inventory-test',
-    sequence: Number(options.eventInstanceId.replace(/\D/g, '').slice(-6) || '1'),
-    occurredAt: options.occurredAt ?? '2026-08-14T07:55:00.000Z',
-    idempotencyKey: `idem-${options.eventInstanceId}`,
+    sequence: 1,
+    occurredAt: overrides.occurredAt ?? '2026-08-14T08:00:00.000Z',
+    idempotencyKey: `sale:${eventInstanceId}`,
     payload: {
-      orderId: `order-${options.eventInstanceId}`,
       eventId: inventoryEventId,
-      salesLocationId: options.salesLocationId ?? 'bar-main',
+      salesLocationId: 'bar-main',
+      orderId: overrides.orderId ?? `order-${eventInstanceId}`,
       state: 'CLOSED',
-      totalMinor: 10_000,
+      totalMinor: 1000,
       currency: 'KES',
-      lines: options.lines.map((line) => ({
-        menuItemId: `menu-${line.skuId}`,
-        skuId: line.skuId,
-        quantity: line.quantity,
-        unitPriceMinor: 10_000,
-      })),
+      lines: overrides.lines,
     },
   };
 }
