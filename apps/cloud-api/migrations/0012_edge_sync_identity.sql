@@ -43,3 +43,10 @@ ALTER TABLE sync_device_state
 CREATE INDEX IF NOT EXISTS sync_device_state_edge_idx
   ON sync_device_state(edge_id, last_seen_at DESC)
   WHERE edge_id IS NOT NULL;
+
+ALTER TABLE inventory_edge_events
+  ADD COLUMN IF NOT EXISTS edge_id text REFERENCES edge_sync_clients(edge_id),
+  ADD COLUMN IF NOT EXISTS organisation_id uuid REFERENCES organisations(id);
+CREATE INDEX IF NOT EXISTS inventory_edge_events_edge_idx
+  ON inventory_edge_events(edge_id, received_at DESC)
+  WHERE edge_id IS NOT NULL;
