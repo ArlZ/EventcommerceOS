@@ -10,12 +10,14 @@ import com.eventcommerce.pos.sync.DeviceEdgeAck
 import com.eventcommerce.pos.sync.DeviceEdgeTransport
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
+import com.eventcommerce.pos.sync.SyncJson
 import com.eventcommerce.pos.sync.deviceRetryDelayMs
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -137,6 +139,17 @@ class DeviceSyncEngineTest {
     assertEquals(safePrefix, health.acknowledgedThroughSequence)
     assertEquals(2, health.edgeBacklogCount)
     assertEquals("Edge reconciliation required before sync can advance", health.lastError)
+  }
+
+  @Test
+  fun `Edge response parser detects conflict receipts`() {
+    val acknowledgement = SyncJson.acknowledgement(
+      """{"deviceId":"device-1","acceptedThroughSequence":0,"edgeBacklogCount":3,"receipts":[{"eventInstanceId":"event-1","status":"CONFLICT"}]}""",
+    )
+
+    assertTrue(acknowledgement.hasConflict)
+    assertEquals(0L, acknowledgement.acceptedThroughSequence)
+    assertEquals(3, acknowledgement.edgeBacklogCount)
   }
 
   @Test
