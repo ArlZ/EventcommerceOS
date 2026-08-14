@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS event_close_reports (
   event_id uuid NOT NULL,
   revision integer NOT NULL CHECK (revision > 0),
   source_version_token text NOT NULL,
-  report_json jsonb NOT NULL,
+  report_json json NOT NULL,
   report_sha256 char(64) NOT NULL,
   created_by_actor_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
