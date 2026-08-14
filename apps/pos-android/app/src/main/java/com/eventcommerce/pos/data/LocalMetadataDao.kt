@@ -12,4 +12,7 @@ interface LocalMetadataDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun put(value: LocalMetadataEntity)
+
+  @Query("DELETE FROM local_metadata WHERE `key` = :key")
+  suspend fun delete(key: String)
 }
