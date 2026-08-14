@@ -9,6 +9,7 @@ export function makeHealthResponse(service: string, now: Date = new Date()): Hea
   return { service, status: 'ok', version: '0.1.0', timestamp: now.toISOString() };
 }
 
+export * from './command-centre';
 export * from './configuration';
 export * from './inventory';
 export * from './payment';
