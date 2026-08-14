@@ -22,8 +22,8 @@ export class InventoryOperationsLoopService implements OnModuleInit, OnModuleDes
 
   onModuleInit(): void {
     if (
-      process.env.EDGE_FORWARDER_DISABLED === 'true' ||
-      process.env.INVENTORY_BACKGROUND_DISABLED === 'true'
+      process.env.INVENTORY_BACKGROUND_DISABLED === 'true' ||
+      process.env.NODE_ENV === 'test'
     ) {
       return;
     }
