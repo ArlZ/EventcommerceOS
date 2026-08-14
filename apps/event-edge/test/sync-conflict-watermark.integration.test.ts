@@ -31,7 +31,7 @@ describeIntegration('device conflict acknowledgement safety', () => {
     delete process.env.EDGE_FORWARDER_DISABLED;
   });
 
-  it('does not acknowledge through a conflicting local sequence', async () => {
+  it('keeps a device blocked at an unresolved sequence fork until reconciliation resolves it', async () => {
     const original = {
       schemaVersion: 1,
       eventInstanceId: 'edge-existing-instance',
@@ -58,16 +58,52 @@ describeIntegration('device conflict acknowledgement safety', () => {
       idempotencyKey: 'edge-conflicting-idem',
       payload: { ...original.payload, totalMinor: 20_000 },
     };
-    const response = await request(app.getHttpServer())
+    const conflictResponse = await request(app.getHttpServer())
       .post('/sync/device-events')
       .send({ deviceId: conflict.deviceId, events: [conflict] })
       .expect(201);
 
-    expect(response.body.receipts[0].status).toBe('CONFLICT');
-    expect(response.body.acceptedThroughSequence).toBe(0);
+    expect(conflictResponse.body.receipts[0].status).toBe('CONFLICT');
+    expect(conflictResponse.body.acceptedThroughSequence).toBe(0);
+
+    const next = {
+      ...original,
+      eventInstanceId: 'edge-next-instance',
+      eventId: 'edge-next-event',
+      sequence: 2,
+      occurredAt: '2026-08-13T18:00:01Z',
+      idempotencyKey: 'edge-next-idem',
+      payload: { ...original.payload, totalMinor: 30_000 },
+    };
+    const stillBlocked = await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .send({ deviceId: next.deviceId, events: [next] })
+      .expect(201);
+
+    expect(stillBlocked.body.acceptedThroughSequence).toBe(0);
+    const persisted = await database.query<{ accepted_through_sequence: string }>(
+      `SELECT accepted_through_sequence::text
+       FROM edge_device_watermarks
+       WHERE device_id = $1`,
+      [original.deviceId],
+    );
+    expect(persisted[0]!.accepted_through_sequence).toBe('0');
+
     const exceptions = await database.query<{ exception_type: string }>(
-      'SELECT exception_type FROM edge_reconciliation_exceptions',
+      'SELECT exception_type FROM edge_reconciliation_exceptions WHERE resolved_at IS NULL',
     );
     expect(exceptions.map((row) => row.exception_type)).toContain('DEVICE_SEQUENCE_REUSE');
+
+    await database.query(
+      'UPDATE edge_reconciliation_exceptions SET resolved_at = now() WHERE device_id = $1',
+      [original.deviceId],
+    );
+    const afterResolution = await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .send({ deviceId: next.deviceId, events: [next] })
+      .expect(201);
+
+    expect(afterResolution.body.receipts[0].status).toBe('DUPLICATE');
+    expect(afterResolution.body.acceptedThroughSequence).toBe(2);
   });
 });
