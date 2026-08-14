@@ -51,12 +51,6 @@ interface PaymentRow extends QueryResultRow {
   currency: string;
 }
 
-interface AttemptStateRow extends QueryResultRow {
-  state: PaymentAttemptState;
-  reconciliation_required: boolean;
-  next_query_at: Date | null;
-}
-
 interface CreateAttemptResult {
   attempt: AttemptRow;
   idempotentReplay: boolean;
@@ -72,8 +66,8 @@ export class PaymentService {
   async initiate(input: InitiatePaymentRequest): Promise<InitiatePaymentResponse> {
     const created = await this.createOrFindAttempt(input);
 
-    if (created.idempotentReplay && created.attempt.dispatch_started_at !== null) {
-      if (created.attempt.state === 'INITIATED') {
+    if (created.idempotentReplay) {
+      if (created.attempt.dispatch_started_at !== null && created.attempt.state === 'INITIATED') {
         await this.applyTransition(created.attempt.id, {
           target: 'UNKNOWN',
           source: 'SYSTEM',
@@ -167,6 +161,9 @@ export class PaymentService {
       const existing = await this.attemptByIdempotency(client, input.idempotencyKey);
       if (existing) return { attempt: existing, idempotentReplay: true };
 
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `payment:${input.paymentId}`,
+      ]);
       await this.ensurePayment(client, input);
       const prior = await client.query<{ state: PaymentAttemptState }>(
         `SELECT s.state
@@ -177,7 +174,9 @@ export class PaymentService {
       );
       const disposition = paymentRetryDisposition(prior.rows.map((row) => row.state));
       if (disposition === 'BLOCK_UNRESOLVED') {
-        throw new ConflictException('payment has an unresolved attempt; reconcile it before retrying');
+        throw new ConflictException(
+          'payment has an unresolved attempt; reconcile it before retrying',
+        );
       }
       if (disposition === 'BLOCK_SETTLED') {
         throw new ConflictException('payment is already settled');
@@ -307,16 +306,22 @@ export class PaymentService {
 
       if (input.providerRequestId && attempt.provider_request_id !== input.providerRequestId) {
         if (attempt.provider_request_id !== null) {
-          await this.exception(client, attemptId, attempt.provider, 'PROVIDER_REQUEST_ID_CONFLICT', {
-            currentRequestId: attempt.provider_request_id,
-            observedRequestId: input.providerRequestId,
-          });
+          await this.exception(
+            client,
+            attemptId,
+            attempt.provider,
+            'PROVIDER_REQUEST_ID_CONFLICT',
+            {
+              currentRequestId: attempt.provider_request_id,
+              observedRequestId: input.providerRequestId,
+            },
+          );
           return;
         }
-        await client.query(
-          `UPDATE payment_attempts SET provider_request_id = $2 WHERE id = $1`,
-          [attemptId, input.providerRequestId],
-        );
+        await client.query(`UPDATE payment_attempts SET provider_request_id = $2 WHERE id = $1`, [
+          attemptId,
+          input.providerRequestId,
+        ]);
       }
       if (input.providerReceiptReference && attempt.provider_receipt_reference === null) {
         await client.query(
