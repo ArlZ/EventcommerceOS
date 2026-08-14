@@ -30,10 +30,21 @@ object SyncJson {
 
   fun acknowledgement(text: String): DeviceEdgeAck {
     val value = JSONObject(text)
+    val receipts = value.optJSONArray("receipts")
+    var hasConflict = false
+    if (receipts != null) {
+      for (index in 0 until receipts.length()) {
+        if (receipts.getJSONObject(index).optString("status") == "CONFLICT") {
+          hasConflict = true
+          break
+        }
+      }
+    }
     return DeviceEdgeAck(
       deviceId = value.getString("deviceId"),
       acceptedThroughSequence = value.getLong("acceptedThroughSequence"),
       edgeBacklogCount = value.getInt("edgeBacklogCount"),
+      hasConflict = hasConflict,
     )
   }
 }
