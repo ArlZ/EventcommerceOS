@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CommandCentreModule } from './command-centre/command-centre.module';
 import { ConfigurationModule } from './configuration/configuration.module';
 import { DatabaseModule } from './database/database.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -14,6 +15,7 @@ import { HealthModule } from './system/health.module';
     InventoryModule,
     PaymentsModule,
     SyncModule,
+    CommandCentreModule,
   ],
 })
 export class AppModule {}
