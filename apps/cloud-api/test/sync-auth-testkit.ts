@@ -3,7 +3,7 @@ import { DatabaseService } from '../src/database/database.service';
 
 export const DEFAULT_SYNC_ORGANISATION_ID = '11111111-1111-4111-8111-111111111111';
 export const DEFAULT_SYNC_EVENT_ID = '22222222-2222-4222-8222-222222222222';
-export const DEFAULT_SYNC_TOKEN = 'test-edge-sync-token-0123456789-abcdefghijklmnopqrstuvwxyz';
+const DEFAULT_SYNC_TOKEN_PREFIX = 'test-edge-sync-token-0123456789-abcdefghijklmnopqrstuvwxyz';
 
 export interface SyncEdgeFixtureOptions {
   edgeId: string;
@@ -16,7 +16,11 @@ function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-export function syncEdgeHeaders(edgeId: string, token = DEFAULT_SYNC_TOKEN) {
+function defaultToken(edgeId: string): string {
+  return `${DEFAULT_SYNC_TOKEN_PREFIX}:${edgeId}`;
+}
+
+export function syncEdgeHeaders(edgeId: string, token = defaultToken(edgeId)) {
   return {
     'x-edge-id': edgeId,
     authorization: `Bearer ${token}`,
@@ -29,7 +33,7 @@ export async function provisionSyncEdge(
 ): Promise<{ organisationId: string; token: string; headers: ReturnType<typeof syncEdgeHeaders> }> {
   const organisationId = options.organisationId ?? DEFAULT_SYNC_ORGANISATION_ID;
   const eventIds = options.eventIds ?? [DEFAULT_SYNC_EVENT_ID];
-  const token = options.token ?? DEFAULT_SYNC_TOKEN;
+  const token = options.token ?? defaultToken(options.edgeId);
 
   await database.query(
     `INSERT INTO organisations(id,name,lifecycle)
