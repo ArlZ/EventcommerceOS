@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS edge_sync_clients (
   revoked_at timestamptz,
   CHECK ((status = 'ACTIVE' AND revoked_at IS NULL) OR (status = 'REVOKED' AND revoked_at IS NOT NULL))
 );
+CREATE UNIQUE INDEX IF NOT EXISTS edge_sync_clients_credential_idx
+  ON edge_sync_clients(credential_sha256);
 CREATE INDEX IF NOT EXISTS edge_sync_clients_org_idx
   ON edge_sync_clients(organisation_id, status, edge_id);
 
