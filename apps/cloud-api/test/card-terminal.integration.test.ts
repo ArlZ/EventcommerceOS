@@ -165,6 +165,22 @@ describeIntegration('card terminal orchestration', () => {
     expect(attempts[0]?.count).toBe('1');
   });
 
+  it('replays a verified terminal callback received before Cloud creates the payment attempt', async () => {
+    const early = await payments.ingestProviderCallback('pesapal_sabi', { terminal: 'signal' });
+    expect(early.status).toBe('UNMATCHED');
+
+    const resolved = await payments.initiate(cardRequest());
+    expect(resolved.status).toBe('SUCCEEDED');
+    expect(resolved.providerReference).toBe('confirm-1');
+
+    const providerEvents = await database.query<{ payment_attempt_id: string | null }>(
+      `SELECT payment_attempt_id FROM payment_provider_events
+       WHERE provider_id='pesapal_sabi' AND provider_event_key='sabi:confirm-1'`,
+    );
+    expect(providerEvents[0]?.payment_attempt_id).toBe('attempt-card-1');
+    expect((await payments.ingestProviderCallback('pesapal_sabi', {})).status).toBe('DUPLICATE');
+  });
+
   it('correlates a verified terminal callback by merchant reference before a provider reference exists', async () => {
     const pending = await payments.initiate(cardRequest());
     expect(pending.providerReference).toBeNull();
