@@ -1,8 +1,42 @@
 import type {
+  ConfirmExternalTerminalPaymentRequest,
   InitiatePaymentRequest,
   RefundPaymentRequest,
   ReversePaymentRequest,
 } from '@event-commerce/contracts';
+
+const PROHIBITED_CARD_KEYS = new Set([
+  'pan',
+  'cardnumber',
+  'cvv',
+  'cvc',
+  'pin',
+  'track',
+  'track1',
+  'track2',
+  'trackdata',
+  'magstripe',
+  'emv',
+  'cryptogram',
+  'expiry',
+  'expirationdate',
+  'cardexpiry',
+]);
+
+export function assertNoProhibitedCardFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertNoProhibitedCardFields);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (PROHIBITED_CARD_KEYS.has(normalized)) {
+      throw new Error(`Prohibited raw card field is not accepted: ${key}`);
+    }
+    assertNoProhibitedCardFields(child);
+  }
+}
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -43,6 +77,7 @@ function currency(record: Record<string, unknown>): string {
 }
 
 export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
   const request: InitiatePaymentRequest = {
     eventId: requiredString(record, 'eventId'),
@@ -62,7 +97,31 @@ export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequ
   return request;
 }
 
+export function parseExternalTerminalConfirmation(
+  value: unknown,
+): ConfirmExternalTerminalPaymentRequest {
+  assertNoProhibitedCardFields(value);
+  const record = object(value);
+  const outcome = requiredString(record, 'outcome').toUpperCase();
+  if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
+    throw new Error('outcome must be APPROVED or DECLINED');
+  }
+  return {
+    confirmationId: requiredString(record, 'confirmationId'),
+    paymentAttemptId: requiredString(record, 'paymentAttemptId'),
+    externalProviderId: requiredString(record, 'externalProviderId').toLowerCase(),
+    externalReference: requiredString(record, 'externalReference'),
+    amountMinor: positiveAmount(record),
+    currency: currency(record),
+    outcome,
+    actorId: requiredString(record, 'actorId'),
+    reason: requiredString(record, 'reason'),
+    idempotencyKey: requiredString(record, 'idempotencyKey'),
+  };
+}
+
 export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
   const request: RefundPaymentRequest = {
     refundId: requiredString(record, 'refundId'),
@@ -79,6 +138,7 @@ export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest 
 }
 
 export function parseReversePaymentRequest(value: unknown): ReversePaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
   return {
     reversalId: requiredString(record, 'reversalId'),
