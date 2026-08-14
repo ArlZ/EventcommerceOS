@@ -75,6 +75,7 @@ describeIntegration('inventory periodic operations loop', () => {
     );
     expect(Number(escalation[0]!.count)).toBeGreaterThanOrEqual(1);
   });
+
   it('recovers a persisted sale after a crash between sync durability and inventory consumption', async () => {
     await receipt(ledger, mainLocationId, beerSkuId, 100n, 'crash-window-main');
     const sale = closedSale({
@@ -104,15 +105,19 @@ describeIntegration('inventory periodic operations loop', () => {
       ],
     );
 
-    const before = await database.query<{ processed_at: Date | null }>(
-      `SELECT processed_at FROM edge_inventory_sale_inbox
+    const before = await database.query<{ processed_at: Date | null; next_attempt_at: Date }>(
+      `SELECT processed_at, next_attempt_at FROM edge_inventory_sale_inbox
        WHERE source_event_instance_id = $1`,
       [sale.eventInstanceId],
     );
     expect(before[0]!.processed_at).toBeNull();
 
-    const first = await loop.runOnce(new Date('2026-08-14T08:00:10.000Z'));
-    const second = await loop.runOnce(new Date('2026-08-14T08:00:20.000Z'));
+    // The inbox trigger uses database now() for next_attempt_at. Drive the periodic loop
+    // from that durable timestamp rather than a wall-clock fixture so this recovery test
+    // remains deterministic regardless of when CI executes on the fixture date.
+    const dueAt = before[0]!.next_attempt_at.getTime();
+    const first = await loop.runOnce(new Date(dueAt + 1_000));
+    const second = await loop.runOnce(new Date(dueAt + 11_000));
     expect(first.salesReconciled).toBe(1);
     expect(second.salesReconciled).toBe(0);
 

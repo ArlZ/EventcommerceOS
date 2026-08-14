@@ -8,7 +8,7 @@ import androidx.room.Update
 
 @Dao
 interface OrderDao {
-  @Query("SELECT * FROM pos_orders WHERE state = 'OPEN' ORDER BY createdAtEpochMs DESC LIMIT 1")
+  @Query("SELECT * FROM pos_orders WHERE state IN ('OPEN','PAYMENT_PENDING') ORDER BY createdAtEpochMs DESC LIMIT 1")
   suspend fun openOrder(): OrderEntity?
 
   @Query("SELECT * FROM pos_orders WHERE id = :orderId LIMIT 1")

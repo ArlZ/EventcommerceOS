@@ -52,6 +52,43 @@ class LocalOutbox(
     )
   }
 
+  suspend fun appendPaymentAttempt(
+    eventType: String,
+    attempt: PaymentAttemptEntity,
+    deviceId: String,
+  ) {
+    val instanceId = idFactory()
+    val payload = JSONObject()
+      .put("eventId", attempt.eventId)
+      .put("paymentId", attempt.paymentId)
+      .put("paymentAttemptId", attempt.id)
+      .put("orderId", attempt.orderId)
+      .put("providerId", attempt.providerId)
+      .put("idempotencyKey", attempt.idempotencyKey)
+      .put("amountMinor", attempt.amountMinor)
+      .put("currency", attempt.currency)
+      .put("status", attempt.state)
+      .put("providerReference", attempt.providerReference)
+      .put("failureCode", attempt.failureCode)
+
+    dao.insert(
+      OutboxEventEntity(
+        eventInstanceId = instanceId,
+        eventId = idFactory(),
+        eventType = eventType,
+        aggregateType = "PAYMENT_ATTEMPT",
+        aggregateId = attempt.id,
+        eventVersion = 1,
+        deviceId = deviceId,
+        sequence = deviceState.nextSequence(),
+        occurredAtEpochMs = clock(),
+        idempotencyKey = "payment-state:${attempt.id}:${attempt.state}",
+        payloadJson = payload.toString(),
+        sentAtEpochMs = null,
+      ),
+    )
+  }
+
   suspend fun count(): Int = dao.countAll()
 
   suspend fun events(): List<OutboxEventEntity> = dao.events()

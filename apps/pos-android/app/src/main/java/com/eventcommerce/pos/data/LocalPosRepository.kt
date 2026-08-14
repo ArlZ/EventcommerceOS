@@ -5,6 +5,7 @@ import com.eventcommerce.pos.domain.LocalOrder
 import com.eventcommerce.pos.domain.MenuCandidate
 import com.eventcommerce.pos.domain.MenuCandidateItem
 import com.eventcommerce.pos.domain.MenuIntegrity
+import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.util.UUID
 
 class LocalPosRepository(
@@ -17,6 +18,7 @@ class LocalPosRepository(
   private val deviceState = LocalDeviceState(db, idFactory)
   private val outbox = LocalOutbox(db, deviceState, clock, idFactory)
   private val orders = LocalOrderStore(db, menus, deviceState, outbox, clock, idFactory, faultInjector)
+  private val payments = LocalPaymentStore(db, deviceState, outbox, clock, idFactory, faultInjector)
 
   suspend fun ensureDevelopmentMenu(): CachedMenu = activeMenu() ?: installMenu(developmentMenuCandidate())
 
@@ -37,6 +39,36 @@ class LocalPosRepository(
   suspend fun clearCurrentOrder(): LocalOrder? = orders.clear()
 
   suspend fun recordCashPayment(orderId: String): LocalOrder = orders.recordCash(orderId)
+
+  suspend fun createPaymentAttempt(
+    orderId: String,
+    providerId: String,
+    paymentSlot: String = "primary",
+    clientAttemptId: String = UUID.randomUUID().toString(),
+  ): LocalPaymentAttempt = payments.createAttempt(orderId, providerId, paymentSlot, clientAttemptId)
+
+  suspend fun applyPaymentState(
+    paymentAttemptId: String,
+    state: PaymentAttemptState,
+    providerReference: String? = null,
+    failureCode: String? = null,
+  ): LocalPaymentAttempt = payments.applyProviderState(
+    paymentAttemptId,
+    state,
+    providerReference,
+    failureCode,
+  )
+
+  suspend fun markPaymentTransportUncertain(paymentAttemptId: String): LocalPaymentAttempt =
+    payments.markTransportUncertain(paymentAttemptId)
+
+  suspend fun paymentAttempt(paymentAttemptId: String): LocalPaymentAttempt? =
+    payments.attempt(paymentAttemptId)
+
+  suspend fun paymentAttemptsForOrder(orderId: String): List<LocalPaymentAttempt> =
+    payments.attemptsForOrder(orderId)
+
+  suspend fun unresolvedPaymentAttempts(): List<LocalPaymentAttempt> = payments.unresolved()
 
   suspend fun currentOpenOrder(): LocalOrder? = orders.current()
 

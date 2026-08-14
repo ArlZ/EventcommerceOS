@@ -25,15 +25,18 @@ class LocalOrderStore(
     require(quantityDelta != 0) { "quantity delta must not be zero" }
     return mutex.withLock {
       db.withTransaction {
-        val open = dao.openOrder()
-        val menu = if (open == null) {
+        val active = dao.openOrder()
+        if (active != null) {
+          require(active.state == OrderState.OPEN.name) { "order cannot be edited while payment is unresolved" }
+        }
+        val menu = if (active == null) {
           requireNotNull(menus.active()) { "no active menu is available" }
         } else {
-          requireNotNull(menus.version(open.menuVersion)) { "order menu version is unavailable" }
+          requireNotNull(menus.version(active.menuVersion)) { "order menu version is unavailable" }
         }
         val selected = requireNotNull(menus.item(menu.version, menuItemId)) { "menu item is unavailable" }
         val now = clock()
-        val order = open ?: OrderEntity(
+        val order = active ?: OrderEntity(
           id = idFactory(),
           eventId = menu.eventId,
           salesLocationId = DEVELOPMENT_SALES_LOCATION_ID,
@@ -91,6 +94,7 @@ class LocalOrderStore(
   suspend fun clear(): LocalOrder? = mutex.withLock {
     db.withTransaction {
       val order = dao.openOrder() ?: return@withTransaction null
+      require(order.state == OrderState.OPEN.name) { "order cannot be cleared while payment is unresolved" }
       if (dao.orderItems(order.id).isEmpty()) return@withTransaction snapshot(order)
       dao.clearOrderItems(order.id)
       val updated = order.copy(subtotalMinor = 0, totalMinor = 0, updatedAtEpochMs = clock())

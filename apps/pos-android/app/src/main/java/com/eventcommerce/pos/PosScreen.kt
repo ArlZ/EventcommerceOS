@@ -19,6 +19,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -31,18 +32,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.eventcommerce.pos.data.LocalPaymentAttempt
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.domain.CachedMenu
 import com.eventcommerce.pos.domain.LocalOrder
+import com.eventcommerce.pos.domain.OrderState
+import com.eventcommerce.pos.payments.PaymentCoordinator
 import kotlinx.coroutines.launch
 
 @Composable
-fun PosScreen(repository: LocalPosRepository) {
+fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
   var menu by remember { mutableStateOf<CachedMenu?>(null) }
   var order by remember { mutableStateOf<LocalOrder?>(null) }
+  var paymentAttempt by remember { mutableStateOf<LocalPaymentAttempt?>(null) }
   var history by remember { mutableStateOf<List<LocalOrder>>(emptyList()) }
   var outboxCount by remember { mutableStateOf(0) }
   var selectedCategory by remember { mutableStateOf("All") }
+  var customerPhone by remember { mutableStateOf("") }
   var busy by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<String?>(null) }
   var confirmClear by remember { mutableStateOf(false) }
@@ -51,6 +57,7 @@ fun PosScreen(repository: LocalPosRepository) {
   suspend fun refresh() {
     menu = repository.menuForSale()
     order = repository.currentOpenOrder()
+    paymentAttempt = order?.let { repository.paymentAttemptsForOrder(it.id).lastOrNull() }
     history = repository.history(5)
     outboxCount = repository.outboxCount()
   }
@@ -88,6 +95,8 @@ fun PosScreen(repository: LocalPosRepository) {
         }
         error?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
 
+        val current = order
+        val orderEditable = current == null || current.state == OrderState.OPEN
         val categories = listOf("All") + (menu?.items?.map { it.category }?.distinct()?.sorted() ?: emptyList())
         Row(
           modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -116,7 +125,7 @@ fun PosScreen(repository: LocalPosRepository) {
           items(visibleItems, key = { it.itemId }) { item ->
             Button(
               onClick = { mutate { repository.addItem(item.itemId) } },
-              enabled = !busy,
+              enabled = !busy && orderEditable,
               modifier = Modifier.height(92.dp),
             ) {
               Column {
@@ -133,7 +142,6 @@ fun PosScreen(repository: LocalPosRepository) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             Text("Current order", style = MaterialTheme.typography.titleLarge)
-            val current = order
             if (current == null || current.items.isEmpty()) {
               Text("Tap a product to start a locally durable order.")
             } else {
@@ -149,29 +157,68 @@ fun PosScreen(repository: LocalPosRepository) {
                   Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedButton(
                       onClick = { mutate { repository.removeItem(line.menuItemId) } },
-                      enabled = !busy,
+                      enabled = !busy && current.state == OrderState.OPEN,
                     ) { Text("−") }
                     Button(
                       onClick = { mutate { repository.addItem(line.menuItemId) } },
-                      enabled = !busy,
+                      enabled = !busy && current.state == OrderState.OPEN,
                     ) { Text("+") }
                   }
                 }
               }
               Text("Total: ${formatMinor(current.totalMinor, current.currency)}", style = MaterialTheme.typography.titleLarge)
-              Button(
-                onClick = { mutate { repository.recordCashPayment(current.id) } },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
-              ) {
-                Text("Record cash payment (dev) • Close order")
-              }
-              OutlinedButton(
-                onClick = { confirmClear = true },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                Text("Clear current order")
+
+              if (current.state == OrderState.OPEN) {
+                OutlinedTextField(
+                  value = customerPhone,
+                  onValueChange = { customerPhone = it },
+                  label = { Text("M-PESA phone") },
+                  singleLine = true,
+                  enabled = !busy,
+                  modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                  onClick = {
+                    mutate {
+                      payments.startMpesa(current.id, customerPhone)
+                      customerPhone = ""
+                    }
+                  },
+                  enabled = !busy && customerPhone.isNotBlank(),
+                  modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) {
+                  Text("Pay with M-PESA")
+                }
+                Button(
+                  onClick = { mutate { repository.recordCashPayment(current.id) } },
+                  enabled = !busy,
+                  modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) {
+                  Text("Record cash payment (dev) • Close order")
+                }
+                OutlinedButton(
+                  onClick = { confirmClear = true },
+                  enabled = !busy,
+                  modifier = Modifier.fillMaxWidth(),
+                ) {
+                  Text("Clear current order")
+                }
+              } else {
+                val attempt = paymentAttempt
+                Text("Payment state: ${attempt?.state?.name ?: "PENDING"}")
+                when (attempt?.state?.name) {
+                  "UNKNOWN" -> Text("Payment result is uncertain. Do not ask the customer to pay again until reconciled.")
+                  "PENDING", "INITIATED", "CREATED" -> Text("Waiting for payment confirmation.")
+                }
+                if (attempt != null) {
+                  OutlinedButton(
+                    onClick = { mutate { payments.reconcile(attempt.id) } },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                  ) {
+                    Text("Check payment status")
+                  }
+                }
               }
             }
           }

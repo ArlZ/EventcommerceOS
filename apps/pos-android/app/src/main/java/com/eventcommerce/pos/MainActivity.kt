@@ -12,6 +12,8 @@ import com.eventcommerce.pos.data.DeviceSyncProvisioningStore
 import com.eventcommerce.pos.data.DeviceSyncStateStore
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.data.SyncQueueStore
+import com.eventcommerce.pos.payments.PaymentCoordinator
+import com.eventcommerce.pos.payments.ProvisionedEdgePaymentTransport
 import com.eventcommerce.pos.sync.DeviceSyncCoordinator
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
@@ -23,6 +25,9 @@ class MainActivity : ComponentActivity() {
   private val syncState by lazy { DeviceSyncStateStore(database) }
   private val syncProvisioning by lazy { DeviceSyncProvisioningStore(database) }
   private val syncQueue by lazy { SyncQueueStore(database) }
+  private val payments by lazy {
+    PaymentCoordinator(repository, ProvisionedEdgePaymentTransport(syncProvisioning))
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -37,7 +42,7 @@ class MainActivity : ComponentActivity() {
     setContent {
       Column(modifier = Modifier.fillMaxSize()) {
         SyncStatusLine(syncQueue, syncState, syncProvisioning)
-        PosScreen(repository)
+        PosScreen(repository, payments)
       }
     }
   }
