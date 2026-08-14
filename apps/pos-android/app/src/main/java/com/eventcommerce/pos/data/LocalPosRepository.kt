@@ -2,6 +2,7 @@ package com.eventcommerce.pos.data
 
 import com.eventcommerce.pos.domain.CachedMenu
 import com.eventcommerce.pos.domain.LocalOrder
+import com.eventcommerce.pos.domain.LocalPaymentAttempt
 import com.eventcommerce.pos.domain.MenuCandidate
 import com.eventcommerce.pos.domain.MenuCandidateItem
 import com.eventcommerce.pos.domain.MenuIntegrity
@@ -17,6 +18,7 @@ class LocalPosRepository(
   private val deviceState = LocalDeviceState(db, idFactory)
   private val outbox = LocalOutbox(db, deviceState, clock, idFactory)
   private val orders = LocalOrderStore(db, menus, deviceState, outbox, clock, idFactory, faultInjector)
+  private val payments = LocalPaymentStore(db, orders, clock, idFactory)
 
   suspend fun ensureDevelopmentMenu(): CachedMenu = activeMenu() ?: installMenu(developmentMenuCandidate())
 
@@ -38,7 +40,28 @@ class LocalPosRepository(
 
   suspend fun recordCashPayment(orderId: String): LocalOrder = orders.recordCash(orderId)
 
+  suspend fun beginMpesaPayment(orderId: String): LocalPaymentAttempt = payments.beginMpesa(orderId)
+
+  suspend fun applyPaymentSnapshot(snapshot: LocalPaymentAttempt): LocalPaymentAttempt =
+    payments.applyEdgeSnapshot(snapshot)
+
+  suspend fun markPaymentTransportUnknown(
+    attemptId: String,
+    maskedPayerReference: String?,
+  ): LocalPaymentAttempt = payments.markTransportUnknown(attemptId, maskedPayerReference)
+
+  suspend fun paymentAttempt(attemptId: String): LocalPaymentAttempt? = payments.attempt(attemptId)
+
+  suspend fun unresolvedPayments(): List<LocalPaymentAttempt> = payments.unresolved()
+
+  suspend fun failedPayments(limit: Int = 10): List<LocalPaymentAttempt> = payments.failed(limit)
+
+  suspend fun resumeOrderAfterFailedPayment(attemptId: String) =
+    payments.resumeOrderAfterTerminalFailure(attemptId)
+
   suspend fun currentOpenOrder(): LocalOrder? = orders.current()
+
+  suspend fun paymentPendingOrders(): List<LocalOrder> = orders.paymentPending()
 
   suspend fun history(limit: Int = 20): List<LocalOrder> = orders.history(limit)
 
