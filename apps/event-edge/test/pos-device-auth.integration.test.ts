@@ -23,14 +23,18 @@ function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-function syncBody(eventId = DEFAULT_DEVICE_EVENT_ID, bodyDeviceId = deviceId) {
+function syncBody(
+  eventId = DEFAULT_DEVICE_EVENT_ID,
+  bodyDeviceId = deviceId,
+  salesLocationId?: string,
+) {
   return {
     deviceId: bodyDeviceId,
     events: [
       {
         schemaVersion: 1,
-        eventInstanceId: `security-sync-${eventId}-${bodyDeviceId}`,
-        eventId: `security-envelope-${eventId}-${bodyDeviceId}`,
+        eventInstanceId: `security-sync-${eventId}-${bodyDeviceId}-${salesLocationId ?? 'none'}`,
+        eventId: `security-envelope-${eventId}-${bodyDeviceId}-${salesLocationId ?? 'none'}`,
         eventType: 'ORDER_CHANGED',
         aggregateType: 'ORDER',
         aggregateId: `security-order-${bodyDeviceId}`,
@@ -38,10 +42,11 @@ function syncBody(eventId = DEFAULT_DEVICE_EVENT_ID, bodyDeviceId = deviceId) {
         deviceId: bodyDeviceId,
         sequence: 1,
         occurredAt: '2026-08-14T18:00:00.000Z',
-        idempotencyKey: `security-idem-${eventId}-${bodyDeviceId}`,
+        idempotencyKey: `security-idem-${eventId}-${bodyDeviceId}-${salesLocationId ?? 'none'}`,
         payload: {
           orderId: `security-order-${bodyDeviceId}`,
           eventId,
+          ...(salesLocationId === undefined ? {} : { salesLocationId }),
           state: 'OPEN',
           totalMinor: 10000,
           currency: 'KES',
@@ -98,6 +103,7 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     await database.query(
       `TRUNCATE edge_payment_attempt_cache,edge_cloud_outbox,edge_processed_device_events,
                 edge_device_watermarks,edge_reconciliation_exceptions,
@@ -109,6 +115,7 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
 
   afterAll(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     delete process.env.EDGE_FORWARDER_DISABLED;
     await app.close();
   });
@@ -144,6 +151,27 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
       'SELECT count(*)::text AS count FROM edge_processed_device_events',
     );
     expect(rows[0]!.count).toBe('0');
+  });
+
+  it('requires the exact assigned sales location on order sync', async () => {
+    const assignedLocation = 'bar-west';
+    await provisionPosDevice(database, deviceId, { salesLocationId: assignedLocation });
+
+    await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .set(posDeviceHeaders(deviceId))
+      .send(syncBody())
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .set(posDeviceHeaders(deviceId))
+      .send(syncBody(DEFAULT_DEVICE_EVENT_ID, deviceId, 'bar-east'))
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .set(posDeviceHeaders(deviceId))
+      .send(syncBody(DEFAULT_DEVICE_EVENT_ID, deviceId, assignedLocation))
+      .expect(201);
   });
 
   it('revokes the POS device immediately without deleting its local business history', async () => {
