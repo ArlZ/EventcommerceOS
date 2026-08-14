@@ -9,12 +9,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.eventcommerce.pos.data.DeviceSyncProvisioningStore
 import com.eventcommerce.pos.data.DeviceSyncStateStore
-import com.eventcommerce.pos.data.LocalPosRepository
+import com.eventcommerce.pos.data.SyncQueueStore
 import kotlinx.coroutines.delay
 
 @Composable
 fun SyncStatusLine(
-  repository: LocalPosRepository,
+  queue: SyncQueueStore,
   state: DeviceSyncStateStore,
   provisioning: DeviceSyncProvisioningStore,
 ) {
@@ -23,9 +23,7 @@ fun SyncStatusLine(
     while (true) {
       runCatching {
         val health = state.health()
-        val pending = repository.allOutboxEvents().count {
-          it.sequence > health.acknowledgedThroughSequence
-        }
+        val pending = queue.countAfter(health.acknowledgedThroughSequence)
         val mode = if (provisioning.endpoint() == null) "not provisioned" else "active"
         label = "Edge sync $mode • pending $pending • ack ${health.acknowledgedThroughSequence} • edge backlog ${health.edgeBacklogCount}" +
           (health.lastError?.let { " • error $it" } ?: "")
