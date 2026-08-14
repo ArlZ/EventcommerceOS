@@ -6,7 +6,10 @@ import type {
   PaymentAttemptSnapshot,
   PaymentAttemptState,
 } from '@event-commerce/contracts';
-import { requirePaymentAttemptTransition } from '@event-commerce/domain';
+import {
+  paymentRetryDisposition,
+  requirePaymentAttemptTransition,
+} from '@event-commerce/domain';
 import { EdgeDatabaseService } from '../database/database.service';
 import { PaymentCloudTransport } from './payment-cloud.transport';
 import { maskEdgeMsisdn } from './payment.validation';
@@ -127,6 +130,27 @@ export class PaymentRelayService {
       );
       if (attemptIdentity.rowCount !== 0) {
         throw new ConflictException('payment attempt ID was reused under another idempotency key');
+      }
+
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+        `edge-payment-order:${input.eventId}:${input.orderId}`,
+      ]);
+      const prior = await client.query<{ payment_id: string; state: PaymentAttemptState }>(
+        `SELECT payment_id, state FROM edge_payment_attempts
+         WHERE event_id = $1 AND order_id = $2`,
+        [input.eventId, input.orderId],
+      );
+      if (prior.rows.some((row) => row.payment_id !== input.paymentId)) {
+        throw new ConflictException('order already has a different logical payment ID');
+      }
+      const disposition = paymentRetryDisposition(prior.rows.map((row) => row.state));
+      if (disposition === 'BLOCK_UNRESOLVED') {
+        throw new ConflictException(
+          'order already has an unresolved payment attempt; reconcile it before retrying',
+        );
+      }
+      if (disposition === 'BLOCK_SETTLED') {
+        throw new ConflictException('order payment is already settled');
       }
 
       await client.query(
