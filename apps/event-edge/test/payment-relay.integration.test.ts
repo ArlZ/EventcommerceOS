@@ -142,6 +142,31 @@ describeIntegration('Event Edge payment relay', () => {
     expect(cloud.getCalls).toEqual(['edge-attempt-001']);
   });
 
+  it('never regresses confirmed SUCCESS when a delayed Cloud PENDING snapshot arrives', async () => {
+    const input = request();
+    cloud.attempts.set(input.attemptId, snapshot(input, 'SUCCESS'));
+    const confirmed = await payments.initiate(input);
+    expect(confirmed.attempt.state).toBe('SUCCESS');
+
+    cloud.attempts.set(input.attemptId, {
+      ...snapshot(input, 'PENDING'),
+      updatedAt: '2026-08-14T06:29:59.000Z',
+    });
+    await payments.refreshAttempt(input.attemptId);
+
+    const persisted = await payments.getAttempt(input.attemptId, false);
+    expect(persisted.state).toBe('SUCCESS');
+    expect(persisted.providerReceiptReference).toBe('receipt-edge-attempt-001');
+    const relay = await database.query<{ relay_status: string; last_relay_error: string | null }>(
+      `SELECT relay_status,last_relay_error FROM edge_payment_attempts WHERE attempt_id = $1`,
+      [input.attemptId],
+    );
+    expect(relay[0]).toEqual({
+      relay_status: 'UNAVAILABLE',
+      last_relay_error: 'CLOUD_PAYMENT_STATE_CONFLICT',
+    });
+  });
+
   it('preserves known PENDING provider truth during a later Cloud outage', async () => {
     const initiated = await payments.initiate(request());
     expect(initiated.attempt.state).toBe('PENDING');
