@@ -34,7 +34,7 @@ interface TransferLineRow extends QueryResultRow {
 }
 
 interface ReceiptRow extends QueryResultRow {
-  payload: Record<string, unknown>;
+  same_payload: boolean;
 }
 
 @Injectable()
@@ -81,14 +81,22 @@ export class InventoryTransferService {
           input.idempotencyKey,
         ],
       );
-      for (const line of input.lines) {
+      for (const line of [...input.lines].sort((a, b) => a.skuId.localeCompare(b.skuId))) {
         await client.query(
           `INSERT INTO edge_stock_transfer_lines(transfer_id, sku_id, requested_quantity)
            VALUES ($1,$2,$3)`,
           [input.id, line.skuId, line.requestedQuantityBase],
         );
       }
-      await this.history(client, input.id, null, 'REQUESTED', input.actorId, input.reason, input.requestedAt);
+      await this.history(
+        client,
+        input.id,
+        null,
+        'REQUESTED',
+        input.actorId,
+        input.reason,
+        input.requestedAt,
+      );
       const row = await this.transfer(client, input.id, true);
       await this.queueCloud(client, row);
       return this.map(row);
@@ -118,17 +126,29 @@ export class InventoryTransferService {
       const requested = new Map(lines.map((line) => [line.sku_id, BigInt(line.requested_quantity)]));
       const supplied = new Map(input.quantities.map((line) => [line.skuId, BigInt(line.quantityBase)]));
       if (requested.size !== supplied.size) throw new Error('dispatch must include every requested transfer line');
-      for (const [skuId, quantity] of requested) {
+
+      const orderedSkus = [...requested.keys()].sort((a, b) => a.localeCompare(b));
+      for (const skuId of orderedSkus) {
+        await this.ledger.lockStock(client, transfer.event_id, transfer.source_location_id, skuId);
+      }
+      for (const skuId of orderedSkus) {
+        const quantity = requested.get(skuId)!;
         if (supplied.get(skuId) !== quantity) {
           throw new Error('MVP dispatch quantity must exactly match the requested transfer quantity');
         }
-        const onHand = await this.ledger.onHand(client, transfer.event_id, transfer.source_location_id, skuId);
+        const onHand = await this.ledger.onHand(
+          client,
+          transfer.event_id,
+          transfer.source_location_id,
+          skuId,
+        );
         if (onHand < quantity) {
           throw new ConflictException(`insufficient source stock to dispatch SKU ${skuId}`);
         }
       }
 
-      for (const [skuId, quantity] of requested) {
+      for (const skuId of orderedSkus) {
+        const quantity = requested.get(skuId)!;
         await this.ledger.insert(client, {
           eventId: transfer.event_id,
           inventoryLocationId: transfer.source_location_id,
@@ -155,7 +175,15 @@ export class InventoryTransferService {
          WHERE id = $1`,
         [transfer.id, input.occurredAt],
       );
-      await this.history(client, transfer.id, transfer.state, 'IN_TRANSIT', input.actorId, input.reason, input.occurredAt);
+      await this.history(
+        client,
+        transfer.id,
+        transfer.state,
+        'IN_TRANSIT',
+        input.actorId,
+        input.reason,
+        input.occurredAt,
+      );
       const updated = await this.transfer(client, transfer.id, false);
       await this.queueCloud(client, updated);
       return this.map(updated);
@@ -166,15 +194,21 @@ export class InventoryTransferService {
     return this.database.transaction(async (client) => {
       const transfer = await this.transfer(client, transferId, true);
       await this.authorization.require(client, transfer.event_id, input.actorId, 'TRANSFER_MANAGE');
-      if (transfer.state !== 'IN_TRANSIT') throw new Error('stock can only be received from an in-transit transfer');
+      if (transfer.state !== 'IN_TRANSIT') {
+        throw new Error('stock can only be received from an in-transit transfer');
+      }
 
-      const existingReceipt = await client.query<ReceiptRow>(
-        'SELECT payload FROM edge_stock_transfer_receipts WHERE idempotency_key = $1',
-        [input.idempotencyKey],
+      const orderedReceipts = [...input.quantities].sort((a, b) => a.skuId.localeCompare(b.skuId));
+      const canonicalPayload = JSON.stringify(
+        orderedReceipts.map((line) => ({ skuId: line.skuId, quantityBase: line.quantityBase })),
       );
-      const canonicalPayload = JSON.stringify(input.quantities.map((line) => ({ skuId: line.skuId, quantityBase: line.quantityBase })));
+      const existingReceipt = await client.query<ReceiptRow>(
+        `SELECT (payload = $2::jsonb) AS same_payload
+         FROM edge_stock_transfer_receipts WHERE idempotency_key = $1`,
+        [input.idempotencyKey, canonicalPayload],
+      );
       if (existingReceipt.rowCount === 1) {
-        if (JSON.stringify(existingReceipt.rows[0]!.payload) !== canonicalPayload) {
+        if (!existingReceipt.rows[0]!.same_payload) {
           throw new ConflictException('transfer receipt idempotency key was reused with different content');
         }
         return this.map(transfer);
@@ -182,20 +216,30 @@ export class InventoryTransferService {
 
       const lines = await this.lines(client, transfer.id);
       const bySku = new Map(lines.map((line) => [line.sku_id, line]));
-      for (const receipt of input.quantities) {
+      for (const receipt of orderedReceipts) {
         const line = bySku.get(receipt.skuId);
         if (!line) throw new Error(`SKU ${receipt.skuId} is not part of this transfer`);
         const quantity = BigInt(receipt.quantityBase);
         const outstanding = BigInt(line.dispatched_quantity) - BigInt(line.received_quantity);
-        if (quantity > outstanding) throw new ConflictException(`receipt exceeds outstanding quantity for SKU ${receipt.skuId}`);
+        if (quantity > outstanding) {
+          throw new ConflictException(`receipt exceeds outstanding quantity for SKU ${receipt.skuId}`);
+        }
       }
 
+      for (const receipt of orderedReceipts) {
+        await this.ledger.lockStock(
+          client,
+          transfer.event_id,
+          transfer.destination_location_id,
+          receipt.skuId,
+        );
+      }
       await client.query(
         `INSERT INTO edge_stock_transfer_receipts(idempotency_key, transfer_id, actor_id, payload, received_at)
          VALUES ($1,$2,$3,$4::jsonb,$5)`,
         [input.idempotencyKey, transfer.id, input.actorId, canonicalPayload, input.receivedAt],
       );
-      for (const receipt of input.quantities) {
+      for (const receipt of orderedReceipts) {
         const quantity = BigInt(receipt.quantityBase);
         await this.ledger.insert(client, {
           eventId: transfer.event_id,
@@ -227,9 +271,19 @@ export class InventoryTransferService {
            WHERE id = $1`,
           [transfer.id, input.receivedAt],
         );
-        await this.history(client, transfer.id, 'IN_TRANSIT', 'RECEIVED', input.actorId, input.reason, input.receivedAt);
+        await this.history(
+          client,
+          transfer.id,
+          'IN_TRANSIT',
+          'RECEIVED',
+          input.actorId,
+          input.reason,
+          input.receivedAt,
+        );
       } else {
-        await client.query('UPDATE edge_stock_transfers SET updated_at = now() WHERE id = $1', [transfer.id]);
+        await client.query('UPDATE edge_stock_transfers SET updated_at = now() WHERE id = $1', [
+          transfer.id,
+        ]);
       }
       const updated = await this.transfer(client, transfer.id, false);
       await this.queueCloud(client, updated);
@@ -254,16 +308,31 @@ export class InventoryTransferService {
       const transfer = await this.transfer(client, transferId, true);
       await this.authorization.require(client, transfer.event_id, input.actorId, 'TRANSFER_MANAGE');
       requireTransferTransition(transfer.state, toState);
-      const assignments = toState === 'ASSIGNED' ? ', assigned_actor_id = $4, assigned_at = $3' : '';
-      const milestone = toState === 'PICKING' ? ', picking_at = $3' : toState === 'CANCELLED' ? ', cancelled_at = $3' : '';
-      const values = toState === 'ASSIGNED'
-        ? [transfer.id, toState, input.occurredAt, input.assignedActorId]
-        : [transfer.id, toState, input.occurredAt];
+      const assignments =
+        toState === 'ASSIGNED' ? ', assigned_actor_id = $4, assigned_at = $3' : '';
+      const milestone =
+        toState === 'PICKING'
+          ? ', picking_at = $3'
+          : toState === 'CANCELLED'
+            ? ', cancelled_at = $3'
+            : '';
+      const values =
+        toState === 'ASSIGNED'
+          ? [transfer.id, toState, input.occurredAt, input.assignedActorId]
+          : [transfer.id, toState, input.occurredAt];
       await client.query(
         `UPDATE edge_stock_transfers SET state = $2, updated_at = now()${assignments}${milestone} WHERE id = $1`,
         values,
       );
-      await this.history(client, transfer.id, transfer.state, toState, input.actorId, input.reason, input.occurredAt);
+      await this.history(
+        client,
+        transfer.id,
+        transfer.state,
+        toState,
+        input.actorId,
+        input.reason,
+        input.occurredAt,
+      );
       const updated = await this.transfer(client, transfer.id, false);
       await this.queueCloud(client, updated);
       return this.map(updated);
