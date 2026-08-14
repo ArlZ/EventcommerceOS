@@ -10,3 +10,4 @@ export * from './inventory';
 export * from './inventory-imbalance';
 export * from './money';
 export * from './payment';
+export * from './security-credential';
