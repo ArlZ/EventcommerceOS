@@ -37,7 +37,8 @@ class FakePaymentProvider implements PaymentProvider {
     };
   }
 
-  async initiate(_request: ProviderInitiationRequest): Promise<ProviderInitiationResult> {
+  async initiate(request: ProviderInitiationRequest): Promise<ProviderInitiationResult> {
+    void request;
     this.initiations += 1;
     this.onInitiationStarted?.();
     if (this.initiationGate) await this.initiationGate;
@@ -49,7 +50,8 @@ class FakePaymentProvider implements PaymentProvider {
     return { ...this.queryResult, providerReference };
   }
 
-  async parseAndVerifyWebhook(_payload: unknown): Promise<VerifiedProviderCallback> {
+  async parseAndVerifyWebhook(payload: unknown): Promise<VerifiedProviderCallback> {
+    void payload;
     return {
       providerEventKey: 'fake-event',
       providerReference: 'fake-provider-ref',
