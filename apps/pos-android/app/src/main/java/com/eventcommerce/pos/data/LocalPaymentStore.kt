@@ -18,7 +18,7 @@ class LocalPaymentStore(
 
   suspend fun beginMpesa(orderId: String): LocalPaymentAttempt {
     val attemptId = idFactory()
-    val paymentId = idFactory()
+    val newPaymentId = idFactory()
     val clientAttemptId = idFactory()
     val idempotencyKey = "PAYMENT:$orderId:full:$clientAttemptId"
     val now = clock()
@@ -30,9 +30,17 @@ class LocalPaymentStore(
       require(current.totalMinor > 0) { "cannot pay an empty order" }
       require(current.currency == "KES") { "M-PESA currently supports KES orders only" }
       require(current.totalMinor % 100L == 0L) { "M-PESA requires a whole KES order total" }
-      require(db.payments().forOrder(orderId).none { it.state in UNRESOLVED_STATES }) {
+
+      val priorAttempts = db.payments().forOrder(orderId)
+      require(priorAttempts.none { it.state in UNRESOLVED_STATES }) {
         "order already has an unresolved payment attempt"
       }
+      require(priorAttempts.none { it.state == PaymentAttemptState.SUCCESS.name }) {
+        "order payment is already settled"
+      }
+      val priorPaymentIds = priorAttempts.map { it.paymentId }.distinct()
+      require(priorPaymentIds.size <= 1) { "order has conflicting logical payment identities" }
+      val paymentId = priorPaymentIds.firstOrNull() ?: newPaymentId
 
       db.payments().insert(
         PaymentAttemptEntity(
