@@ -10,6 +10,7 @@ import com.eventcommerce.pos.domain.MenuCandidate
 import com.eventcommerce.pos.domain.OrderState
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -117,6 +118,27 @@ class LocalPosRepositoryTest {
     assertEquals(OrderState.CLOSED, secondClose.state)
     assertEquals(1, eventCountAfterFirstClose)
     assertEquals(1, repository.outboxCount(open.id, "ORDER_CLOSED_CASH"))
+  }
+
+  @Test
+  fun `closed order outbox freezes inventory-relevant line snapshot`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    val item = menu.items.first()
+    val open = repository.addItem(item.itemId, quantityDelta = 2)
+    repository.recordCashPayment(open.id)
+
+    val event = repository.allOutboxEvents()
+      .single { it.aggregateId == open.id && it.eventType == "ORDER_CLOSED_CASH" }
+    val payload = JSONObject(event.payloadJson)
+    val lines = payload.getJSONArray("lines")
+
+    assertEquals(2, event.eventVersion)
+    assertEquals(open.eventId, payload.getString("eventId"))
+    assertEquals(open.salesLocationId, payload.getString("salesLocationId"))
+    assertEquals(1, lines.length())
+    assertEquals(item.skuId, lines.getJSONObject(0).getString("skuId"))
+    assertEquals(2, lines.getJSONObject(0).getInt("quantity"))
+    assertEquals(item.priceMinor, lines.getJSONObject(0).getLong("unitPriceMinor"))
   }
 
   @Test
