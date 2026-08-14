@@ -73,3 +73,24 @@ export function parseAuthorizationCredential(
   }
   return parseOpaqueCredential(token);
 }
+
+export function canonicalSecurityJson(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('Canonical security JSON rejects non-finite numbers');
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalSecurityJson(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const entries = Object.keys(record)
+      .filter((key) => record[key] !== undefined)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalSecurityJson(record[key])}`);
+    return `{${entries.join(',')}}`;
+  }
+  throw new Error('Canonical security JSON received an unsupported value');
+}
