@@ -1,6 +1,5 @@
 CREATE TABLE IF NOT EXISTS edge_inventory_sale_inbox (
-  source_event_instance_id text PRIMARY KEY
-    REFERENCES edge_processed_device_events(event_instance_id) ON DELETE CASCADE,
+  source_event_instance_id text PRIMARY KEY,
   envelope jsonb NOT NULL,
   received_at timestamptz NOT NULL,
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
