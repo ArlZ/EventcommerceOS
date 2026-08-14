@@ -7,7 +7,8 @@ import {
 
 function requiredString(body: Record<string, unknown>, key: string): string {
   const value = body[key];
-  if (typeof value !== 'string' || value.length === 0) throw new BadRequestException(`${key} is required`);
+  if (typeof value !== 'string' || value.length === 0)
+    throw new BadRequestException(`${key} is required`);
   return value;
 }
 
@@ -24,9 +25,11 @@ export function parseEnvelope(value: unknown): SyncEventEnvelope {
     throw new BadRequestException('event must be an object');
   }
   const body = value as Record<string, unknown>;
-  if (body.schemaVersion !== SYNC_SCHEMA_VERSION) throw new BadRequestException('unsupported schemaVersion');
+  if (body.schemaVersion !== SYNC_SCHEMA_VERSION)
+    throw new BadRequestException('unsupported schemaVersion');
   const occurredAt = requiredString(body, 'occurredAt');
-  if (Number.isNaN(Date.parse(occurredAt))) throw new BadRequestException('occurredAt must be an ISO timestamp');
+  if (Number.isNaN(Date.parse(occurredAt)))
+    throw new BadRequestException('occurredAt must be an ISO timestamp');
   const payload = body.payload;
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new BadRequestException('payload must be an object');

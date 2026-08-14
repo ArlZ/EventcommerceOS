@@ -1,7 +1,11 @@
 import { Inject, Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { QueryResultRow } from 'pg';
-import type { DeviceCloudStatus, EdgeCloudBatch, SyncEventEnvelope } from '@event-commerce/contracts';
+import type {
+  DeviceCloudStatus,
+  EdgeCloudBatch,
+  SyncEventEnvelope,
+} from '@event-commerce/contracts';
 import { EdgeDatabaseService } from '../database/database.service';
 import { CloudSyncTransport } from './cloud-sync.transport';
 import { retryDelayMs } from './retry-policy';

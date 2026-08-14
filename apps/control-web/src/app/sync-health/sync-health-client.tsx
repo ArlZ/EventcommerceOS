@@ -47,18 +47,27 @@ export function SyncHealthClient() {
       <button type="button" onClick={() => void refresh()} style={{ marginBottom: 16 }}>
         Refresh
       </button>
-      {devices.length === 0 && !error ? <p>No device sync activity has reached Cloud yet.</p> : null}
+      {devices.length === 0 && !error ? (
+        <p>No device sync activity has reached Cloud yet.</p>
+      ) : null}
       <div style={{ display: 'grid', gap: 12 }}>
         {devices.map((device) => (
-          <article key={device.deviceId} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16 }}>
+          <article
+            key={device.deviceId}
+            style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16 }}
+          >
             <strong>{device.deviceId}</strong>
             <p style={{ marginBottom: 4 }}>Last seen: {ageLabel(device.lastSeenAt)}</p>
             <p style={{ margin: '4px 0' }}>
-              Sequence seen {device.lastSequenceSeen} • Edge acknowledged through {device.edgeAcceptedThroughSequence}
+              Sequence seen {device.lastSequenceSeen} • Edge acknowledged through{' '}
+              {device.edgeAcceptedThroughSequence}
             </p>
             <p style={{ margin: '4px 0' }}>Edge → Cloud backlog: {device.edgeBacklogCount}</p>
             <p style={{ marginTop: 4 }}>
-              Last Cloud delivery: {device.lastCloudDeliveryAt ? ageLabel(device.lastCloudDeliveryAt) : 'not yet reported'}
+              Last Cloud delivery:{' '}
+              {device.lastCloudDeliveryAt
+                ? ageLabel(device.lastCloudDeliveryAt)
+                : 'not yet reported'}
             </p>
           </article>
         ))}

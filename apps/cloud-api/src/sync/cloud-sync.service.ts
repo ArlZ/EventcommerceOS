@@ -1,11 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResultRow } from 'pg';
-import type {
-  EdgeCloudAck,
-  EdgeCloudBatch,
-  SyncEventEnvelope,
-} from '@event-commerce/contracts';
+import type { EdgeCloudAck, EdgeCloudBatch, SyncEventEnvelope } from '@event-commerce/contracts';
 import { DatabaseService } from '../database/database.service';
 
 interface ExistingEventRow extends QueryResultRow {
@@ -34,7 +30,9 @@ export class CloudSyncService {
 
       const deviceIds = [...new Set(batch.events.map((event) => event.deviceId))].sort();
       for (const deviceId of deviceIds) {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`sync-device:${deviceId}`]);
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `sync-device:${deviceId}`,
+        ]);
       }
 
       for (const event of batch.events) {
@@ -186,14 +184,23 @@ export class CloudSyncService {
       await client.query(
         `INSERT INTO sync_order_state(order_id, device_id, last_sequence, state, total_minor, currency)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [event.aggregateId, event.deviceId, event.sequence, payload.state, payload.totalMinor, payload.currency],
+        [
+          event.aggregateId,
+          event.deviceId,
+          event.sequence,
+          payload.state,
+          payload.totalMinor,
+          payload.currency,
+        ],
       );
       return 'ACCEPTED';
     }
 
     const existing = current.rows[0]!;
     if (existing.device_id !== event.deviceId) {
-      await this.exception(client, 'ORDER_DEVICE_CONFLICT', event, { existingDeviceId: existing.device_id });
+      await this.exception(client, 'ORDER_DEVICE_CONFLICT', event, {
+        existingDeviceId: existing.device_id,
+      });
       return 'CONFLICT';
     }
 
@@ -217,15 +224,23 @@ export class CloudSyncService {
     return 'ACCEPTED';
   }
 
-  private orderPayload(event: SyncEventEnvelope): { state: string; totalMinor: number; currency: string } {
+  private orderPayload(event: SyncEventEnvelope): {
+    state: string;
+    totalMinor: number;
+    currency: string;
+  } {
     const state = event.payload.state;
     const totalMinor = event.payload.totalMinor;
     const currency = event.payload.currency;
-    if (typeof state !== 'string' || !['OPEN', 'CLOSED'].includes(state)) throw new Error('unsupported synced order state');
-    if (!Number.isSafeInteger(totalMinor) || (totalMinor as number) < 0) throw new Error('synced totalMinor must be a non-negative safe integer');
-    if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency)) throw new Error('synced currency is invalid');
+    if (typeof state !== 'string' || !['OPEN', 'CLOSED'].includes(state))
+      throw new Error('unsupported synced order state');
+    if (!Number.isSafeInteger(totalMinor) || (totalMinor as number) < 0)
+      throw new Error('synced totalMinor must be a non-negative safe integer');
+    if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency))
+      throw new Error('synced currency is invalid');
     const payloadOrderId = event.payload.orderId;
-    if (payloadOrderId !== event.aggregateId) throw new Error('payload orderId must equal aggregateId');
+    if (payloadOrderId !== event.aggregateId)
+      throw new Error('payload orderId must equal aggregateId');
     return { state, totalMinor: totalMinor as number, currency };
   }
 
@@ -245,7 +260,14 @@ export class CloudSyncService {
       `INSERT INTO sync_reconciliation_exceptions(
          id, exception_type, event_instance_id, device_id, aggregate_id, details
        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
-      [randomUUID(), type, event.eventInstanceId, event.deviceId, event.aggregateId, JSON.stringify(details)],
+      [
+        randomUUID(),
+        type,
+        event.eventInstanceId,
+        event.deviceId,
+        event.aggregateId,
+        JSON.stringify(details),
+      ],
     );
   }
 }

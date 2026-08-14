@@ -12,7 +12,10 @@ export class EdgeDatabaseService implements OnModuleDestroy {
       'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_edge',
   });
 
-  async query<T extends QueryResultRow = QueryResultRow>(text: string, values: readonly unknown[] = []): Promise<T[]> {
+  async query<T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values: readonly unknown[] = [],
+  ): Promise<T[]> {
     const result = await this.pool.query<T>(text, [...values]);
     return result.rows;
   }

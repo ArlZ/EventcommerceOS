@@ -27,12 +27,16 @@ export class SafeDeviceSyncService {
         [batch.deviceId],
       );
       const contiguous = Number.parseInt(rows.rows[0]?.watermark ?? '0', 10);
-      const firstConflict = acknowledgement.receipts.reduce<number | null>((lowest, receipt, index) => {
-        if (receipt.status !== 'CONFLICT') return lowest;
-        const sequence = batch.events[index]!.sequence;
-        return lowest === null ? sequence : Math.min(lowest, sequence);
-      }, null);
-      const safe = firstConflict === null ? contiguous : Math.min(contiguous, Math.max(0, firstConflict - 1));
+      const firstConflict = acknowledgement.receipts.reduce<number | null>(
+        (lowest, receipt, index) => {
+          if (receipt.status !== 'CONFLICT') return lowest;
+          const sequence = batch.events[index]!.sequence;
+          return lowest === null ? sequence : Math.min(lowest, sequence);
+        },
+        null,
+      );
+      const safe =
+        firstConflict === null ? contiguous : Math.min(contiguous, Math.max(0, firstConflict - 1));
       await client.query(
         'UPDATE edge_device_watermarks SET accepted_through_sequence = $2 WHERE device_id = $1',
         [batch.deviceId, safe],

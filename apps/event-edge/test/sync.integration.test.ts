@@ -114,7 +114,11 @@ describeIntegration('device to edge synchronization', () => {
   });
 
   it('keeps accepting device events during cloud outage and drains the durable backlog after recovery', async () => {
-    const events = [event('device-offline-cloud', 1), event('device-offline-cloud', 2), event('device-offline-cloud', 3)];
+    const events = [
+      event('device-offline-cloud', 1),
+      event('device-offline-cloud', 2),
+      event('device-offline-cloud', 3),
+    ];
     await request(app.getHttpServer())
       .post('/sync/device-events')
       .send({ deviceId: 'device-offline-cloud', events })
@@ -125,7 +129,9 @@ describeIntegration('device to edge synchronization', () => {
     expect(failed.sent).toBe(0);
     expect(failed.backlog).toBe(3);
 
-    await database.query('UPDATE edge_cloud_outbox SET next_attempt_at = now() WHERE delivered_at IS NULL');
+    await database.query(
+      'UPDATE edge_cloud_outbox SET next_attempt_at = now() WHERE delivered_at IS NULL',
+    );
     cloudAvailable = true;
     const drained = await forwarder.drainOnce();
     expect(drained.sent).toBe(3);

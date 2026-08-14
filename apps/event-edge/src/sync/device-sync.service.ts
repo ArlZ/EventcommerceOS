@@ -81,7 +81,10 @@ export class DeviceSyncService {
     };
   }
 
-  private async persistEvent(client: PoolClient, event: SyncEventEnvelope): Promise<SyncEventReceipt> {
+  private async persistEvent(
+    client: PoolClient,
+    event: SyncEventEnvelope,
+  ): Promise<SyncEventReceipt> {
     const envelope = JSON.stringify(event);
     const inserted = await client.query<{ event_instance_id: string }>(
       `INSERT INTO edge_processed_device_events(
@@ -183,7 +186,14 @@ export class DeviceSyncService {
       `INSERT INTO edge_reconciliation_exceptions(
          id, exception_type, device_id, sequence, event_instance_id, details
        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
-      [randomUUID(), type, event.deviceId, event.sequence, event.eventInstanceId, JSON.stringify(details)],
+      [
+        randomUUID(),
+        type,
+        event.deviceId,
+        event.sequence,
+        event.eventInstanceId,
+        JSON.stringify(details),
+      ],
     );
   }
 }

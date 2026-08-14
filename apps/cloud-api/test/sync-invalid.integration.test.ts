@@ -57,10 +57,16 @@ describeIntegration('invalid synced order quarantine', () => {
       ],
     };
 
-    const first = await request(app.getHttpServer()).post('/sync/edge-events').send(body).expect(201);
+    const first = await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .send(body)
+      .expect(201);
     expect(first.body.conflictEventInstanceIds).toEqual(['invalid-order-instance']);
 
-    const replay = await request(app.getHttpServer()).post('/sync/edge-events').send(body).expect(201);
+    const replay = await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .send(body)
+      .expect(201);
     expect(replay.body.duplicateEventInstanceIds).toEqual(['invalid-order-instance']);
 
     const processed = await database.query<{ count: string }>(
