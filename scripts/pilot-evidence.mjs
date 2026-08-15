@@ -173,8 +173,13 @@ export function validateManifest(manifest, expectedReleaseCommit) {
     validatePassEvidence(gateName, gate, blockers);
   }
 
-  if (manifest.gates?.representativeRecovery?.status === 'PASS' && manifest.gates.representativeRecovery.representativeData !== true) {
-    blockers.push('representativeRecovery: PASS requires representativeData=true; synthetic CI recovery is insufficient.');
+  if (
+    manifest.gates?.representativeRecovery?.status === 'PASS' &&
+    manifest.gates.representativeRecovery.representativeData !== true
+  ) {
+    blockers.push(
+      'representativeRecovery: PASS requires representativeData=true; synthetic CI recovery is insufficient.',
+    );
   }
 
   if (manifest.gates?.dependencySecurity?.status === 'PASS') {
@@ -200,11 +205,17 @@ function printValidation(result) {
 
 function initCommand(outputPath) {
   const releaseCommit = configuredReleaseCommit();
-  const absolute = resolve(outputPath || `artifacts/pilot-evidence/pilot-evidence-${releaseCommit}.json`);
+  const absolute = resolve(
+    outputPath || `artifacts/pilot-evidence/pilot-evidence-${releaseCommit}.json`,
+  );
   mkdirSync(dirname(absolute), { recursive: true });
-  writeFileSync(absolute, `${JSON.stringify(createInitialManifest(releaseCommit), null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(absolute, `${JSON.stringify(createInitialManifest(releaseCommit), null, 2)}\n`, {
+    mode: 0o600,
+  });
   console.log(`Initialized blocked pilot evidence manifest: ${absolute}`);
-  console.log('All release gates are NOT_RUN. Populate real evidence and run validate before any go/no-go review.');
+  console.log(
+    'All release gates are NOT_RUN. Populate real evidence and run validate before any go/no-go review.',
+  );
 }
 
 function validateCommand(inputPath) {
@@ -231,7 +242,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       process.exitCode = 2;
     }
   } catch (error) {
-    console.error(`Pilot evidence command failed: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `Pilot evidence command failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exitCode = 1;
   }
 }

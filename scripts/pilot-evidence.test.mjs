@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { REQUIRED_GATES, REQUIRED_OWNERS, createInitialManifest, validateManifest } from './pilot-evidence.mjs';
+import {
+  REQUIRED_GATES,
+  REQUIRED_OWNERS,
+  createInitialManifest,
+  validateManifest,
+} from './pilot-evidence.mjs';
 
 const RELEASE = '1111111111111111111111111111111111111111';
 const OTHER_RELEASE = '2222222222222222222222222222222222222222';
@@ -56,7 +61,11 @@ test('unknown deployment mode fails closed', () => {
   manifest.pilot.deploymentMode = 'production';
   const result = validateManifest(manifest, RELEASE);
   assert.equal(result.ok, false);
-  assert.ok(result.blockers.some((blocker) => blocker.includes('single_instance_pilot or upstream_distributed')));
+  assert.ok(
+    result.blockers.some((blocker) =>
+      blocker.includes('single_instance_pilot or upstream_distributed'),
+    ),
+  );
 });
 
 test('pass without evidence and named review fails', () => {
@@ -66,8 +75,16 @@ test('pass without evidence and named review fails', () => {
   manifest.gates.hardwareNetwork.reviewedAt = '';
   const result = validateManifest(manifest, RELEASE);
   assert.equal(result.ok, false);
-  assert.ok(result.blockers.some((blocker) => blocker.includes('hardwareNetwork: PASS requires at least one')));
-  assert.ok(result.blockers.some((blocker) => blocker.includes('hardwareNetwork: PASS requires a named reviewer')));
+  assert.ok(
+    result.blockers.some((blocker) =>
+      blocker.includes('hardwareNetwork: PASS requires at least one'),
+    ),
+  );
+  assert.ok(
+    result.blockers.some((blocker) =>
+      blocker.includes('hardwareNetwork: PASS requires a named reviewer'),
+    ),
+  );
 });
 
 test('synthetic recovery cannot satisfy representative recovery gate', () => {
@@ -75,7 +92,9 @@ test('synthetic recovery cannot satisfy representative recovery gate', () => {
   manifest.gates.representativeRecovery.representativeData = false;
   const result = validateManifest(manifest, RELEASE);
   assert.equal(result.ok, false);
-  assert.ok(result.blockers.some((blocker) => blocker.includes('synthetic CI recovery is insufficient')));
+  assert.ok(
+    result.blockers.some((blocker) => blocker.includes('synthetic CI recovery is insufficient')),
+  );
 });
 
 test('dependency security cannot pass with blockers', () => {
