@@ -17,7 +17,7 @@ import {
 type HeaderValue = string | string[] | undefined;
 type HeadersRecord = Record<string, HeaderValue>;
 
-interface HttpRequest {
+export interface AbuseRequestLike {
   method?: string;
   path?: string;
   url?: string;
@@ -30,7 +30,7 @@ interface HttpResponse {
   setHeader(name: string, value: string): void;
 }
 
-interface ClassifiedRequest {
+export interface ClassifiedAbuseRequest {
   policy: AbusePolicyName;
   principalKey?: string;
   principalType: 'edge' | 'operator' | 'provider' | 'anonymous';
@@ -44,7 +44,7 @@ function fingerprint(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-function normalizedPath(request: HttpRequest): string {
+function normalizedPath(request: AbuseRequestLike): string {
   if (request.path) return request.path;
   const raw = request.url ?? '/';
   return raw.split('?', 1)[0] || '/';
@@ -64,7 +64,9 @@ function isEdgePaymentPath(path: string): boolean {
   );
 }
 
-export function classifyAbuseRequest(request: HttpRequest): ClassifiedRequest | undefined {
+export function classifyAbuseRequest(
+  request: AbuseRequestLike,
+): ClassifiedAbuseRequest | undefined {
   const method = (request.method ?? 'GET').toUpperCase();
   if (method === 'OPTIONS') return undefined;
 
@@ -117,7 +119,7 @@ export class AbuseProtectionGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     if (context.getType() !== 'http') return true;
-    const request = context.switchToHttp().getRequest<HttpRequest>();
+    const request = context.switchToHttp().getRequest<AbuseRequestLike>();
     const response = context.switchToHttp().getResponse<HttpResponse>();
     const classified = classifyAbuseRequest(request);
     if (!classified) return true;
@@ -141,8 +143,10 @@ export class AbuseProtectionGuard implements CanActivate {
     const decisions = principalDecision ? [sourceDecision, principalDecision] : [sourceDecision];
     const remaining = Math.min(...decisions.map((decision) => decision.remaining));
     const limit = Math.min(...decisions.map((decision) => decision.limit));
+    const burst = Math.min(...decisions.map((decision) => decision.burst));
     response.setHeader('X-RateLimit-Policy', classified.policy);
     response.setHeader('X-RateLimit-Limit', String(limit));
+    response.setHeader('X-RateLimit-Burst', String(burst));
     response.setHeader('X-RateLimit-Remaining', String(remaining));
 
     const rejected = decisions.find((decision) => !decision.allowed);
@@ -161,13 +165,13 @@ export class AbuseProtectionGuard implements CanActivate {
     );
   }
 
-  private sourceKey(request: HttpRequest): string {
+  private sourceKey(request: AbuseRequestLike): string {
     const value = request.ip ?? request.socket?.remoteAddress ?? 'unknown';
     return fingerprint(value);
   }
 
   private warnSampled(
-    classified: ClassifiedRequest,
+    classified: ClassifiedAbuseRequest,
     source: string,
     retryAfterSeconds: number,
     now: number,
