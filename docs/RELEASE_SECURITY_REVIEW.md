@@ -17,17 +17,22 @@ This review distinguishes implemented domain safety from deployment/security con
 
 ### SEC-001 — P0 — Cloud payment caller authentication and authority separation
 
-**Machine path status: remediated in `security/cloud-payment-machine-trust`, pending permanent CI and stack merge.**
+**Status: remediated across `security/cloud-payment-machine-trust` and `security/human-auth-rbac`, pending permanent CI and stack merge.**
 
-The Event Edge machine credential now protects Cloud payment initiation, attempt reconciliation, payment-order reads and payment-rail availability. Cloud derives the Edge organisation from the server-side Edge registry and verifies event/payment tenant ownership before returning or mutating payment truth.
+The Event Edge machine credential protects Cloud payment initiation, attempt reconciliation, payment-order reads and payment-rail availability. Cloud derives the Edge organisation from the server-side Edge registry and verifies event/payment tenant ownership before returning or mutating payment truth.
 
 Provider callbacks remain on their separate provider-specific verification boundary and are not converted into Event Edge traffic.
 
-Until real human authentication/RBAC exists, public Cloud routes for manual terminal confirmation, refunds, reversals, payment-adjustment history, manual-terminal evidence history and event payment health fail closed with `403`. The formerly anonymous Event Edge manual-terminal-confirmation route is removed as well. Underlying financial services remain intact for internal business-rule tests and future authenticated human controllers.
+Privileged human payment operations are re-enabled only through revocable operator sessions and server-derived organisation roles:
 
-This closes the anonymous machine payment path without granting a machine credential human financial authority. It intentionally makes privileged payment operations unavailable through public HTTP until SEC-003 is remediated.
+- manual terminal confirmation: `ADMIN` or `SUPERVISOR`, plus the existing event-specific `PAYMENT_MANUAL_CONFIRM` permission;
+- refunds/reversals and financial history: `ADMIN` or `FINANCE`;
+- manual-terminal evidence history: `ADMIN`, `FINANCE` or `SUPERVISOR`;
+- event payment health: authenticated organisation roles including read-only `VIEWER`.
 
-Security coverage includes unauthenticated initiation denial before durable payment creation, tenant-bound Edge initiation, cross-organisation order-read/reconciliation denial, authenticated rail-health access and fail-closed privileged human routes.
+Request-body actor identity must match the authenticated operator. Public HTTP does not accept a caller-supplied `approvingActorId`; a separate approval session/step-up flow is required before any operation that needs a second approver can be exposed.
+
+Machine credentials cannot satisfy the human authorization boundary, and human operator sessions cannot replace provider callback verification.
 
 ### SEC-002 — P0 — Event Edge to Cloud machine ingress
 
@@ -59,18 +64,30 @@ Implemented controls:
 
 Security tests cover missing/wrong/unknown/revoked credentials, body identity mismatch, wrong-organisation event injection, rotation, authenticated attribution, cross-tenant device takeover and the inventory ingestion boundary.
 
-### SEC-003 — P1 — Human administrative identity relies on caller-supplied headers
+### SEC-003 — P1 — Human administrative identity and RBAC
 
-Administrative paths still use `x-actor-id`, `x-role` and `x-organisation-id` via the existing admin context. This is development/testing scaffolding, not production authentication. Privileged payment HTTP operations are now disabled rather than trusting this context, but configuration, command-centre, inventory-control and event-close administrative paths still require remediation.
+**Status: remediated in `security/human-auth-rbac`, pending permanent CI and stack merge.**
 
-**Required remediation:**
+Cloud now uses revocable, expiring opaque operator sessions. Session secrets are generated with 256 bits of randomness and only SHA-256 digests are stored. Actor identity, platform authority and organisation membership/role are resolved from Cloud database state on each request.
 
-- validate server-issued short-lived human access tokens;
-- derive actor identity and organisation/role membership from server-side state;
-- remove direct trust in externally supplied role/organisation headers;
-- step-up/supervisor permission for configured high-risk actions;
-- explicit session/token expiry and revocation handling;
-- re-enable privileged payment routes only through this authenticated human boundary.
+Implemented controls:
+
+- operator identities can be active or revoked;
+- organisation memberships are server-side and role-scoped: `ADMIN`, `FINANCE`, `SUPERVISOR`, `VIEWER`;
+- `PLATFORM_ADMIN` is separate platform-wide authority;
+- sessions expire and can be individually revoked; identity revocation invalidates active sessions/memberships;
+- caller-supplied `x-actor-id` and `x-role` are stripped globally before controllers execute;
+- `x-organisation-id` is only a requested scope selector and is checked against server-side membership;
+- organisation creation is platform-admin-only;
+- configuration remains `ADMIN`/`PLATFORM_ADMIN`;
+- command-centre and event-close distinguish read, operational-action, financial-correction and close/reopen roles;
+- privileged payment actor IDs must match the authenticated session;
+- operator/session/membership lifecycle actions have append-only audit records;
+- control-web stores the temporary access token in browser `sessionStorage`, injects it only for the configured Cloud origin and strips obsolete actor/role headers.
+
+The controlled-pilot provisioning path is an audited Cloud DB-admin CLI, not a password login flow. No claim is made that this is final enterprise IAM: external OIDC/SSO, MFA and organization-specific identity-policy integration remain appropriate P2 hardening/graduation work beyond a bounded pilot.
+
+Adversarial coverage includes legacy-header privilege spoofing, role inflation, wrong-organisation selection, platform-only organisation creation, expired/revoked session rejection, revoked-identity rejection, machine-token rejection on human routes, role separation and privileged payment actor spoof rejection before business effect.
 
 ### SEC-004 — P1 — POS device registration/revocation lifecycle
 
@@ -146,9 +163,9 @@ Provider-specific logic remains at the Cloud adapter boundary. Payment command e
 
 Provider integrations use provider-specific validation/verification rather than accepting arbitrary callback bodies as final truth. Identifier/amount/currency conflicts remain explicit reconciliation cases.
 
-### Machine trust chain
+### Authenticated trust chain
 
-The stacked security work authenticates POS -> Event Edge and Event Edge -> Cloud with independent revocable machine credentials. Event/organisation assignment is derived server-side at each boundary, while local POS ordering remains independent of Cloud availability. Event Edge -> Cloud payment machine calls now reuse the same revocable Edge identity and remain tenant-bound.
+The stacked security work authenticates POS -> Event Edge and Event Edge -> Cloud with independent revocable machine credentials, and authenticates human Cloud operations with a separate revocable session boundary. Event/organisation assignment is derived server-side. Local POS ordering remains independent of Cloud availability, and no machine credential is promoted into human financial authority.
 
 ### Sync replay/conflict safety
 
@@ -162,8 +179,13 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 - unauthenticated Cloud payment initiation rejected;
 - authenticated Edge denied another organisation's payment event/order/attempt;
-- user token with wrong organisation rejected;
-- bartender/operator denied refund/reversal/manual confirmation without permission;
+- operator session with wrong organisation rejected;
+- caller-supplied actor/role headers cannot inflate authority;
+- expired/revoked human session rejected;
+- revoked human identity rejected;
+- `VIEWER`/`SUPERVISOR`/`FINANCE` denied actions outside their explicit role;
+- privileged payment body cannot name a different requesting actor;
+- machine Edge credential cannot satisfy a human administrative route;
 - revoked Event Edge denied sync, inventory and machine payment access;
 - forged/mismatched Edge ID denied;
 - revoked POS denied Event Edge sync/payment access;
@@ -183,14 +205,15 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-SEC-001's anonymous machine-payment path, SEC-002 and SEC-004 are closed at code/review level in the stacked security branches, subject to permanent CI. Privileged human payment functionality remains deliberately fail-closed pending SEC-003.
+SEC-001 through SEC-004 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. The remaining release blockers are now operational/security evidence and abuse-control gates rather than anonymous identity boundaries.
 
 Remaining mandatory release blockers are:
 
-1. SEC-003 replacement of caller-trusted administrative role headers with real human authentication/RBAC and controlled re-enablement of privileged payment operations;
-2. SEC-005 rate limiting/abuse controls;
-3. SEC-006 tested backup/restore evidence;
-4. SEC-007 green permanent CI on the exact release stack;
-5. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk.
+1. SEC-005 rate limiting/abuse controls;
+2. SEC-006 tested backup/restore evidence;
+3. SEC-007 green permanent CI on the exact release stack;
+4. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk.
 
-After those are closed, the correct next status is **controlled live pilot candidate**, not major-festival ready. Graduation criteria remain in `docs/PILOT_RUNBOOK.md`.
+External OIDC/SSO/MFA is still recommended before graduating beyond a tightly controlled pilot, but the repository no longer trusts browser-supplied role/actor headers for operational authority.
+
+After the mandatory blockers are closed, the correct next status is **controlled live pilot candidate**, not major-festival ready. Graduation criteria remain in `docs/PILOT_RUNBOOK.md`.
