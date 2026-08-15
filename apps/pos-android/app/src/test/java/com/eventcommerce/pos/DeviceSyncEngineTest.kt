@@ -157,7 +157,11 @@ class DeviceSyncEngineTest {
     assertEquals(500L, deviceRetryDelayMs(1, random = { 0.0 }))
     assertEquals(30_000L, deviceRetryDelayMs(30, random = { 1.0 }))
     assertThrows(IllegalArgumentException::class.java) {
-      HttpsDeviceEdgeTransport("http://edge.local/sync/device-events")
+      HttpsDeviceEdgeTransport(
+        "http://edge.local/sync/device-events",
+        "device-1",
+        "test-edge-sync-token-0123456789-abcdefghijklmnopqrstuvwxyz",
+      )
     }
   }
 }
