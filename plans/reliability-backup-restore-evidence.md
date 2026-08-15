@@ -1,7 +1,7 @@
 # Reliability remediation — Cloud backup and restore evidence
 
-Status: implementation complete; repository CI revalidation in progress; representative restore evidence remains a release-time requirement
-Base: `security/abuse-controls` (PR #18)
+Status: implementation complete; final green abuse-controls base merged; permanent CI revalidation in progress; representative restore evidence remains a release-time requirement
+Base: final `security/abuse-controls` at `9e330b9da38d14726ebd6c86394ca2eb451e5081`
 
 ## Objective
 
@@ -54,10 +54,9 @@ Security credentials remain digest-only in the database; the evidence manifest c
 
 ## Repository CI checkpoint
 
-- The first real runner pass exposed cross-stack correctness/test regressions introduced by later security hardening: Nest constructor DI tokens converted to type-only imports, stale authentication fixtures, FK-unsafe Event Edge cleanup, and integration suites mutating one shared database in parallel.
-- Those non-SCA fixes were proven on the fully green PR #20 stack and have now been backported here without bringing the SCA scanner, SCA dependency upgrades, lockfile changes, or SCA documentation into this PR.
-- Cloud API and Event Edge integration test files now run serially within their respective packages so shared PostgreSQL/process state is deterministic while package-level parallelism remains available elsewhere.
-- A fresh permanent CI pass on this branch is required before merge readiness.
+The final green PR #18 abuse-controls head merged into this branch without conflicts. The branch is now zero commits behind its base and the PR diff has collapsed to five intended backup/restore evidence files: the drill script, package entrypoint, gitignore rule, operator documentation and this plan. All runtime security/auth/abuse fixes are inherited from the proven base rather than duplicated in this evidence layer.
+
+A fresh permanent CI pass on this exact re-linked head is required before merge readiness. Passing repository CI proves the evidence tooling integrates cleanly; it does **not** substitute for executing the restore drill against representative release-candidate data.
 
 ## Remaining evidence gate
 
