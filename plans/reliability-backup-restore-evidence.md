@@ -1,13 +1,13 @@
 # Reliability remediation — Cloud backup and restore evidence
 
-Status: implementation in progress
+Status: implementation complete; representative release-candidate execution and named sign-off pending
 Base: `security/abuse-controls` (PR #18)
 
 ## Objective
 
 Turn Task 010 SEC-006 from a prose requirement into a repeatable PostgreSQL backup/isolated-restore verification drill that produces machine-readable evidence without committing database contents or credentials.
 
-This branch can make the drill executable and reviewable. It must **not** claim SEC-006 is closed until the drill has actually run against a representative Cloud database and isolated restore target and the resulting evidence has been reviewed.
+This branch makes the drill executable and reviewable. It must **not** claim SEC-006 is closed until the drill has actually run against a representative Cloud database and isolated restore target and the resulting evidence has been reviewed.
 
 ## Drill design
 
@@ -61,4 +61,5 @@ SEC-006 closes only after:
 - all critical fingerprints match;
 - the evidence manifest is retained with release commit/operator/timestamps;
 - the measured restore duration is reviewed against the pilot RTO target;
-- backup cadence is reviewed against the pilot RPO target.
+- backup cadence is reviewed against the pilot RPO target;
+- the retained manifest/checksum and result receive named operator/reviewer sign-off.
