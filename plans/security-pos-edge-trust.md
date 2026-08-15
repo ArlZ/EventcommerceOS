@@ -1,7 +1,7 @@
 # Security remediation — POS device to Event Edge trust
 
-Status: implementation complete; repository CI revalidation in progress
-Base: `security/edge-cloud-trust`
+Status: implementation complete; final green Edge→Cloud trust base merged; permanent CI revalidation in progress
+Base: final `security/edge-cloud-trust` at `325d0ff060f4e99b536bb2bc110edb3425cabc72`
 
 ## Objective
 
@@ -58,9 +58,8 @@ Controls:
 - Endpoint + device ID are stored as non-secret Room metadata.
 - Token is encrypted with an AES-256 key held in Android Keystore and only ciphertext/IV are stored in private SharedPreferences.
 - Sync and payment transports inject the token only as `Authorization: Bearer ...` plus `X-Device-Id`; it is never written to Room/outbox payloads.
-- If the Keystore key/ciphertext becomes unavailable (for example restored/copy data on another device), the credential is cleared and explicit reprovisioning is required while endpoint/device metadata remains.
+- If the Keystore key/ciphertext becomes unavailable, the credential is cleared and explicit reprovisioning is required while endpoint/device metadata remains.
 - The app provides an `Update Edge credential` path so rotation does not require reinstalling or deleting local orders.
-- Updating the credential restarts sync with the new token; payment transport resolves the same current secure provisioning dynamically.
 
 ## Offline-first revocation caveat
 
@@ -101,10 +100,7 @@ Android tests cover:
 
 ## Repository CI checkpoint
 
-- The first real runner pass built successfully but failed on the same six cross-stack import-hygiene issues later seen on PR #16: four Nest runtime dependencies were treated as type-only imports and the Cloud sync testkit used a value import only for typing.
-- Shared Command Centre/Event Close runtime-DI corrections, deterministic shared-database integration execution, POS-auth fixture cleanup, FK-safe cleanup, Event Close query/CSV handling and core close/reconciliation invariants have now been backported from the repaired PR #16 stack without importing PR #16's Cloud-payment machine-auth feature files.
-- The complete repository CI formatting surface was normalized in the same repair.
-- A fresh permanent TypeScript + Android CI pass on this exact repaired tree is required before merge readiness.
+The final green PR #14 Edge→Cloud trust head merged into this branch without conflicts. The resulting branch is zero commits behind its base and its diff is again limited to the POS→Edge identity feature scope plus its tests/docs. Earlier substantive validation had already cleared build, lint, typecheck, Android and the full runtime test suite after repairing a stale device-authenticated payment-controller fixture; the canonical Pesapal formatting is also retained. A fresh permanent TypeScript + Android CI pass on this exact re-linked head is required before merge readiness.
 
 ## Non-goals / remaining blockers
 
