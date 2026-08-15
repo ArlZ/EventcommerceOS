@@ -1,7 +1,7 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: **feature-complete at code/review level; repository CI revalidation in progress; release still gated by security + real pilot evidence**
-Base: Task 009 (`codex/task-009-event-close`)
+Status: **feature-complete; final green Task 009 base merged; permanent repository CI revalidation in progress; release still gated by security + real pilot evidence**
+Base: final Task 009 (`codex/task-009-event-close` at `bb531f8dc5fcf91cf3a76649e812e275ab88a0d9`)
 
 ## Objective
 
