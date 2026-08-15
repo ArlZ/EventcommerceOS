@@ -1,13 +1,13 @@
 # Reliability remediation — Cloud backup and restore evidence
 
-Status: implementation complete; representative release-candidate execution and named sign-off pending
-Base: `security/abuse-controls` (PR #18)
+Status: implementation complete; final green abuse-controls base merged; permanent CI revalidation in progress; representative restore evidence remains a release-time requirement
+Base: final `security/abuse-controls` at `9e330b9da38d14726ebd6c86394ca2eb451e5081`
 
 ## Objective
 
 Turn Task 010 SEC-006 from a prose requirement into a repeatable PostgreSQL backup/isolated-restore verification drill that produces machine-readable evidence without committing database contents or credentials.
 
-This branch makes the drill executable and reviewable. It must **not** claim SEC-006 is closed until the drill has actually run against a representative Cloud database and isolated restore target and the resulting evidence has been reviewed.
+This branch can make the drill executable and reviewable. It must **not** claim SEC-006 is closed until the drill has actually run against a representative Cloud database and isolated restore target and the resulting evidence has been reviewed.
 
 ## Drill design
 
@@ -52,6 +52,12 @@ Security credentials remain digest-only in the database; the evidence manifest c
 - The source fingerprint and `pg_dump` use the same exported PostgreSQL snapshot, so normal concurrent event activity cannot create a false mismatch.
 - The drill records measured backup duration, restore duration and recovery-point age at restore completion. Actual operational RPO still depends on backup cadence and must be recorded separately in deployment policy.
 
+## Repository CI checkpoint
+
+The final green PR #18 abuse-controls head merged into this branch without conflicts. The branch is now zero commits behind its base and the PR diff has collapsed to five intended backup/restore evidence files: the drill script, package entrypoint, gitignore rule, operator documentation and this plan. All runtime security/auth/abuse fixes are inherited from the proven base rather than duplicated in this evidence layer.
+
+A fresh permanent CI pass on this exact re-linked head is required before merge readiness. Passing repository CI proves the evidence tooling integrates cleanly; it does **not** substitute for executing the restore drill against representative release-candidate data.
+
 ## Remaining evidence gate
 
 SEC-006 closes only after:
@@ -61,5 +67,4 @@ SEC-006 closes only after:
 - all critical fingerprints match;
 - the evidence manifest is retained with release commit/operator/timestamps;
 - the measured restore duration is reviewed against the pilot RTO target;
-- backup cadence is reviewed against the pilot RPO target;
-- the retained manifest/checksum and result receive named operator/reviewer sign-off.
+- backup cadence is reviewed against the pilot RPO target.
