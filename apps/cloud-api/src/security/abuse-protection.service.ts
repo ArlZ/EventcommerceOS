@@ -11,6 +11,8 @@ export type AbusePolicyName =
 export interface AbusePolicy {
   name: AbusePolicyName;
   requestsPerMinute: number;
+  burst: number;
+  maxInFlight: number;
 }
 
 interface Bucket {
@@ -21,27 +23,23 @@ interface Bucket {
 export interface RateLimitDecision {
   allowed: boolean;
   limit: number;
+  burst: number;
   remaining: number;
   retryAfterSeconds: number;
 }
 
-const DEFAULT_LIMITS: Record<AbusePolicyName, number> = {
-  EDGE_SYNC: 1_200,
-  EDGE_PAYMENT: 3_000,
-  PROVIDER_CALLBACK: 1_200,
-  OPERATOR_READ: 1_200,
-  OPERATOR_MUTATION: 240,
-  PUBLIC: 120,
+const DEFAULTS: Record<AbusePolicyName, Omit<AbusePolicy, 'name'>> = {
+  EDGE_SYNC: { requestsPerMinute: 1_200, burst: 120, maxInFlight: 64 },
+  EDGE_PAYMENT: { requestsPerMinute: 3_000, burst: 300, maxInFlight: 128 },
+  PROVIDER_CALLBACK: { requestsPerMinute: 1_200, burst: 200, maxInFlight: 128 },
+  OPERATOR_READ: { requestsPerMinute: 600, burst: 60, maxInFlight: 128 },
+  OPERATOR_MUTATION: { requestsPerMinute: 120, burst: 30, maxInFlight: 32 },
+  PUBLIC: { requestsPerMinute: 120, burst: 30, maxInFlight: 64 },
 };
 
-const ENV_BY_POLICY: Record<AbusePolicyName, string> = {
-  EDGE_SYNC: 'ABUSE_LIMIT_EDGE_SYNC_PER_MINUTE',
-  EDGE_PAYMENT: 'ABUSE_LIMIT_EDGE_PAYMENT_PER_MINUTE',
-  PROVIDER_CALLBACK: 'ABUSE_LIMIT_PROVIDER_CALLBACK_PER_MINUTE',
-  OPERATOR_READ: 'ABUSE_LIMIT_OPERATOR_READ_PER_MINUTE',
-  OPERATOR_MUTATION: 'ABUSE_LIMIT_OPERATOR_MUTATION_PER_MINUTE',
-  PUBLIC: 'ABUSE_LIMIT_PUBLIC_PER_MINUTE',
-};
+function envName(policy: AbusePolicyName, suffix: string): string {
+  return `ABUSE_${policy}_${suffix}`;
+}
 
 function boundedInteger(
   name: string,
@@ -62,23 +60,39 @@ function boundedInteger(
 @Injectable()
 export class AbuseProtectionService {
   private readonly buckets = new Map<string, Bucket>();
+  private readonly inFlight = new Map<AbusePolicyName, number>();
   private readonly policies: Record<AbusePolicyName, AbusePolicy>;
   private readonly maxBuckets: number;
 
   constructor() {
     this.policies = Object.fromEntries(
-      (Object.keys(DEFAULT_LIMITS) as AbusePolicyName[]).map((name) => [
-        name,
-        {
+      (Object.keys(DEFAULTS) as AbusePolicyName[]).map((name) => {
+        const defaults = DEFAULTS[name];
+        const requestsPerMinute = boundedInteger(
+          envName(name, 'PER_MINUTE'),
+          defaults.requestsPerMinute,
+          10,
+          100_000,
+        );
+        const burst = boundedInteger(envName(name, 'BURST'), defaults.burst, 5, 10_000);
+        if (burst > requestsPerMinute) {
+          throw new Error(`ABUSE_${name}_BURST must not exceed ABUSE_${name}_PER_MINUTE`);
+        }
+        return [
           name,
-          requestsPerMinute: boundedInteger(
-            ENV_BY_POLICY[name],
-            DEFAULT_LIMITS[name],
-            10,
-            100_000,
-          ),
-        },
-      ]),
+          {
+            name,
+            requestsPerMinute,
+            burst,
+            maxInFlight: boundedInteger(
+              envName(name, 'MAX_IN_FLIGHT'),
+              defaults.maxInFlight,
+              1,
+              5_000,
+            ),
+          },
+        ];
+      }),
     ) as Record<AbusePolicyName, AbusePolicy>;
     this.maxBuckets = boundedInteger('ABUSE_MAX_BUCKETS', 20_000, 1_000, 100_000);
   }
@@ -94,8 +108,8 @@ export class AbuseProtectionService {
     const existing = this.buckets.get(bucketKey);
     const elapsed = existing ? Math.max(0, now - existing.updatedAt) : 0;
     const available = existing
-      ? Math.min(policy.requestsPerMinute, existing.tokens + elapsed * refillPerMs)
-      : policy.requestsPerMinute;
+      ? Math.min(policy.burst, existing.tokens + elapsed * refillPerMs)
+      : policy.burst;
 
     if (available < 1) {
       this.touch(bucketKey, { tokens: available, updatedAt: now });
@@ -103,6 +117,7 @@ export class AbuseProtectionService {
       return {
         allowed: false,
         limit: policy.requestsPerMinute,
+        burst: policy.burst,
         remaining: 0,
         retryAfterSeconds: Math.max(1, Math.ceil(missing / refillPerMs / 1000)),
       };
@@ -113,9 +128,27 @@ export class AbuseProtectionService {
     return {
       allowed: true,
       limit: policy.requestsPerMinute,
+      burst: policy.burst,
       remaining: Math.max(0, Math.floor(remaining)),
       retryAfterSeconds: 0,
     };
+  }
+
+  tryEnter(policyName: AbusePolicyName): boolean {
+    const current = this.inFlight.get(policyName) ?? 0;
+    if (current >= this.policies[policyName].maxInFlight) return false;
+    this.inFlight.set(policyName, current + 1);
+    return true;
+  }
+
+  leave(policyName: AbusePolicyName): void {
+    const current = this.inFlight.get(policyName) ?? 0;
+    if (current <= 1) this.inFlight.delete(policyName);
+    else this.inFlight.set(policyName, current - 1);
+  }
+
+  inFlightCount(policyName: AbusePolicyName): number {
+    return this.inFlight.get(policyName) ?? 0;
   }
 
   bucketCount(): number {
