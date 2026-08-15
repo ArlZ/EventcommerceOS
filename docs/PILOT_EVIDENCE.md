@@ -24,9 +24,11 @@ To tie the manifest to an explicit candidate SHA rather than the checked-out HEA
 PILOT_EVIDENCE_RELEASE_COMMIT=<40-char-sha> pnpm pilot:evidence:init
 ```
 
+New manifests use schema version 2. Version 2 makes PASS evidence tamper-evident: evidence is referenced by both its retained path and the SHA-256 digest of the reviewed bytes.
+
 ## Populate only after real execution
 
-Record the pilot identity, named owners and the evidence references produced by the actual exercises. A gate may be changed to `PASS` only after its real exercise is complete and reviewed.
+Record the pilot identity, named owners and the evidence produced by the actual exercises. A gate may be changed to `PASS` only after its real exercise is complete and reviewed.
 
 `pilot.deploymentMode` must use the same Task 010 security meaning as the runtime: `single_instance_pilot` or `upstream_distributed`. Any other value fails validation.
 
@@ -44,26 +46,65 @@ Required gates:
 
 A PASS requires:
 
-- at least one non-empty `evidenceRefs` entry;
+- at least one digest-bound `evidenceRefs` entry;
 - a named `reviewer`;
 - an RFC3339 `reviewedAt` timestamp.
 
-Additional fail-closed rules:
+Each evidence reference has this shape:
+
+```json
+{
+  "path": "evidence/hardware-network/results.json",
+  "sha256": "<64-character-lowercase-sha256>"
+}
+```
+
+The path is relative to the directory containing the manifest. It must stay inside that directory tree. Absolute paths, `.`/`..` traversal and legacy string-only evidence references are rejected.
+
+## Retain and hash evidence
+
+Place or export the reviewed evidence underneath the manifest directory before recording PASS. For example:
+
+```text
+artifacts/pilot/
+├── evidence.json
+└── evidence/
+    └── hardware-network/
+        └── results.json
+```
+
+Generate the exact reference rather than typing a digest manually:
+
+```bash
+pnpm pilot:evidence:hash -- \
+  artifacts/pilot/evidence.json \
+  artifacts/pilot/evidence/hardware-network/results.json
+```
+
+The command prints a JSON record containing the relative path and SHA-256 digest. Copy that record into the gate's `evidenceRefs` array.
+
+If evidence originates in CI, secure storage, an incident system or another external system, retain an export or a small review record under the manifest directory first. The manifest deliberately validates retained bytes rather than trusting a mutable URL or label.
+
+Do not place secrets, provider credentials, customer payment data or raw database dumps inside the manifest. Evidence files themselves must follow the project's secure evidence-handling rules.
+
+## Additional fail-closed rules
 
 - `representativeRecovery` requires `representativeData: true`; the synthetic CI restore smoke cannot satisfy this gate;
 - `dependencySecurity` requires `blockingFindings: 0`;
 - every named owner from the runbook must be populated;
-- the manifest release commit must match the candidate being validated.
+- the manifest release commit must match the candidate being validated;
+- every PASS evidence file must exist and be a regular file;
+- every retained file must still hash to the exact SHA-256 recorded at review time.
 
-Evidence references may point to retained CI artifacts, approved secure evidence storage, incident records, screenshots, exports or signed review records. Do not place secrets, provider credentials, customer payment data or database dumps inside the manifest.
+Changing or replacing reviewed evidence after sign-off therefore causes validation to fail until the new bytes are reviewed and the manifest is deliberately updated.
 
 ## Validate
 
 ```bash
-pnpm pilot:evidence:validate -- artifacts/pilot-evidence/pilot-evidence-<release-sha>.json
+pnpm pilot:evidence:validate -- artifacts/pilot/evidence.json
 ```
 
-Validation exits non-zero for `NOT_RUN`, `FAIL`, missing reviewer/evidence data, release mismatch, non-representative recovery or dependency blockers.
+Validation exits non-zero for `NOT_RUN`, `FAIL`, missing reviewer/evidence data, release mismatch, legacy/unsafe evidence references, missing evidence files, digest mismatches, non-representative recovery or dependency blockers.
 
 For an archived candidate that is not currently checked out, set the expected SHA explicitly:
 
@@ -71,4 +112,4 @@ For an archived candidate that is not currently checked out, set the expected SH
 PILOT_EVIDENCE_RELEASE_COMMIT=<40-char-sha> pnpm pilot:evidence:validate -- <manifest.json>
 ```
 
-A validator PASS means the manifest is structurally complete and all required gates are recorded as passed with review evidence. It is still subject to the named human go/no-go review in `docs/PILOT_RUNBOOK.md` and does not make the product major-festival ready.
+A validator PASS means the manifest is complete, every required gate is recorded as passed with named review, and every retained evidence file still matches the digest recorded in the manifest. It remains subject to the named human go/no-go review in `docs/PILOT_RUNBOOK.md` and does not make the product major-festival ready by itself.
