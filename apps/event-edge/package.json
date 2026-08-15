@@ -2,6 +2,7 @@
   "name": "@event-commerce/event-edge",
   "version": "0.1.0",
   "private": true,
+  "files": ["dist", "migrations", "scripts"],
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch",
