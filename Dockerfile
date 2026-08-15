@@ -7,6 +7,8 @@ RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 WORKDIR /workspace
 
 FROM pnpm-base AS build
+ARG NEXT_PUBLIC_CLOUD_API_URL=http://localhost:3001
+ENV NEXT_PUBLIC_CLOUD_API_URL=$NEXT_PUBLIC_CLOUD_API_URL
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json eslint.config.mjs ./
 COPY apps ./apps
 COPY packages ./packages
@@ -18,8 +20,10 @@ RUN pnpm --filter @event-commerce/event-edge... build \
 RUN pnpm --filter @event-commerce/control-web build
 
 FROM ${NODE_IMAGE} AS cloud-api
+ARG RELEASE_COMMIT
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV RELEASE_COMMIT=$RELEASE_COMMIT
 WORKDIR /app
 COPY --from=build --chown=node:node /out/cloud-api ./
 USER node
@@ -29,8 +33,10 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 CMD ["node", "dist/main.js"]
 
 FROM ${NODE_IMAGE} AS event-edge
+ARG RELEASE_COMMIT
 ENV NODE_ENV=production
 ENV PORT=3002
+ENV RELEASE_COMMIT=$RELEASE_COMMIT
 WORKDIR /app
 COPY --from=build --chown=node:node /out/event-edge ./
 USER node
