@@ -48,7 +48,9 @@ function timeoutMs(environment) {
 export function runtimeMonitorConfig(environment = process.env) {
   const expectedRelease = environment.RUNTIME_MONITOR_EXPECTED_RELEASE?.trim() ?? '';
   if (!SHA_PATTERN.test(expectedRelease)) {
-    throw new Error('RUNTIME_MONITOR_EXPECTED_RELEASE must be a full lowercase 40-character Git SHA');
+    throw new Error(
+      'RUNTIME_MONITOR_EXPECTED_RELEASE must be a full lowercase 40-character Git SHA',
+    );
   }
 
   const endpointInputs = [
