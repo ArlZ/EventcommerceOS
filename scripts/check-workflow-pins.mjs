@@ -14,7 +14,10 @@ for (const entry of readdirSync(workflowDirectory, { withFileTypes: true })) {
   lines.forEach((line, index) => {
     const trimmed = line.trim();
     if (trimmed.startsWith('- uses:') || trimmed.startsWith('uses:')) {
-      const value = trimmed.replace(/^-?\s*uses:\s*/, '').split(/\s+#\s*/, 1)[0].trim();
+      const value = trimmed
+        .replace(/^-?\s*uses:\s*/, '')
+        .split(/\s+#\s*/, 1)[0]
+        .trim();
       if (value.startsWith('./')) return;
       const separator = value.lastIndexOf('@');
       if (separator < 1) {
