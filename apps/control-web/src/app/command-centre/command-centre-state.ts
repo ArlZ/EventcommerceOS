@@ -1,11 +1,7 @@
 import type { CommandCentreSnapshot } from '@event-commerce/contracts';
 
 export type CommandCentreRealtimeMode = 'IDLE' | 'CONNECTING' | 'LIVE' | 'POLLING';
-export type CommandCentreRealtimeEvent =
-  | 'RESET'
-  | 'CONNECT'
-  | 'STREAM_CONNECTED'
-  | 'STREAM_FAILED';
+export type CommandCentreRealtimeEvent = 'RESET' | 'CONNECT' | 'STREAM_CONNECTED' | 'STREAM_FAILED';
 
 export const COMMAND_CENTRE_POLL_INTERVAL_MS = 15_000;
 

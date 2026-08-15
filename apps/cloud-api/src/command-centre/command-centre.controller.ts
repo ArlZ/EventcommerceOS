@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Headers, Inject, Param, Post, Sse } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  Sse,
+} from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
 import { from, type Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
@@ -11,7 +21,8 @@ import { parseInventoryAlertAction } from './command-centre-validation';
 @Controller('command-centre')
 export class CommandCentreController {
   constructor(
-    private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}

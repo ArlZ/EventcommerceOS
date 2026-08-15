@@ -14,10 +14,7 @@ export class CloudSyncController {
   ) {}
 
   @Post('edge-events')
-  async ingest(
-    @Headers() headers: HeadersRecord,
-    @Body() body: unknown,
-  ): Promise<EdgeCloudAck> {
+  async ingest(@Headers() headers: HeadersRecord, @Body() body: unknown): Promise<EdgeCloudAck> {
     const identity = await this.edgeAuth.authenticate(headers);
     const batch = parseEdgeBatch(body);
     await this.edgeAuth.authorizeSyncBatch(identity, batch);

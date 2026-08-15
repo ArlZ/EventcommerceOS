@@ -112,11 +112,13 @@ describe('event simulation release evidence', () => {
   it('passes invariant assertions for the required modeled suite', () => {
     const suite = runRequiredSuite(new Date('2026-08-14T18:00:00.000Z'));
     const failed = suite.results.flatMap((result) =>
-      result.assertions.filter((assertion) => !assertion.passed).map((assertion) => ({
-        scenario: result.scenario,
-        assertion: assertion.id,
-        observed: assertion.observed,
-      })),
+      result.assertions
+        .filter((assertion) => !assertion.passed)
+        .map((assertion) => ({
+          scenario: result.scenario,
+          assertion: assertion.id,
+          observed: assertion.observed,
+        })),
     );
     expect(failed).toEqual([]);
     expect(suite.passed).toBe(true);

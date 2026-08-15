@@ -30,7 +30,9 @@ function newCredential() {
 }
 
 async function validateAssignment(client, eventId, salesLocationId) {
-  const event = await client.query('SELECT 1 FROM edge_inventory_event_config WHERE event_id=$1', [eventId]);
+  const event = await client.query('SELECT 1 FROM edge_inventory_event_config WHERE event_id=$1', [
+    eventId,
+  ]);
   if (event.rowCount !== 1) {
     throw new Error('DEVICE_EVENT_ID is not installed in Event Edge configuration');
   }
@@ -60,7 +62,9 @@ try {
     const salesLocationId = optional('DEVICE_SALES_LOCATION_ID');
     const registerId = optional('DEVICE_REGISTER_ID');
     await validateAssignment(client, eventId, salesLocationId);
-    const existing = await client.query('SELECT 1 FROM edge_pos_devices WHERE device_id=$1', [deviceId]);
+    const existing = await client.query('SELECT 1 FROM edge_pos_devices WHERE device_id=$1', [
+      deviceId,
+    ]);
     if (existing.rowCount !== 0) {
       throw new Error('POS device already exists; rotate, reassign or revoke it instead');
     }
@@ -142,7 +146,14 @@ try {
         `INSERT INTO edge_pos_device_audit(
            device_id,action,credential_version,event_id,sales_location_id,register_id,actor
          ) VALUES ($1,'REVOKED',$2,$3,$4,$5,$6)`,
-        [deviceId, row.credential_version, row.event_id, row.sales_location_id, row.register_id, actor],
+        [
+          deviceId,
+          row.credential_version,
+          row.event_id,
+          row.sales_location_id,
+          row.register_id,
+          actor,
+        ],
       );
       output.push(`POS device ${deviceId} revoked.`);
     }

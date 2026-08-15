@@ -1,4 +1,13 @@
-import { Body, Controller, ForbiddenException, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+} from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { ManualTerminalService } from './manual-terminal.service';
 import { PaymentAdjustmentsService } from './payment-adjustments.service';
@@ -102,11 +111,7 @@ export class PaymentsController {
     @Headers() headers: HeadersRecord,
     @Param('paymentId') paymentId: string,
   ) {
-    await this.operators.contextForPayment(headers, paymentId, [
-      'ADMIN',
-      'FINANCE',
-      'SUPERVISOR',
-    ]);
+    await this.operators.contextForPayment(headers, paymentId, ['ADMIN', 'FINANCE', 'SUPERVISOR']);
     return this.manualTerminal.history(paymentId);
   }
 
