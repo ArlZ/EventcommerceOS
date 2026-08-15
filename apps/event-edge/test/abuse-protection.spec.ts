@@ -4,6 +4,7 @@ import {
   classifyEdgeAbuseRequest,
   EdgeAbuseProtectionGuard,
 } from '../src/security/edge-abuse-protection.guard';
+import { EdgeAbuseProtectionService } from '../src/security/edge-abuse-protection.service';
 
 function contextFor(
   request: Record<string, unknown>,
@@ -59,9 +60,10 @@ describe('Event Edge abuse protection', () => {
     expect(classified?.principal).not.toContain(secret);
   });
 
-  it('returns 429 after a local source exceeds the fallback policy', () => {
-    const guard = new EdgeAbuseProtectionGuard();
-    const limit = guard.limit('LOCAL_OTHER');
+  it('returns 429 after a local source exhausts its immediate burst', () => {
+    const service = new EdgeAbuseProtectionService();
+    const guard = new EdgeAbuseProtectionGuard(service);
+    const policy = service.policy('LOCAL_OTHER');
     const headers: Record<string, string> = {};
     const request = {
       method: 'GET',
@@ -71,12 +73,24 @@ describe('Event Edge abuse protection', () => {
     };
     const context = contextFor(request, headers);
 
-    for (let index = 0; index < limit; index += 1) {
+    for (let index = 0; index < policy.burst; index += 1) {
       expect(guard.canActivate(context)).toBe(true);
     }
     expect(() => guard.canActivate(context)).toThrowError(/Event Edge request rate exceeded/);
     expect(headers['X-RateLimit-Policy']).toBe('LOCAL_OTHER');
+    expect(headers['X-RateLimit-Burst']).toBe(String(policy.burst));
     expect(headers['X-RateLimit-Remaining']).toBe('0');
     expect(Number(headers['Retry-After'])).toBeGreaterThanOrEqual(1);
+  });
+
+  it('caps Event Edge in-flight device payment work', () => {
+    const service = new EdgeAbuseProtectionService();
+    const max = service.policy('DEVICE_PAYMENT').maxInFlight;
+    for (let index = 0; index < max; index += 1) {
+      expect(service.tryEnter('DEVICE_PAYMENT')).toBe(true);
+    }
+    expect(service.tryEnter('DEVICE_PAYMENT')).toBe(false);
+    service.leave('DEVICE_PAYMENT');
+    expect(service.tryEnter('DEVICE_PAYMENT')).toBe(true);
   });
 });
