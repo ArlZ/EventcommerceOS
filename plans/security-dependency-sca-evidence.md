@@ -59,3 +59,9 @@ Make Task 010 SEC-008 executable against the exact release candidate instead of 
 - The release security review records SEC-008 as executable and requires exact-release PASS evidence plus named reviewer sign-off: **implemented**.
 - Permanent CI receives runners, executes the SCA job and retains PASS evidence on the stacked merge candidate: **achieved**.
 - Exact-release SCA evidence is retained and reviewed by the named release/security reviewer for the candidate being promoted: **release-time requirement**.
+
+## Current CI checkpoint
+
+- CI run 477 executed the corrected stack with Android, build, lint, typecheck, tests, and SCA all passing; its only failure was formatting in the Pesapal provider test.
+- Commit `c5640e2f906e8b8b9a7f806b6798462eaeea38b8` normalized that test with Prettier and removed the temporary formatting workflow.
+- A fresh full CI pass on the post-format tree remains required before this PR can be considered merge-ready.
