@@ -1,6 +1,6 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: **feature-complete at code/review level; release blocked by security + permanent CI**
+Status: **feature-complete at code/review level; repository CI revalidation in progress; release still gated by security + real pilot evidence**
 Base: Task 009 (`codex/task-009-event-close`)
 
 ## Objective
@@ -93,24 +93,19 @@ Full deterministic baseline: `docs/SIMULATION_BASELINE_2026-08-14.md`.
 
 Documented in `docs/RELEASE_SECURITY_REVIEW.md`.
 
-Release-blocking findings include:
+The review identified release-blocking areas that are being remediated in the later stacked security/reliability PRs: authenticated machine ingress, POS and human identity/RBAC, abuse controls, backup/restore evidence and dependency/SCA evidence. This Task 010 slice must not claim those later controls as part of its own feature scope.
 
-- Cloud payment mutation/read surfaces lack production authentication;
-- Cloud sync ingestion/device-health surfaces lack authenticated Edge identity;
-- admin role/organisation context currently trusts caller-supplied headers;
-- device registration/revocation is not production-grade end-to-end;
-- rate limiting/abuse controls are not wired globally;
-- backup/restore evidence has not been executed;
-- dependency/SCA evidence is incomplete;
-- permanent GitHub Actions still fails before step 1 and therefore provides no code validation signal.
+Current security disposition remains **NO-GO for internet-exposed production or a live-money pilot** until the full stack and required operational evidence are complete.
 
-Current security disposition: **NO-GO for internet-exposed production or a live-money pilot**.
+## Repository CI checkpoint
 
-## Validation limitation
+The first real permanent runner pass reached a successful build and then exposed five shared Command Centre/Event Close Nest DI import-hygiene errors. Those dependencies are runtime injection tokens, so the repair preserves runtime class imports with explicit `@Inject(...)` rather than applying unsafe type-only conversion.
 
-The local execution environment has Node.js 22 and TypeScript 5.8.3, but cannot reach the npm registry to activate/download pnpm. Therefore the full workspace build/lint/Vitest/dependency-audit commands could not be substituted locally.
+The repaired Task 010 tree also carries the already-proven shared Event Close correctness needed by its own existing tests: consistent Command Centre SQL typing, correct CSV response handling, explicit correction-window conflict enforcement, inconclusive financial reconciliation when provider adjustment truth is unresolved, and deterministic serial execution for the Cloud API/Event Edge integration suites that share PostgreSQL/process state.
 
-The permanent GitHub TypeScript/Android workflow was retried again during Task 010 and both jobs still completed with zero executed steps. No stack is eligible for merge until those jobs actually run and pass.
+No later Edge credential, POS identity, human-auth, abuse-control, backup/SCA feature scope was pulled into this PR. The complete repository Prettier surface was normalized as part of the repair.
+
+A fresh permanent TypeScript + Android CI pass on this exact repaired tree is now required before this PR is merge-ready.
 
 ## Pilot graduation rule
 
