@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { DatabaseService } from '../src/database/database.service';
 import type { OperatorOrganisationRole } from '../src/auth/operator-auth.service';
 
@@ -42,11 +42,11 @@ export async function provisionOperator(
 
   await database.query(
     `INSERT INTO operator_sessions(id,actor_id,token_sha256,expires_at,revoked_at)
-     VALUES (gen_random_uuid(),$1,$2,now()+($3::text || ' minutes')::interval,NULL)
+     VALUES ($1,$2,$3,now()+($4::text || ' minutes')::interval,NULL)
      ON CONFLICT (token_sha256) DO UPDATE SET
        actor_id=EXCLUDED.actor_id,expires_at=EXCLUDED.expires_at,revoked_at=NULL,
        last_authenticated_at=NULL`,
-    [options.actorId, digest(token), options.expiresInMinutes ?? 60],
+    [randomUUID(), options.actorId, digest(token), options.expiresInMinutes ?? 60],
   );
 
   return {
