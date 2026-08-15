@@ -92,8 +92,8 @@ describeIntegration('sync and inventory acceptance boundary', () => {
     );
     const stock = await database.query<{ on_hand: string }>(
       `SELECT on_hand::text FROM edge_inventory_stock_projection
-       WHERE inventory_location_id = $1 AND sku_id = $2`,
-      [mainLocationId, beerSkuId],
+       WHERE event_id = $1 AND inventory_location_id = $2 AND sku_id = $3`,
+      [inventoryEventId, mainLocationId, beerSkuId],
     );
     expect(movement[0]).toEqual({ count: '1', quantity: '-2' });
     expect(stock[0]!.on_hand).toBe('98');
