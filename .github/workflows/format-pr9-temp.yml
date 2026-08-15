@@ -1,0 +1,35 @@
+name: Task 007 formatting temporary
+
+on:
+  push:
+    branches: [codex/task-007-card-terminal]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/task-007-card-terminal
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Format repository sources
+        run: pnpm exec prettier --write "apps/**/*.{ts,tsx,mjs}" "packages/**/*.{ts,tsx}" "scripts/*.mjs" eslint.config.mjs
+      - name: Commit formatting and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps packages scripts eslint.config.mjs
+          git rm .github/workflows/format-pr9-temp.yml
+          git diff --cached --check
+          git commit -m "Normalize Task 007 formatting"
+          git push origin HEAD:codex/task-007-card-terminal
