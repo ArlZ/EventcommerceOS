@@ -1,7 +1,8 @@
 # Reliability — bounded database connection waits
 
 Status: **in progress**
-Base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
+Original base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
+Pinned-CI revalidation base: `main` at `bcad290f556b2c250d2f11252ec8abfc126bbf0c`
 
 ## Objective
 
