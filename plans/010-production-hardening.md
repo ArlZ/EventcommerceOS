@@ -1,6 +1,6 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: **feature/security-control implementation complete; permanent CI is executing and core gates have passed; final exact-head CI plus operational/pilot evidence remain outstanding**
+Status: **feature/security-control implementation complete; permanent CI is operational and exact-release CI acceptance is enforced; operational/pilot evidence remains outstanding**
 Base: Task 009 (`codex/task-009-event-close`)
 
 ## Objective
@@ -102,9 +102,9 @@ The threat review is documented in `docs/RELEASE_SECURITY_REVIEW.md`. The origin
 - SEC-006 recovery evidence: executable consistent-snapshot backup + isolated restore/fingerprint/sequence/RPO/RTO drill.
 - SEC-008 dependency evidence: executable exact-release npm + Android/Maven SCA gate using resolved inventories, OSV advisories and exact expiring risk acceptances.
 
-Permanent GitHub Actions execution is now functioning. CI run #445 on 2026-08-15 passed build, lint, typecheck, all repository tests, Android and SCA; the only failure was the repository-wide formatting gate. The accumulated formatting drift was then normalized with the repository's pinned Prettier version. A final consolidated exact-head run is still required before the CI evidence layer is treated as closed.
+Permanent GitHub Actions execution is functioning and the workflow exercises build, lint, typecheck, repository tests, formatting, architecture boundaries, Android and SCA. Repository-wide formatting drift found during the first complete gate execution was normalized with the pinned Prettier version. Every release candidate must retain one consolidated exact-candidate run; an earlier commit's pass or a partial run is not substituted for that evidence.
 
-SEC-006 remains an **evidence mechanism**, not passed recovery evidence by itself. SEC-008 has produced real passing SCA evidence on the stacked code lineage, but the exact release candidate still requires retained PASS evidence and named review/sign-off.
+SEC-006 remains an **evidence mechanism**, not passed recovery evidence by itself. SEC-008 has produced real zero-blocker passing SCA evidence on the stacked code lineage, while every exact release candidate still requires its retained PASS evidence and named review/sign-off.
 
 ## Remaining mandatory release blockers
 
@@ -114,7 +114,7 @@ The remaining blockers are evidence/environment gates rather than missing anonym
 
 1. **SEC-005 deployment evidence** — run the documented flood/abuse exercise on the actual pilot topology and retain upstream distributed-protection evidence if applicable.
 2. **SEC-006 restore evidence** — execute the representative backup/isolated-restore drill on the exact release candidate, pass fingerprints/sequence/RPO/RTO checks and obtain named sign-off.
-3. **Final exact-head CI evidence** — retain one consolidated run where TypeScript/build/lint/typecheck/tests/format/architecture, Android and SCA all pass on the exact release candidate.
+3. **Exact-release CI evidence** — retain one consolidated run where TypeScript/build/lint/typecheck/tests/format/architecture, Android and SCA all pass on the exact release candidate.
 4. **SEC-008 review/sign-off** — retain the exact-release SCA PASS manifest with no unaccepted HIGH/CRITICAL/UNKNOWN finding and obtain named sign-off. Moderate/low findings remain visible and are not silently treated as absent.
 5. **Real hardware/network/provider pilot evidence** — complete the durability, payment-fault, network partition/recovery, inventory and close/reconciliation exercises in `docs/PILOT_RUNBOOK.md`.
 
@@ -122,7 +122,7 @@ No PASS artifact should be fabricated or inferred from the existence of a script
 
 ## Validation limitation
 
-The prior GitHub Actions runner-allocation blocker is closed: permanent jobs now receive runners and execute. The remaining CI limitation is evidentiary rather than infrastructural — the final exact release head still needs one consolidated green run after repository formatting normalization and documentation refresh.
+The prior GitHub Actions runner-allocation blocker is closed: permanent jobs now receive runners and execute. Permanent CI is therefore no longer an environment limitation; release acceptance is tied to the consolidated result for the exact candidate being considered.
 
 The backup/restore and pilot-topology gates require representative databases, hardware, network and provider conditions that are not present in this chat execution environment. Those gates cannot be substituted by synthetic unit/integration evidence.
 
