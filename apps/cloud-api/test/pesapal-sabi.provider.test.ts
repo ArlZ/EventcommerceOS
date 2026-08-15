@@ -86,18 +86,16 @@ describe('Pesapal Sabi provider', () => {
   it('requires complete verified financial identity before success', async () => {
     vi.stubGlobal(
       'fetch',
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              ...successVerification,
-              currency: undefined,
-              payment_option: undefined,
-            }),
-            { status: 200, headers: { 'content-type': 'application/json' } },
-          ),
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...successVerification,
+            currency: undefined,
+            payment_option: undefined,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
         ),
+      ),
     );
     const provider = new PesapalSabiProvider();
     const result = await provider.parseAndVerifyWebhook(notification(), context());
@@ -143,7 +141,7 @@ describe('Pesapal Sabi provider', () => {
     const result = await provider.parseAndVerifyWebhook(notification(), context());
 
     expect(result.status).toBe('UNKNOWN');
-    expect(result.failureCode).toBe('PESAPAL_SABI_VERIFICATION_MISMATCH');
+    expect(result.failureCode).toBe('PESAP_SABI_VERIFICATION_MISMATCH');
   });
 
   it('rejects prohibited raw card fields', async () => {
