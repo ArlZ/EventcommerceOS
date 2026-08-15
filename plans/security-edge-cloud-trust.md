@@ -1,7 +1,7 @@
 # Security remediation — Event Edge to Cloud trust
 
-Status: implementation complete; permanent CI pending
-Base: Task 010 (`codex/task-010-production-hardening`)
+Status: implementation complete; final green Task 010 base merged; permanent CI revalidation in progress
+Base: final Task 010 (`codex/task-010-production-hardening` at `6c1784b31b5f59ef34535ece0e7e8274569a627b`)
 
 ## Objective
 
@@ -64,6 +64,10 @@ The integration suite covers:
 - inventory Edge ingestion uses the same authentication and tenant binding;
 - Event Edge runtime transport fails closed when credential is missing or batch identity mismatches.
 
+## Validation checkpoint
+
+The final green Task 010 base has been merged into this branch. The only merge conflicts were two tests: the Pesapal provider test was resolved to Task 010's canonical Prettier output because the variants were semantically identical, while the Command Centre projection integration test retained this PR's authenticated Edge provisioning because that is part of the machine-trust feature boundary. The branch is now zero commits behind its base and requires a fresh permanent TypeScript + Android CI pass on this exact head.
+
 ## Non-goals / remaining blockers
 
 This slice does **not** claim to solve:
@@ -74,7 +78,6 @@ This slice does **not** claim to solve:
 - caller-supplied admin role/header replacement;
 - global rate limiting/abuse controls;
 - backup/restore evidence;
-- dependency/SCA evidence;
-- permanent CI, currently blocked before runner assignment.
+- dependency/SCA evidence.
 
-Those remain release blockers. The system remains NO-GO for internet-exposed live-money production until the wider Task 010 security disposition is cleared.
+Those remain addressed only by later stacked remediations and release evidence. The system remains NO-GO for internet-exposed live-money production until the wider Task 010 security disposition is cleared.
