@@ -11,23 +11,23 @@ jobs:
   remediate:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
+      EDGE_FORWARDER_DISABLED: 'true'
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
           POSTGRES_DB: event_commerce_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d event_commerce_test"
-          --health-interval 10s
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_test"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-    env:
-      CLOUD_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/event_commerce_test
-      EDGE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/event_commerce_test
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with:
