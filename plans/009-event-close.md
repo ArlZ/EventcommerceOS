@@ -1,5 +1,8 @@
 # Task 009 — Event Close, Reconciliation & Audit
 
+Status: implementation complete; final repository CI validation in progress
+Base: final Task 008 (`codex/task-008-command-centre` at `612b4acfc3827f00d58fd3cc6b59cae397e2005e`)
+
 ## Objective
 
 Make an event operationally closeable while preserving unresolved financial and inventory truth. Closing is a control-plane action and immutable report snapshot, not a rewrite of commerce/payment/inventory ledgers.
@@ -48,7 +51,7 @@ refunds = successful electronic refunds + CASH_REFUND adjustments
 net sales = gross - discounts - comps - voids - refunds
 ```
 
-Electronic tender uses one successful attempt per logical payment, less successful refunds/reversals. Cash expected is calculated independently from cash-closed orders. Sales-vs-tender variance is shown and is marked non-conclusive while unresolved payments remain.
+Electronic tender uses one successful attempt per logical payment, less successful refunds/reversals. Cash expected is calculated independently from cash-closed orders. Sales-vs-tender variance is shown and is marked non-conclusive while unresolved payments or unresolved payment adjustments remain.
 
 Provider settlement bank/deposit data is not available in the current adapters, so the report must say `PROVIDER_SETTLEMENT_DATA_UNAVAILABLE` rather than imply settlement reconciliation.
 
@@ -81,3 +84,11 @@ Synthetic close fixture must include:
 - critical unresolved alert.
 
 Assertions must prove totals/drilldowns reconcile to source ledgers, close snapshot remains immutable after late provider truth, live report flags post-close source change, and reopen/re-close creates a new audited revision.
+
+## Repository CI checkpoint
+
+Task 009 now contains the fully validated Task 008 base through a real conflict-free merge. The earlier permanent runner pass exposed only shared import/runtime-DI hygiene and Event Close correctness issues already proven on the higher Task 010 stack.
+
+The repaired tree preserves Nest runtime injection tokens with explicit `@Inject(...)`, enforces the Event Close correction window before new corrections, keeps financial reconciliation inconclusive when provider adjustment truth is unresolved, uses correct CSV response handling, serializes the shared-PostgreSQL integration suites, and has the full repository Prettier surface normalized.
+
+No Task 010 simulation/security feature scope was pulled down into Task 009. A fresh permanent TypeScript + Android CI pass on this exact repaired tree is required before merge readiness.
