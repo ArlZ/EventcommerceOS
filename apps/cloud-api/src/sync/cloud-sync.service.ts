@@ -18,6 +18,8 @@ interface OrderStateRow extends QueryResultRow {
   state: string;
   event_id: string;
   sales_location_id: string | null;
+  close_method: string | null;
+  cashier_id: string | null;
 }
 
 interface OrderLineProjection {
@@ -33,6 +35,8 @@ interface OrderProjectionPayload {
   currency: string;
   eventId: string;
   salesLocationId: string | null;
+  closeMethod: 'CASH' | 'PROVIDER' | 'UNKNOWN' | null;
+  cashierId: string | null;
   lines: OrderLineProjection[];
   linesProvided: boolean;
   occurredAt: string;
@@ -195,7 +199,8 @@ export class CloudSyncService {
     }
 
     const current = await client.query<OrderStateRow>(
-      `SELECT device_id, last_sequence::text, state, event_id, sales_location_id
+      `SELECT device_id, last_sequence::text, state, event_id, sales_location_id,
+              close_method, cashier_id
        FROM sync_order_state WHERE order_id = $1 FOR UPDATE`,
       [event.aggregateId],
     );
@@ -204,8 +209,8 @@ export class CloudSyncService {
       await client.query(
         `INSERT INTO sync_order_state(
            order_id, device_id, last_sequence, state, total_minor, currency,
-           event_id, sales_location_id, lines, occurred_at
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)`,
+           event_id, sales_location_id, lines, occurred_at, close_method, cashier_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12)`,
         [
           event.aggregateId,
           event.deviceId,
@@ -217,6 +222,8 @@ export class CloudSyncService {
           payload.salesLocationId,
           JSON.stringify(payload.lines),
           payload.occurredAt,
+          payload.closeMethod,
+          payload.cashierId,
         ],
       );
       return 'ACCEPTED';
@@ -250,6 +257,28 @@ export class CloudSyncService {
       });
       return 'CONFLICT';
     }
+    if (
+      existing.close_method !== null &&
+      payload.closeMethod !== null &&
+      existing.close_method !== payload.closeMethod
+    ) {
+      await this.exception(client, 'ORDER_CLOSE_METHOD_CONFLICT', event, {
+        existingCloseMethod: existing.close_method,
+        incomingCloseMethod: payload.closeMethod,
+      });
+      return 'CONFLICT';
+    }
+    if (
+      existing.cashier_id !== null &&
+      payload.cashierId !== null &&
+      existing.cashier_id !== payload.cashierId
+    ) {
+      await this.exception(client, 'ORDER_CASHIER_CONFLICT', event, {
+        existingCashierId: existing.cashier_id,
+        incomingCashierId: payload.cashierId,
+      });
+      return 'CONFLICT';
+    }
     if (!this.safeOrderAdvance(existing.state, payload.state)) {
       await this.exception(client, 'ORDER_STATE_REGRESSION', event, {
         currentState: existing.state,
@@ -269,6 +298,8 @@ export class CloudSyncService {
            sales_location_id = COALESCE($7, sales_location_id),
            lines = CASE WHEN $9 THEN $8::jsonb ELSE lines END,
            occurred_at = $10,
+           close_method = COALESCE($11, close_method),
+           cashier_id = COALESCE($12, cashier_id),
            updated_at = now()
        WHERE order_id = $1`,
       [
@@ -282,6 +313,8 @@ export class CloudSyncService {
         JSON.stringify(payload.lines),
         payload.linesProvided,
         payload.occurredAt,
+        payload.closeMethod,
+        payload.cashierId,
       ],
     );
     return 'ACCEPTED';
@@ -320,6 +353,16 @@ export class CloudSyncService {
     const salesLocationId =
       typeof salesLocationValue === 'string' ? salesLocationValue.trim() : null;
 
+    const cashierValue = event.payload.cashierId;
+    if (
+      cashierValue !== undefined &&
+      cashierValue !== null &&
+      (typeof cashierValue !== 'string' || !cashierValue.trim())
+    ) {
+      throw new Error('synced cashierId must be a non-empty string when provided');
+    }
+    const cashierId = typeof cashierValue === 'string' ? cashierValue.trim() : null;
+
     const rawLines = event.payload.lines;
     const linesProvided = rawLines !== undefined;
     const lines: OrderLineProjection[] = [];
@@ -357,12 +400,23 @@ export class CloudSyncService {
       });
     }
 
+    const closeMethod: OrderProjectionPayload['closeMethod'] =
+      state !== 'CLOSED'
+        ? null
+        : event.eventType === 'ORDER_CLOSED_CASH'
+          ? 'CASH'
+          : event.eventType === 'ORDER_CLOSED_PROVIDER'
+            ? 'PROVIDER'
+            : 'UNKNOWN';
+
     return {
       state,
       totalMinor: totalMinor as number,
       currency,
       eventId: businessEventId,
       salesLocationId,
+      closeMethod,
+      cashierId,
       lines,
       linesProvided,
       occurredAt: event.occurredAt,

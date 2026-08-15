@@ -10,6 +10,9 @@ export default function HomePage() {
         <a href="/command-centre">Open Live Event Command Centre</a>
       </p>
       <p>
+        <a href="/event-close">Open Event Close & Reconciliation</a>
+      </p>
+      <p>
         <a href="/configuration">Open Event Setup</a>
       </p>
       <p>
