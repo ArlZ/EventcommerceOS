@@ -410,7 +410,7 @@ export class CommandCentreService {
               max(state.occurred_at) AS last_sale_at
        FROM sync_order_state state
        LEFT JOIN sales_locations location
-         ON location.id::text = state.sales_location_id AND location.event_id = $1::uuid
+         ON location.id::text = state.sales_location_id AND location.event_id::text = $1
        WHERE state.event_id = $1 AND state.state = 'CLOSED'
        GROUP BY state.sales_location_id, location.name, state.currency
        ORDER BY max(state.occurred_at) ASC NULLS FIRST, name, state.currency`,

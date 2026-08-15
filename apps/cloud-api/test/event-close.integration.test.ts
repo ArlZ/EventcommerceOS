@@ -455,6 +455,6 @@ describeIntegration('event operational close and post-close reconciliation', () 
       .set(headers())
       .expect(200)
       .expect('Content-Type', /text\/csv/);
-    expect(Buffer.from(csv.body).toString('utf8')).toContain('FINANCIAL_RECONCILIATION');
+    expect(csv.text).toContain('FINANCIAL_RECONCILIATION');
   });
 });
