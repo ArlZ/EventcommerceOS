@@ -6,7 +6,6 @@ import { DatabaseModule } from './database/database.module';
 import { EventCloseModule } from './event-close/event-close.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { PaymentsModule } from './payments/payments.module';
-import { AbuseProtectionModule } from './security/abuse-protection.module';
 import { SyncModule } from './sync/sync.module';
 import { HealthModule } from './system/health.module';
 
@@ -14,7 +13,6 @@ import { HealthModule } from './system/health.module';
   imports: [
     DatabaseModule,
     AuthModule,
-    AbuseProtectionModule,
     HealthModule,
     ConfigurationModule,
     InventoryModule,
