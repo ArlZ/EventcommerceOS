@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { InventoryEdgeAck, InventoryEdgeBatch } from '@event-commerce/contracts';
+import { edgeCloudCredentials } from '../security/edge-cloud-credentials';
 import { InventoryCloudTransport } from './inventory-cloud.transport';
 
 function endpoint(): URL {
@@ -16,10 +17,12 @@ function endpoint(): URL {
 @Injectable()
 export class HttpInventoryCloudTransport extends InventoryCloudTransport {
   async send(batch: InventoryEdgeBatch): Promise<InventoryEdgeAck> {
+    const credentials = edgeCloudCredentials(batch.edgeId);
     const response = await fetch(endpoint(), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: credentials.headers,
       body: JSON.stringify(batch),
+      signal: AbortSignal.timeout(5_000),
     });
     if (!response.ok) throw new Error(`inventory cloud sync failed with HTTP ${response.status}`);
     return (await response.json()) as InventoryEdgeAck;

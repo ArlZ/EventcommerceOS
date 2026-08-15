@@ -6,12 +6,14 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const eventId = '22222222-2222-4222-8222-222222222222';
 const otherEventId = '22222222-2222-4222-8222-333333333333';
 const locationId = '55555555-5555-4555-8555-555555555555';
 const skuId = '88888888-8888-4888-8888-888888888888';
+const edgeId = 'projection-edge';
 
 function orderEvent(sequence: number, businessEventId = eventId): SyncEventEnvelope {
   return {
@@ -40,7 +42,7 @@ function orderEvent(sequence: number, businessEventId = eventId): SyncEventEnvel
 
 function batch(event: SyncEventEnvelope): EdgeCloudBatch {
   return {
-    edgeId: 'projection-edge',
+    edgeId,
     events: [event],
     deviceStatuses: [
       {
@@ -58,6 +60,7 @@ function batch(event: SyncEventEnvelope): EdgeCloudBatch {
 describeIntegration('validated command centre order projection', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let authHeaders: Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
@@ -71,6 +74,8 @@ describeIntegration('validated command centre order projection', () => {
     await database.query(
       'TRUNCATE sync_processed_events, sync_order_state, sync_device_state, sync_reconciliation_exceptions',
     );
+    authHeaders = (await provisionSyncEdge(database, { edgeId, eventIds: [eventId, otherEventId] }))
+      .headers;
   });
 
   afterAll(async () => {
@@ -81,10 +86,12 @@ describeIntegration('validated command centre order projection', () => {
   it('stores event, location and line dimensions only after order validation', async () => {
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch(orderEvent(1)))
       .expect(201);
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch(orderEvent(2)))
       .expect(201);
 
@@ -112,10 +119,12 @@ describeIntegration('validated command centre order projection', () => {
   it('rejects a higher sequence trying to move an order into another business event', async () => {
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch(orderEvent(1)))
       .expect(201);
     const response = await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(batch(orderEvent(2, otherEventId)))
       .expect(201);
     expect(response.body.conflictEventInstanceIds).toEqual(['projection-instance-2']);

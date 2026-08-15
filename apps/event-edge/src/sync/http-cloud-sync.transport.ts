@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EdgeCloudAck, EdgeCloudBatch } from '@event-commerce/contracts';
+import { edgeCloudCredentials } from '../security/edge-cloud-credentials';
 import { CloudSyncTransport } from './cloud-sync.transport';
 
 @Injectable()
@@ -14,9 +15,11 @@ export class HttpCloudSyncTransport extends CloudSyncTransport {
     if (parsed.protocol !== 'https:' && !loopback) {
       throw new Error('cloud sync URL must use HTTPS outside loopback development');
     }
+
+    const credentials = edgeCloudCredentials(batch.edgeId);
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: credentials.headers,
       body: JSON.stringify(batch),
       signal: AbortSignal.timeout(5_000),
     });

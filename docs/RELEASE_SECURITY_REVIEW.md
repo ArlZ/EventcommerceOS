@@ -4,7 +4,7 @@ Review scope: payments, provider callbacks, authentication/RBAC, device/Edge tru
 
 Status: **NOT CLEARED FOR INTERNET-EXPOSED PRODUCTION OR A LIVE-MONEY PILOT**
 
-This review distinguishes implemented domain safety from missing deployment/security controls. A strong payment state machine does not make an unauthenticated HTTP endpoint safe.
+This review distinguishes implemented domain safety from deployment/security controls. A strong payment state machine does not make an unauthenticated HTTP endpoint safe.
 
 ## Severity convention
 
@@ -15,56 +15,56 @@ This review distinguishes implemented domain safety from missing deployment/secu
 
 ## Findings
 
-### SEC-001 — P0 — Cloud payment mutation endpoints do not have production authentication
+### SEC-001 — P0 — Cloud payment mutation/read endpoints still lack production authentication
 
-Observed controller surface includes:
+Observed controller surface includes payment initiation, manual terminal confirmation, refunds, reversals, reconciliation and sensitive payment history/health reads.
 
-- `POST /payments/initiate`;
-- `POST /payments/manual-terminal-confirmations`;
-- `POST /payments/refunds`;
-- `POST /payments/reversals`;
-- `POST /payments/attempts/:id/reconcile`;
-- payment history/order/health reads.
-
-`apps/cloud-api/src/payments/payments.controller.ts` does not apply an authenticated operator/device guard, and `apps/cloud-api/src/main.ts` does not install a global authentication guard.
-
-Some downstream services validate actor/permission data, but without cryptographically established caller identity an external caller can potentially supply/spoof business identity fields.
+`apps/cloud-api/src/payments/payments.controller.ts` does not yet apply a cryptographically authenticated operator/device guard, and no global user authentication guard establishes caller identity. Some downstream services validate actor/permission data, but those checks cannot substitute for trustworthy caller provenance.
 
 **Required remediation before exposure/live money:**
 
-- real access-token validation at the Cloud boundary;
-- separate machine identity for Event Edge/device-originated calls;
-- server-derived actor/device/organisation context rather than trusting request-body identity;
-- route-level scopes/roles for initiation, refund, reversal, manual confirmation, reconciliation and sensitive reads;
-- tests proving unauthenticated/incorrect-scope calls are denied.
+- signed short-lived access-token validation at the Cloud boundary;
+- server-derived actor/device/organisation context;
+- route scopes/roles for initiation, refund, reversal, manual confirmation, reconciliation and sensitive reads;
+- tests proving unauthenticated and incorrectly scoped calls are denied.
 
-Do not substitute another trusted header for authentication.
+Do not substitute another caller-trusted header for authentication.
 
-### SEC-002 — P0 — Cloud sync ingestion/device-health endpoints are unauthenticated
+### SEC-002 — P0 — Event Edge to Cloud machine ingress
 
-`apps/cloud-api/src/sync/cloud-sync.controller.ts` exposes:
+**Status: remediated in `security/edge-cloud-trust`, pending permanent CI and stack merge.**
+
+The remediation closes both Edge-originated Cloud ingestion paths:
 
 - `POST /sync/edge-events`;
-- `GET /sync/devices`.
+- `POST /inventory/edge-events`.
 
-No controller/global authentication mechanism establishes that the caller is a registered, non-revoked Event Edge instance.
+Implemented controls:
 
-The sync service has meaningful replay/conflict controls, but idempotency is not authentication. An attacker must not be allowed to submit syntactically valid event envelopes.
+- per-Edge machine identity and cryptographically random 256-bit bearer credential;
+- Cloud stores only SHA-256 credential digests;
+- constant-time credential comparison;
+- unique credential digest per Edge identity;
+- stable `EDGE_ID` plus runtime-only `EDGE_CLOUD_SYNC_TOKEN` on Event Edge;
+- HTTPS required outside loopback development by both Event Edge Cloud transports;
+- server-side Edge-to-organisation binding;
+- request body `edgeId` must match the authenticated Edge;
+- every synced commerce/inventory business `eventId` must belong to the Edge organisation;
+- accepted sync events and device health state record authenticated Edge/organisation attribution;
+- Edge credential versioning, rotation and revocation;
+- append-only provision/rotate/revoke credential audit;
+- immediate rejection of revoked/old rotated credentials;
+- cross-organisation device-ID takeover rejected transactionally;
+- device sequence replay protection scoped by organisation;
+- the previously anonymous `/sync/devices` endpoint removed.
 
-**Required remediation:**
+Security tests cover missing/wrong/unknown/revoked credentials, body identity mismatch, wrong-organisation event injection, rotation, authenticated attribution, cross-tenant device takeover and the inventory ingestion boundary.
 
-- Edge registration and revocation model;
-- per-Edge credential/certificate or signed short-lived machine token;
-- organisation/event binding enforced server-side;
-- credential rotation/revocation procedure;
-- replay-resistant authenticated request envelope where appropriate;
-- tests for unregistered/revoked/wrong-organisation Edge rejection.
+**Important remaining boundary:** this does not authenticate POS devices to Event Edge. A registered Edge remains the trusted machine boundary for the device events it relays until SEC-004 is implemented.
 
-### SEC-003 — P1 — Administrative identity currently relies on caller-supplied headers
+### SEC-003 — P1 — Administrative identity relies on caller-supplied headers
 
-Administrative paths use `x-actor-id`, `x-role` and `x-organisation-id` via `adminContextFromHeaders`.
-
-This is useful scaffolding for internal development/testing, but it is not a production authentication system. Any caller able to reach those routes can assert `ADMIN`/`PLATFORM_ADMIN` unless an upstream trusted identity layer is guaranteed and enforced.
+Administrative paths use `x-actor-id`, `x-role` and `x-organisation-id` via the existing admin context. This remains development/testing scaffolding, not production authentication.
 
 **Required remediation:**
 
@@ -74,14 +74,15 @@ This is useful scaffolding for internal development/testing, but it is not a pro
 - step-up/supervisor approval for configured high-risk actions;
 - explicit session/token revocation and expiry handling.
 
-### SEC-004 — P1 — Device registration/revocation trust boundary is not implemented end-to-end
+### SEC-004 — P1 — POS device registration/revocation is not implemented end-to-end
 
-The reliability baseline requires device registration and revocation, but the current repository does not establish a production-grade device identity lifecycle across POS -> Edge -> Cloud.
+The new Edge machine identity does not establish a production-grade POS device identity lifecycle for POS -> Event Edge.
 
 **Required remediation:**
 
-- unique device identity generated/provisioned through a controlled flow;
+- unique device identity provisioned through a controlled flow;
 - event/register assignment bound to that identity;
+- device-to-Edge authenticated requests;
 - revocation and re-provisioning;
 - stolen/reused credential handling;
 - last-seen/version/security posture visibility;
@@ -89,100 +90,80 @@ The reliability baseline requires device registration and revocation, but the cu
 
 ### SEC-005 — P1 — Public endpoint abuse/rate limiting is not wired globally
 
-`main.ts` configures CORS but no application-level rate limiting/abuse control is visible at the global HTTP boundary.
-
-Provider callbacks and initiation/reconciliation endpoints are especially sensitive to request floods, expensive verification calls and database contention.
+No reviewed application-level rate/abuse control is currently installed at the global HTTP boundary. Provider callbacks and payment initiation/reconciliation are especially sensitive to floods, expensive verification calls and database contention.
 
 **Required remediation:**
 
 - rate limits by endpoint/caller/provider contract;
 - payload/body size limits;
 - connection/request timeouts;
-- provider callback-specific limits that do not break legitimate retry bursts;
-- alerting for sustained rejects/abuse;
-- upstream WAF/reverse-proxy controls documented as part of deployment.
+- provider callback limits that preserve legitimate retry bursts;
+- sustained-reject/abuse alerting;
+- documented upstream WAF/reverse-proxy controls.
 
-### SEC-006 — P1 — Backup/restore procedure is specified but not yet evidenced
+### SEC-006 — P1 — Backup/restore procedure is specified but not evidenced
 
-The security/reliability baseline requires database backup and tested restore. The repository/runbook now defines the exercise, but Task 010 has no executed restore evidence.
+Task 010 defines the exercise but has no executed restore evidence.
 
-**Required remediation/evidence:**
+**Required evidence:** real Cloud backup, isolated restore, representative order/payment/inventory/audit/close verification, measured RPO/RTO and retained operator evidence.
 
-- real Cloud DB backup;
-- isolated restore;
-- representative order/payment/inventory/audit/close verification;
-- RPO/RTO measurement;
-- operator/time/evidence retained.
+### SEC-007 — P1 — Permanent CI/security checks are externally blocked
 
-### SEC-007 — P1 — Permanent CI/security checks are currently externally blocked
-
-The permanent TypeScript and Android GitHub Actions jobs are still failing before step 1 because GitHub does not allocate a runner. No successful permanent gate exists for the current stack.
-
-The local execution environment also cannot currently fetch the pinned pnpm toolchain from the npm registry, so dependency audit/build cannot substitute for CI here.
+The permanent TypeScript and Android GitHub Actions jobs still fail before step 1 because GitHub does not allocate a runner. No successful permanent gate exists for the current stack.
 
 **Required before merge/pilot:** permanent CI must execute and pass on the exact release commit.
 
 ### SEC-008 — P2 — Dependency vulnerability evidence is incomplete
 
-Task 010 attempted the checks available in the environment. Node/TypeScript are present, but pnpm installation/toolchain resolution requires registry access that is unavailable in this execution environment. GitHub Actions is also blocked before steps execute.
-
-**Required release evidence:**
-
-- locked dependency install from `pnpm-lock.yaml`;
-- package-manager audit or approved SCA equivalent;
-- Android/Gradle dependency scan where available;
-- review of high/critical findings with explicit disposition;
-- secret scanning on the release branch/repository.
-
-No claim is made that the current dependency graph is vulnerability-free.
+A locked install/package-manager audit or approved SCA equivalent plus Android dependency/security review remains required. No claim is made that the current dependency graph is vulnerability-free.
 
 ## Positive controls already present
 
 ### Payment state/idempotency safety
 
-Implemented payment architecture has strong business-safety foundations:
-
-- explicit attempt states including durable `UNKNOWN`;
-- duplicate initiation/idempotency protections;
+- explicit payment states including durable `UNKNOWN`;
+- duplicate initiation/idempotency protection;
 - immutable attempt history;
 - late provider truth can resolve uncertainty;
-- duplicate callbacks are deduplicated;
-- refund/reversal intent is separate durable history;
-- one provider retry cannot silently overwrite earlier truth.
-
-These controls reduce duplicate-charge/accounting risk but do not replace endpoint authentication.
+- callback deduplication;
+- separate durable refund/reversal history;
+- provider retries cannot silently overwrite earlier truth.
 
 ### Provider boundary/card-data minimization
 
-The documented implementation keeps provider-specific logic at the Cloud adapter boundary and rejects prohibited raw card data fields at payment HTTP boundaries. Pesapal Sabi card credentials remain in the certified terminal/provider domain.
-
-No claim is made that the deployment is automatically PCI DSS compliant or out of PCI scope.
+Provider-specific logic remains at the Cloud adapter boundary. Payment command endpoints reject prohibited raw card credential fields; Pesapal Sabi card credentials remain within the certified terminal/provider domain. This is not itself a PCI DSS compliance determination.
 
 ### Callback verification/reconciliation
 
-The provider integrations use provider-specific validation/verification rules rather than treating an arbitrary callback body as final truth. Mismatched identifiers/amount/currency and uncertain provider states remain explicit reconciliation cases.
+Provider integrations use provider-specific validation/verification rather than accepting arbitrary callback bodies as final truth. Identifier/amount/currency conflicts remain explicit reconciliation cases.
+
+### Edge Cloud machine trust
+
+The stacked Edge trust remediation authenticates both order/sync and inventory Edge ingestion, binds the Edge to an organisation server-side and adds rotation/revocation/audit without coupling local sales to Cloud availability.
 
 ### Sync replay/conflict safety
 
-Cloud sync persists processed event identities/sequences, detects event-instance/device-sequence reuse and raises explicit reconciliation exceptions for invalid/conflicting order projections. Money/inventory truth is not last-write-wins.
+Cloud persists processed event identities/sequences, detects event-instance/device-sequence reuse and raises explicit reconciliation exceptions for invalid/conflicting order projections. Replay protection is now tenant-scoped for authenticated Edge traffic.
 
 ### Inventory/close audit safety
 
-Inventory is append-only ledger based; physical counts create traceable adjustments. Command-centre alert actions and event-close corrections are attributable/audited. Task 009 also serializes close/correction boundaries so operator corrections cannot race across an immutable close revision.
+Inventory remains append-only ledger based; physical counts create traceable adjustments. Command-centre alert actions and event-close corrections are attributable/audited, and Task 009 serializes close/correction boundaries around immutable close revisions.
 
-## Threat scenarios that must be demonstrated before pilot
+## Threat scenarios required before pilot
 
 - unauthenticated payment initiation rejected;
 - user token with wrong organisation rejected;
-- bartender/operator denied refund/reversal/manual confirmation when lacking permission;
-- revoked device/Edge denied sync;
-- forged device ID cannot impersonate another register;
-- duplicate/reordered signed sync cannot duplicate a business effect;
+- bartender/operator denied refund/reversal/manual confirmation without permission;
+- revoked Event Edge denied both sync and inventory ingestion;
+- forged/mismatched Edge ID denied;
+- authenticated Edge denied another organisation event;
+- revoked POS device denied Event Edge access once SEC-004 is implemented;
+- duplicate/reordered authenticated sync cannot duplicate a business effect;
 - forged/incorrect provider callback rejected;
 - valid duplicate provider callback has one business effect;
 - provider timeout yields `UNKNOWN`, not failure;
-- delayed authoritative success resolves original attempt without a second charge;
-- request flood/rate-limit exercise does not starve local event operations;
+- delayed authoritative success resolves the original attempt without a second charge;
+- request-flood/rate-limit exercise does not starve local event operations;
 - privileged inventory/close actions create immutable audit evidence;
 - audit/ledger records cannot be mutated/deleted through application APIs;
 - secrets/card data absent from logs/database/sample exports.
@@ -191,15 +172,14 @@ Inventory is append-only ledger based; physical counts create traceable adjustme
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-The system may continue through engineering simulation and internal/sandbox exercises, but the following are mandatory release blockers:
+SEC-002 is closed at code/review level in the Edge Cloud trust stack, subject to permanent CI. Remaining mandatory release blockers are:
 
 1. SEC-001 payment API authentication/authorization;
-2. SEC-002 Edge sync authentication/registration;
-3. SEC-003 replacement of caller-trusted admin role headers;
-4. SEC-004 device identity/revocation lifecycle;
-5. SEC-005 rate limiting/abuse controls;
-6. SEC-006 tested backup/restore evidence;
-7. SEC-007 green permanent CI on the exact release stack;
-8. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk.
+2. SEC-003 replacement of caller-trusted administrative role headers;
+3. SEC-004 POS device identity/revocation lifecycle;
+4. SEC-005 rate limiting/abuse controls;
+5. SEC-006 tested backup/restore evidence;
+6. SEC-007 green permanent CI on the exact release stack;
+7. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk.
 
 After those are closed, the correct next status is **controlled live pilot candidate**, not major-festival ready. Graduation criteria remain in `docs/PILOT_RUNBOOK.md`.

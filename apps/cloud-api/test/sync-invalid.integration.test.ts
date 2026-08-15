@@ -5,12 +5,15 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { DEFAULT_SYNC_EVENT_ID, provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
+const edgeId = 'edge-test-invalid';
 
 describeIntegration('invalid synced order quarantine', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let authHeaders: Record<string, string>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
@@ -23,6 +26,7 @@ describeIntegration('invalid synced order quarantine', () => {
     await database.query(
       'TRUNCATE sync_processed_events, sync_order_state, sync_device_state, sync_reconciliation_exceptions',
     );
+    authHeaders = (await provisionSyncEdge(database, { edgeId })).headers;
   });
 
   afterAll(async () => app.close());
@@ -40,10 +44,16 @@ describeIntegration('invalid synced order quarantine', () => {
       sequence: 1,
       occurredAt: '2026-08-13T18:00:00Z',
       idempotencyKey: 'invalid-order-idempotency',
-      payload: { orderId: 'invalid-order', state: 'BOGUS', totalMinor: 10_000, currency: 'KES' },
+      payload: {
+        orderId: 'invalid-order',
+        eventId: DEFAULT_SYNC_EVENT_ID,
+        state: 'BOGUS',
+        totalMinor: 10_000,
+        currency: 'KES',
+      },
     };
     const body = {
-      edgeId: 'edge-test',
+      edgeId,
       events: [event],
       deviceStatuses: [
         {
@@ -59,12 +69,14 @@ describeIntegration('invalid synced order quarantine', () => {
 
     const first = await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(body)
       .expect(201);
     expect(first.body.conflictEventInstanceIds).toEqual(['invalid-order-instance']);
 
     const replay = await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(authHeaders)
       .send(body)
       .expect(201);
     expect(replay.body.duplicateEventInstanceIds).toEqual(['invalid-order-instance']);
