@@ -52,7 +52,10 @@ async function bootstrap(): Promise<void> {
   const trustProxyHops = boundedInteger('TRUST_PROXY_HOPS', 0, 0, 5);
   abuseDeploymentMode(trustProxyHops);
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    bodyParser: false,
+  });
   if (trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
 
   const jsonBodyLimit = boundedInteger(
