@@ -48,6 +48,121 @@ jobs:
       - run: pnpm format:check
       - run: pnpm arch:check
 
+  runtime-images:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_image_test
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6
+        env:
+          POSTGRES_DB: event_commerce_image_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_image_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build Cloud API image
+        run: >-
+          docker build
+          --build-arg APP_FILTER=@event-commerce/cloud-api
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --tag event-commerce/cloud-api:${GITHUB_SHA}
+          .
+      - name: Build Event Edge image
+        run: >-
+          docker build
+          --build-arg APP_FILTER=@event-commerce/event-edge
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --tag event-commerce/event-edge:${GITHUB_SHA}
+          .
+      - name: Build Control Web image
+        run: >-
+          docker build
+          --build-arg APP_FILTER=@event-commerce/control-web
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --build-arg NEXT_PUBLIC_CLOUD_API_URL=https://cloud-pilot.invalid
+          --tag event-commerce/control-web:${GITHUB_SHA}
+          .
+      - name: Run migrations from runtime images
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            event-commerce/cloud-api:${GITHUB_SHA} \
+            pnpm --filter @event-commerce/cloud-api db:migrate
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            event-commerce/event-edge:${GITHUB_SHA} \
+            pnpm --filter @event-commerce/event-edge db:migrate
+      - name: Boot runtime images
+        run: |
+          docker run -d --network host --name cloud-api \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e PORT=3001 \
+            -e ABUSE_DEPLOYMENT_MODE=single_instance_pilot \
+            -e ABUSE_UPSTREAM_CONFIRMED=false \
+            -e TRUST_PROXY_HOPS=0 \
+            event-commerce/cloud-api:${GITHUB_SHA}
+          docker run -d --network host --name event-edge \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e PORT=3002 \
+            -e EDGE_FORWARDER_DISABLED=true \
+            event-commerce/event-edge:${GITHUB_SHA}
+          docker run -d --network host --name control-web \
+            event-commerce/control-web:${GITHUB_SHA}
+      - name: Verify exact-release health
+        run: |
+          node - <<'NODE'
+          const expectedRelease = process.env.GITHUB_SHA;
+          const targets = [
+            ['http://127.0.0.1:3001/health', 'cloud-api'],
+            ['http://127.0.0.1:3002/health', 'event-edge'],
+            ['http://127.0.0.1:3000/api/health', 'control-web'],
+          ];
+
+          for (const [url, expectedService] of targets) {
+            let body;
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+              try {
+                const response = await fetch(url);
+                if (response.ok) {
+                  body = await response.json();
+                  break;
+                }
+              } catch {}
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+            if (!body) throw new Error(`${expectedService} did not become healthy`);
+            if (expectedService !== 'control-web') {
+              if (body.service !== expectedService) {
+                throw new Error(`${expectedService} reported service ${JSON.stringify(body.service)}`);
+              }
+              if (body.releaseCommit !== expectedRelease) {
+                throw new Error(`${expectedService} reported release ${body.releaseCommit}`);
+              }
+            }
+          }
+          NODE
+      - name: Verify containers run unprivileged
+        run: |
+          test "$(docker exec cloud-api id -u)" != "0"
+          test "$(docker exec event-edge id -u)" != "0"
+          test "$(docker exec control-web id -u)" != "0"
+      - name: Runtime logs on failure
+        if: failure()
+        run: |
+          docker logs cloud-api || true
+          docker logs event-edge || true
+          docker logs control-web || true
+
   android:
     runs-on: ubuntu-latest
     steps:
