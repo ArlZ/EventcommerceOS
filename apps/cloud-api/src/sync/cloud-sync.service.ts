@@ -345,10 +345,7 @@ export class CloudSyncService {
             `synced lines[${index}].unitPriceMinor must be a non-negative safe integer`,
           );
         }
-        if (
-          menuItemId !== undefined &&
-          (typeof menuItemId !== 'string' || !menuItemId.trim())
-        ) {
+        if (menuItemId !== undefined && (typeof menuItemId !== 'string' || !menuItemId.trim())) {
           throw new Error(`synced lines[${index}].menuItemId must be non-empty when provided`);
         }
         lines.push({
