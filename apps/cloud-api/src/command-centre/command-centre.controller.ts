@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Sse } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  Sse,
+} from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
 import type { Observable } from 'rxjs';
 import { adminContextFromHeaders } from '../configuration/admin-context';
@@ -12,7 +22,8 @@ type HeadersRecord = Record<string, string | string[] | undefined>;
 @Controller('command-centre')
 export class CommandCentreController {
   constructor(
-    private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
   ) {}
 
