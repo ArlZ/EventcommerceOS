@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { provisionOperator } from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -17,11 +18,11 @@ const inventoryOneId = '66666666-6666-4666-8666-666666666666';
 const inventoryTwoId = '77777777-7777-4777-8777-777777777777';
 const productId = '88888888-8888-4888-8888-888888888888';
 const skuId = '99999999-9999-4999-8999-999999999999';
+let operatorToken = '';
 
 function headers() {
   return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
+    authorization: `Bearer ${operatorToken}`,
     'x-organisation-id': organisationId,
   };
 }
@@ -87,6 +88,12 @@ describeIntegration('event operational close and post-close reconciliation', () 
     await database.query(`INSERT INTO organisations(id,name) VALUES ($1,'Operator')`, [
       organisationId,
     ]);
+    const operator = await provisionOperator(database, {
+      actorId,
+      memberships: [{ organisationId, role: 'ADMIN' }],
+    });
+    operatorToken = operator.token;
+
     await database.query(
       `INSERT INTO events(id,organisation_id,name,timezone,lifecycle,starts_at,ends_at)
        VALUES ($1,$2,'Close Test Event','Africa/Nairobi','CLOSED',now()-interval '8 hours',now())`,

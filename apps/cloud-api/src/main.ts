@@ -15,7 +15,7 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.enableCors({
     origin: process.env.CONTROL_WEB_ORIGIN ?? 'http://localhost:3000',
-    allowedHeaders: ['content-type', 'x-actor-id', 'x-role', 'x-organisation-id'],
+    allowedHeaders: ['authorization', 'content-type', 'x-organisation-id'],
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'OPTIONS'],
   });
   await app.listen(parsePort(process.env.PORT, 3001));

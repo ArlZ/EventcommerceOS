@@ -568,7 +568,7 @@ export class CommandCentreService {
        FROM event_devices event_device
        LEFT JOIN sync_device_state device ON device.device_id = event_device.device_id
        LEFT JOIN sales_locations location
-         ON location.id::text = event_device.sales_location_id AND location.event_id = $1::uuid
+         ON location.id::text = event_device.sales_location_id AND location.event_id::text = $1
        ORDER BY device.last_seen_at ASC NULLS FIRST, event_device.device_id`,
       [eventId],
     );
@@ -670,8 +670,9 @@ export class CommandCentreService {
         amountMinorPerMinute: row.velocity_minor_per_minute,
       });
       const candidate = isoNullable(row.last_sale_at);
-      if (candidate && (!current.lastSaleAt || candidate > current.lastSaleAt))
+      if (candidate && (!current.lastSaleAt || candidate > current.lastSaleAt)) {
         current.lastSaleAt = candidate;
+      }
       grouped.set(row.sales_location_id, current);
     }
     return [...grouped.values()].sort((left, right) =>

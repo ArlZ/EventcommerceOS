@@ -10,14 +10,13 @@ import {
   Sse,
 } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import type { Observable } from 'rxjs';
-import { adminContextFromHeaders } from '../configuration/admin-context';
+import { from, type Observable } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
+import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
 import { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
 import { CommandCentreService } from './command-centre.service';
 import { parseInventoryAlertAction } from './command-centre-validation';
-
-type HeadersRecord = Record<string, string | string[] | undefined>;
 
 @Controller('command-centre')
 export class CommandCentreController {
@@ -25,15 +24,19 @@ export class CommandCentreController {
     @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
     @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
+    @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
 
   @Get('events/:eventId')
   async snapshot(@Headers() headers: HeadersRecord, @Param('eventId') eventId: string) {
     const normalizedEventId = uuid(eventId, 'eventId');
-    const snapshot = await this.commandCentre.snapshot(
-      adminContextFromHeaders(headers),
-      normalizedEventId,
-    );
+    const context = await this.operators.contextForEvent(headers, normalizedEventId, [
+      'ADMIN',
+      'SUPERVISOR',
+      'FINANCE',
+      'VIEWER',
+    ]);
+    const snapshot = await this.commandCentre.snapshot(context, normalizedEventId);
     try {
       return await this.deviceSales.enrich(normalizedEventId, snapshot);
     } catch {
@@ -46,21 +49,34 @@ export class CommandCentreController {
     @Headers() headers: HeadersRecord,
     @Param('eventId') eventId: string,
   ): Observable<MessageEvent> {
-    return this.commandCentre.stream(adminContextFromHeaders(headers), uuid(eventId, 'eventId'));
+    const normalizedEventId = uuid(eventId, 'eventId');
+    return from(
+      this.operators.contextForEvent(headers, normalizedEventId, [
+        'ADMIN',
+        'SUPERVISOR',
+        'FINANCE',
+        'VIEWER',
+      ]),
+    ).pipe(switchMap((context) => this.commandCentre.stream(context, normalizedEventId)));
   }
 
   @Post('events/:eventId/inventory-alerts/:alertId/actions')
-  actOnInventoryAlert(
+  async actOnInventoryAlert(
     @Headers() headers: HeadersRecord,
     @Param('eventId') eventId: string,
     @Param('alertId') alertId: string,
     @Body() body: unknown,
   ) {
+    const normalizedEventId = uuid(eventId, 'eventId');
+    const context = await this.operators.contextForEvent(headers, normalizedEventId, [
+      'ADMIN',
+      'SUPERVISOR',
+    ]);
     const normalizedAlertId = alertId.trim();
     if (!normalizedAlertId) throw new BadRequestException('alertId must not be empty');
     return this.commandCentre.actOnInventoryAlert(
-      adminContextFromHeaders(headers),
-      uuid(eventId, 'eventId'),
+      context,
+      normalizedEventId,
       normalizedAlertId,
       parseInventoryAlertAction(body),
     );

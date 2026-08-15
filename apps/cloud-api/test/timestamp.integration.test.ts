@@ -6,17 +6,25 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 import type { OrganisationRecord } from '@event-commerce/contracts';
 import { AppModule } from '../src/app.module';
+import { DatabaseService } from '../src/database/database.service';
+import { provisionOperator } from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
 describeIntegration('event timestamp boundary', () => {
   let app: INestApplication;
-  const actorId = randomUUID();
+  let platformHeaders: (organisationId?: string) => Record<string, string>;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
+    const database = moduleRef.get(DatabaseService);
     await app.init();
+    const platform = await provisionOperator(database, {
+      actorId: randomUUID(),
+      platformAdmin: true,
+    });
+    platformHeaders = platform.headers;
   });
 
   afterAll(async () => {
@@ -27,18 +35,14 @@ describeIntegration('event timestamp boundary', () => {
     const organisation = (
       await request(app.getHttpServer())
         .post('/organisations')
-        .set({ 'x-actor-id': actorId, 'x-role': 'ADMIN' })
+        .set(platformHeaders())
         .send({ name: 'Timestamp Boundary Operator' })
         .expect(201)
     ).body as OrganisationRecord;
 
     await request(app.getHttpServer())
       .post('/events')
-      .set({
-        'x-actor-id': actorId,
-        'x-role': 'ADMIN',
-        'x-organisation-id': organisation.id,
-      })
+      .set(platformHeaders(organisation.id))
       .send({
         organisationId: organisation.id,
         name: 'Offsetless Timestamp Event',

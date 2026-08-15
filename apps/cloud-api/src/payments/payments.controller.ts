@@ -8,25 +8,28 @@ import {
   Param,
   Post,
 } from '@nestjs/common';
+import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
+import { ManualTerminalService } from './manual-terminal.service';
+import { PaymentAdjustmentsService } from './payment-adjustments.service';
 import { PaymentMachineAuthService } from './payment-machine-auth.service';
-import { parseInitiatePaymentRequest } from './payment-validation';
+import {
+  parseExternalTerminalConfirmation,
+  parseInitiatePaymentRequest,
+  parseRefundPaymentRequest,
+  parseReversePaymentRequest,
+} from './payment-validation';
 import { PaymentRailService } from './payment-rail.service';
 import { PaymentsService } from './payments.service';
-
-type HeadersRecord = Record<string, string | string[] | undefined>;
-
-function humanAuthRequired(): never {
-  throw new ForbiddenException(
-    'Human authentication and authorization are required for this payment operation',
-  );
-}
 
 @Controller('payments')
 export class PaymentsController {
   constructor(
     @Inject(PaymentsService) private readonly payments: PaymentsService,
+    @Inject(PaymentAdjustmentsService) private readonly adjustments: PaymentAdjustmentsService,
+    @Inject(ManualTerminalService) private readonly manualTerminal: ManualTerminalService,
     @Inject(PaymentRailService) private readonly rails: PaymentRailService,
     @Inject(PaymentMachineAuthService) private readonly machineAuth: PaymentMachineAuthService,
+    @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
 
   @Post('initiate')
@@ -37,18 +40,36 @@ export class PaymentsController {
   }
 
   @Post('manual-terminal-confirmations')
-  confirmExternalTerminal() {
-    return humanAuthRequired();
+  async confirmExternalTerminal(@Headers() headers: HeadersRecord, @Body() body: unknown) {
+    const request = parseExternalTerminalConfirmation(body);
+    const context = await this.operators.contextForPaymentAttempt(
+      headers,
+      request.paymentAttemptId,
+      ['ADMIN', 'SUPERVISOR'],
+    );
+    this.operators.assertActor(context.actorId, request.actorId);
+    return this.manualTerminal.confirm(request);
   }
 
   @Post('refunds')
-  refund() {
-    return humanAuthRequired();
+  async refund(@Headers() headers: HeadersRecord, @Body() body: unknown) {
+    const request = parseRefundPaymentRequest(body);
+    const context = await this.operators.contextForPayment(headers, request.paymentId, ['FINANCE']);
+    this.operators.assertActor(context.actorId, request.requestingActorId, 'requestingActorId');
+    if (request.approvingActorId !== undefined) {
+      throw new ForbiddenException(
+        'approvingActorId is not accepted from public HTTP until a separate approval session is implemented',
+      );
+    }
+    return this.adjustments.refund(request);
   }
 
   @Post('reversals')
-  reverse() {
-    return humanAuthRequired();
+  async reverse(@Headers() headers: HeadersRecord, @Body() body: unknown) {
+    const request = parseReversePaymentRequest(body);
+    const context = await this.operators.contextForPayment(headers, request.paymentId, ['FINANCE']);
+    this.operators.assertActor(context.actorId, request.requestingActorId, 'requestingActorId');
+    return this.adjustments.reverse(request);
   }
 
   @Post('providers/:providerId/callback')
@@ -80,13 +101,18 @@ export class PaymentsController {
   }
 
   @Get(':paymentId/history')
-  history() {
-    return humanAuthRequired();
+  async history(@Headers() headers: HeadersRecord, @Param('paymentId') paymentId: string) {
+    await this.operators.contextForPayment(headers, paymentId, ['ADMIN', 'FINANCE']);
+    return this.adjustments.history(paymentId);
   }
 
   @Get(':paymentId/manual-terminal-confirmations')
-  manualTerminalHistory() {
-    return humanAuthRequired();
+  async manualTerminalHistory(
+    @Headers() headers: HeadersRecord,
+    @Param('paymentId') paymentId: string,
+  ) {
+    await this.operators.contextForPayment(headers, paymentId, ['ADMIN', 'FINANCE', 'SUPERVISOR']);
+    return this.manualTerminal.history(paymentId);
   }
 
   @Get('orders/:orderId')
@@ -96,7 +122,13 @@ export class PaymentsController {
   }
 
   @Get('events/:eventId/health')
-  health() {
-    return humanAuthRequired();
+  async health(@Headers() headers: HeadersRecord, @Param('eventId') eventId: string) {
+    await this.operators.contextForEvent(headers, eventId, [
+      'ADMIN',
+      'FINANCE',
+      'SUPERVISOR',
+      'VIEWER',
+    ]);
+    return this.payments.health(eventId);
   }
 }

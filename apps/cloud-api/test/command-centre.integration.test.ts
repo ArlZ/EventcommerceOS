@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { provisionOperator } from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -17,17 +18,10 @@ const inventoryLocationId = '66666666-6666-4666-8666-666666666666';
 const productId = '77777777-7777-4777-8777-777777777777';
 const skuId = '88888888-8888-4888-8888-888888888888';
 
-function adminHeaders(organisation = organisationId) {
-  return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
-    'x-organisation-id': organisation,
-  };
-}
-
 describeIntegration('live event command centre', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let adminHeaders: (organisationId?: string) => Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
@@ -79,6 +73,12 @@ describeIntegration('live event command centre', () => {
       `INSERT INTO organisations(id,name) VALUES ($1,'Event operator'),($2,'Other operator')`,
       [organisationId, otherOrganisationId],
     );
+    const operator = await provisionOperator(database, {
+      actorId,
+      memberships: [{ organisationId, role: 'ADMIN' }],
+    });
+    adminHeaders = operator.headers;
+
     await database.query(
       `INSERT INTO events(id,organisation_id,name,timezone,lifecycle,starts_at,ends_at)
        VALUES ($1,$2,'Festival Night','Africa/Nairobi','ACTIVE',now()-interval '2 hours',now()+interval '6 hours')`,
@@ -159,7 +159,7 @@ describeIntegration('live event command centre', () => {
   it('returns actionable event truth without double-counting successful payment retries', async () => {
     const response = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders(organisationId))
       .expect(200);
 
     expect(response.body.sales).toMatchObject({ transactionCount: 1 });
@@ -186,16 +186,21 @@ describeIntegration('live event command centre', () => {
   });
 
   it('rejects cross-organisation access before returning event metrics', async () => {
+    const outsider = await provisionOperator(database, {
+      actorId: '33333333-3333-4333-8333-444444444444',
+      memberships: [{ organisationId: otherOrganisationId, role: 'ADMIN' }],
+    });
+
     await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders(otherOrganisationId))
+      .set(outsider.headers(otherOrganisationId))
       .expect(403);
   });
 
   it('audits acknowledge and assignment while Edge RESOLVED remains authoritative', async () => {
     const acknowledge = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
-      .set(adminHeaders())
+      .set(adminHeaders(organisationId))
       .send({ action: 'ACKNOWLEDGE' })
       .expect(201);
     expect(acknowledge.body).toMatchObject({
@@ -206,7 +211,7 @@ describeIntegration('live event command centre', () => {
 
     const assign = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
-      .set(adminHeaders())
+      .set(adminHeaders(organisationId))
       .send({ action: 'ASSIGN', assignedActorId })
       .expect(201);
     expect(assign.body).toMatchObject({
@@ -217,7 +222,7 @@ describeIntegration('live event command centre', () => {
 
     const active = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders(organisationId))
       .expect(200);
     expect(active.body.inventory.risks[0]).toMatchObject({
       state: 'ASSIGNED',
@@ -236,7 +241,7 @@ describeIntegration('live event command centre', () => {
     );
     const resolved = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders())
+      .set(adminHeaders(organisationId))
       .expect(200);
     expect(resolved.body.inventory.risks).toEqual([]);
     expect(
