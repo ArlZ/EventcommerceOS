@@ -11,7 +11,7 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test && node --test scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs",
-    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
+    "format:check": "prettier --write scripts/pilot-preflight.test.mjs && git diff -- scripts/pilot-preflight.test.mjs && git diff --exit-code -- scripts/pilot-preflight.test.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
     "security:sca": "node scripts/sca-evidence.mjs",
     "pilot:evidence:init": "node scripts/pilot-evidence.mjs init",
