@@ -27,6 +27,7 @@ Before deployment record:
 - named technical incident lead;
 - named finance/reconciliation owner;
 - named inventory owner;
+- named security/release evidence reviewer;
 - provider escalation contacts.
 
 A single named incident lead owns the technical go/no-go decision. Commercial pressure must not override a failed safety gate.
@@ -70,17 +71,19 @@ For every supported Android POS device:
 
 ## 3. Deployment sequence
 
-1. Deploy Cloud API/control-web release candidate.
-2. Apply Cloud migrations and capture migration output.
-3. Deploy Event Edge release candidate.
-4. Verify Edge database migration/state.
-5. Configure organisation/event/sales locations/inventory locations/menu/prices.
-6. Configure inventory opening quantities and responsibility routing.
-7. Configure payment provider sandbox/pilot credentials through managed runtime secrets only.
-8. Confirm abuse deployment mode, trusted-proxy setting and effective HTTP/rate/burst/concurrency limits.
-9. Provision POS devices and activate the event/menu.
-10. Run pre-open functional test from every sales location.
-11. Run fault and abuse-control tests before opening real service.
+1. Freeze the release candidate commit and run permanent TypeScript, Android and SCA CI on that exact SHA.
+2. Review and retain the SCA evidence manifest; do not deploy with an unaccepted blocking finding.
+3. Deploy Cloud API/control-web release candidate.
+4. Apply Cloud migrations and capture migration output.
+5. Deploy Event Edge release candidate.
+6. Verify Edge database migration/state.
+7. Configure organisation/event/sales locations/inventory locations/menu/prices.
+8. Configure inventory opening quantities and responsibility routing.
+9. Configure payment provider sandbox/pilot credentials through managed runtime secrets only.
+10. Confirm abuse deployment mode, trusted-proxy setting and effective HTTP/rate/burst/concurrency limits.
+11. Provision POS devices and activate the event/menu.
+12. Run pre-open functional test from every sales location.
+13. Run fault and abuse-control tests before opening real service.
 
 Do not introduce unreviewed code/config changes after the pre-open evidence pack is signed off.
 
@@ -122,6 +125,22 @@ Then run the Gate B durability exercise on representative devices:
 4. restore connectivity;
 5. prove zero acknowledged committed orders lost;
 6. prove duplicate replay creates zero duplicate sales/inventory effects.
+
+### Dependency-security release gate
+
+Before any live-money deployment, run and retain the exact-release dependency scan described in `docs/DEPENDENCY_SECURITY.md`.
+
+Required evidence:
+
+- `pnpm install --frozen-lockfile` succeeds on the release candidate;
+- `pnpm security:sca` completes against the exact release SHA;
+- npm and Android/Maven inventories are both non-empty;
+- the evidence status is `PASS`;
+- there is no unaccepted `HIGH`, `CRITICAL` or severity-`UNKNOWN` finding;
+- every active acceptance matches the exact vulnerability/package/version and is unexpired;
+- a named security/release reviewer signs off the JSON manifest.
+
+A scanner/network/API error is a failed gate, not a clean dependency review. Do not set a broad ignore rule or downgrade an unknown severity merely to pass release.
 
 ### Abuse-protection release gate
 
@@ -304,22 +323,30 @@ Provider transaction reconciliation is not the same as acquirer/bank settlement.
 
 ## 12. Backup and restore exercise
 
-Before a larger-than-pilot deployment:
+Before live money, execute the drill in `docs/BACKUP_RESTORE.md` against representative release-candidate data and an isolated restore target.
 
-- take a real database backup using the deployment procedure;
-- restore it into an isolated environment;
-- verify schema/migration integrity;
-- verify representative orders/payments/inventory/audit/close records;
-- record backup start/end, restore start/end and operator;
-- retain evidence of successful restore.
+Required evidence includes:
 
-A backup policy without a tested restore is not a passed reliability gate.
+- source/restore database identity checks passed;
+- exact destructive reset acknowledgement applied only to the isolated target;
+- consistent source snapshot and custom-format dump completed;
+- restored public table list/count/content fingerprints match the source snapshot;
+- restored serial/identity sequence safety passes;
+- representative commerce/payment/inventory/audit/close/auth data gate passes;
+- configured RPO/RTO targets pass;
+- live-data encrypted-storage acknowledgement is retained when applicable;
+- PASS manifest and named reviewer sign-off are retained;
+- production backup cadence is reviewed separately from the one-off restore drill.
+
+A backup policy or executable script without a tested restore is not a passed reliability gate.
 
 ## 13. Evidence pack
 
 Retain:
 
-- release commit SHAs and CI results;
+- release commit SHAs and permanent CI results;
+- exact-release SCA JSON evidence and named review sign-off;
+- any active exact vulnerability risk acceptances and their expiry/remediation owner;
 - device provisioning list;
 - network topology and latency/loss samples;
 - pre-open checklist;
@@ -334,14 +361,15 @@ Retain:
 - command-centre snapshots;
 - backlog peak/drain measurements;
 - event close revisions/CSV/hash;
-- database backup/restore evidence;
+- database backup/restore PASS evidence and review sign-off;
 - post-event reconciliation sign-off.
 
 ## 14. Graduation criteria
 
 A controlled pilot can graduate to a materially larger event only when:
 
-- permanent CI gates are green;
+- permanent TypeScript, Android and SCA CI gates are green on the exact release stack;
+- exact-release SCA evidence has no unaccepted HIGH/CRITICAL/UNKNOWN finding and no expired acceptance;
 - no P0/P1 security issue remains open;
 - real supported-device local interaction p95 is below 150 ms;
 - real local commit p95 is below 250 ms;
@@ -351,7 +379,7 @@ A controlled pilot can graduate to a materially larger event only when:
 - the abuse-control exercise passes without starving local event operations or corrupting payment truth;
 - no unexplained payment reconciliation discrepancy remains;
 - inventory converges with no unexplained ledger discrepancy;
-- backup restore has been proven;
+- representative backup restore has been proven and signed off;
 - the controlled live pilot closes and reconciles successfully;
 - the human go/no-go review explicitly approves the larger topology/volume.
 
