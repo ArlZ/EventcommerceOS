@@ -10,7 +10,7 @@
     "edge-credential": "node scripts/manage-edge-credential.mjs",
     "lint": "eslint src test --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
     "@event-commerce/contracts": "workspace:*",

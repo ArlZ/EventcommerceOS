@@ -15,7 +15,9 @@ import {
 
 function only(body: Record<string, unknown>, allowed: readonly string[]): void {
   const allowedSet = new Set(allowed);
-  const unexpected = Object.keys(body).filter((key) => !allowedSet.has(key)).sort();
+  const unexpected = Object.keys(body)
+    .filter((key) => !allowedSet.has(key))
+    .sort();
   if (unexpected.length > 0) {
     throw new BadRequestException(`Unexpected event close field: ${unexpected[0]}`);
   }
@@ -81,18 +83,9 @@ export function parseCashDeclaration(value: unknown): DeclareEventCashRequest {
   };
 }
 
-export function parseInventoryCostDeclaration(
-  value: unknown,
-): DeclareInventoryUnitCostRequest {
+export function parseInventoryCostDeclaration(value: unknown): DeclareInventoryUnitCostRequest {
   const body = bodyObject(value);
-  only(body, [
-    'declarationId',
-    'skuId',
-    'currency',
-    'unitCostMinor',
-    'reason',
-    'idempotencyKey',
-  ]);
+  only(body, ['declarationId', 'skuId', 'currency', 'unitCostMinor', 'reason', 'idempotencyKey']);
   return {
     declarationId: requiredString(body, 'declarationId'),
     skuId: requiredUuid(body, 'skuId'),

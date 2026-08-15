@@ -20,7 +20,10 @@ export class EdgePaymentsController {
     if (request.customerPhone !== undefined && request.providerId !== 'mpesa') {
       throw new Error('customerPhone is only accepted for the M-PESA provider');
     }
-    if (request.providerId === 'pesapal_sabi' && request.accountReference !== request.paymentAttemptId) {
+    if (
+      request.providerId === 'pesapal_sabi' &&
+      request.accountReference !== request.paymentAttemptId
+    ) {
       throw new Error('Pesapal Sabi accountReference must equal paymentAttemptId');
     }
     return this.payments.initiate(request);

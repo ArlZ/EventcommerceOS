@@ -1,9 +1,4 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import type {
   EventCloseActionRequest,
@@ -15,10 +10,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 import { assertOrganisationAccess, type AdminContext } from '../configuration/admin-context';
 import { DatabaseService } from '../database/database.service';
 import { EventCloseCashCountService } from './event-close-cash-count.service';
-import {
-  EventCloseReportService,
-  type EventCloseEventMeta,
-} from './event-close-report.service';
+import { EventCloseReportService, type EventCloseEventMeta } from './event-close-report.service';
 
 interface EventRow extends QueryResultRow {
   id: string;
@@ -264,16 +256,7 @@ export class EventCloseService {
     const push = (...values: Array<string | number | boolean | null>): void => {
       rows.push(values.map((value) => (value === null ? '' : String(value))));
     };
-    push(
-      'SECTION',
-      'KEY_1',
-      'KEY_2',
-      'CURRENCY',
-      'VALUE_1',
-      'VALUE_2',
-      'STATUS',
-      'DETAIL',
-    );
+    push('SECTION', 'KEY_1', 'KEY_2', 'CURRENCY', 'VALUE_1', 'VALUE_2', 'STATUS', 'DETAIL');
     push(
       'META',
       'event_id',
