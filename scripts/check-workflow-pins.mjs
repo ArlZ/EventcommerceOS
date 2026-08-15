@@ -18,12 +18,16 @@ for (const entry of readdirSync(workflowDirectory, { withFileTypes: true })) {
       if (value.startsWith('./')) return;
       const separator = value.lastIndexOf('@');
       if (separator < 1) {
-        violations.push(`${path}:${index + 1}: action reference must include an immutable commit SHA`);
+        violations.push(
+          `${path}:${index + 1}: action reference must include an immutable commit SHA`,
+        );
         return;
       }
       const ref = value.slice(separator + 1);
       if (!immutableRef.test(ref)) {
-        violations.push(`${path}:${index + 1}: action ref must be a lowercase 40-character commit SHA`);
+        violations.push(
+          `${path}:${index + 1}: action ref must be a lowercase 40-character commit SHA`,
+        );
       }
     }
 
