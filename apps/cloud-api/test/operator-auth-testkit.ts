@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { DatabaseService } from '../src/database/database.service';
 import type { OperatorOrganisationRole } from '../src/auth/operator-auth.service';
+import type { DatabaseService } from '../src/database/database.service';
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');

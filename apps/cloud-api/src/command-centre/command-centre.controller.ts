@@ -11,7 +11,8 @@ import { parseInventoryAlertAction } from './command-centre-validation';
 @Controller('command-centre')
 export class CommandCentreController {
   constructor(
-    private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
