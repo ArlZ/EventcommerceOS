@@ -58,8 +58,18 @@ jobs:
       - name: Build Control Web image
         run: >-
           docker build --target control-web
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
           --build-arg NEXT_PUBLIC_CLOUD_API_URL=https://cloud-pilot.invalid
           --tag event-commerce-control-web:${GITHUB_SHA} .
+      - name: Verify OCI image provenance
+        run: |
+          for image in \
+            event-commerce-cloud-api:${GITHUB_SHA} \
+            event-commerce-event-edge:${GITHUB_SHA} \
+            event-commerce-control-web:${GITHUB_SHA}; do
+            test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$GITHUB_SHA"
+            test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$image")" = "https://github.com/ArlZ/EventcommerceOS"
+          done
       - name: Run packaged migrations
         run: |
           docker run --rm --network host \
