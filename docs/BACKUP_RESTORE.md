@@ -19,7 +19,7 @@ The drill:
 9. restores with `pg_restore --exit-on-error --no-owner --no-privileges`;
 10. fingerprints every restored public table and requires an exact table-list/count/content match;
 11. requires representative configuration, commerce, payment, inventory, audit, event-close and security data by default;
-12. writes a PASS/FAIL JSON evidence manifest containing counts/fingerprints/timings/tool versions/checksums, never raw rows or database passwords.
+12. writes a PASS JSON evidence manifest containing exact-release identity, counts/fingerprints, actual process timings, tool versions and checksums, never raw rows or database passwords.
 
 The source fingerprints and `pg_dump` use the same exported snapshot, so normal concurrent source writes do not create a false source-vs-restore mismatch.
 
@@ -29,6 +29,7 @@ The source fingerprints and `pg_dump` use the same exported snapshot, so normal 
 - Node/pnpm dependencies installed for `@event-commerce/cloud-api`.
 - A **separate disposable PostgreSQL database** for restore verification.
 - A named operator/change reference for the evidence record.
+- The full lowercase 40-character Git SHA for the exact release candidate being exercised.
 - Explicit RPO and RTO targets agreed for the pilot.
 - For live/production data: an output location encrypted at rest and `BACKUP_ENCRYPTED_STORAGE_CONFIRMED=true`.
 
@@ -36,10 +37,11 @@ Do not put database credentials, access tokens or dump files in source control. 
 
 ## Local disposable restore target
 
-The compose file includes an optional isolated restore database:
+The compose file includes an optional isolated restore database under the `restore-drill` profile. It uses tmpfs so the disposable restore contents are not persisted as a normal development volume.
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile restore-drill up -d cloud-db cloud-restore-db
+docker compose -f infra/docker-compose.yml --profile restore-drill up -d \
+  cloud-postgres cloud-restore-postgres
 ```
 
 Local development URLs:
@@ -49,7 +51,7 @@ source:  postgresql://event_commerce:localdev_only@localhost:5432/event_commerce
 restore: postgresql://event_commerce:localdev_only@localhost:5434/event_commerce_cloud_restore
 ```
 
-The restore script will still resolve both live PostgreSQL identities and refuse to reset the target if they resolve to the same database.
+The restore script still resolves both PostgreSQL identities and refuses to reset the target if they resolve to the same database.
 
 ## Required environment
 
@@ -58,10 +60,12 @@ export DATABASE_URL='<source Cloud PostgreSQL URL>'
 export RESTORE_DATABASE_URL='<isolated restore PostgreSQL URL>'
 export RESTORE_TARGET_RESET_ACK='RESET:<restore database name>'
 export BACKUP_OPERATOR='<named operator/change ticket>'
-export RELEASE_COMMIT_SHA='<exact release commit SHA>'
+export RELEASE_COMMIT_SHA='<full lowercase 40-character exact release commit SHA>'
 export BACKUP_RPO_TARGET_MINUTES='<agreed target>'
 export BACKUP_RTO_TARGET_MINUTES='<agreed target>'
 ```
+
+`RELEASE_COMMIT_SHA` is deliberately strict. Short SHAs, uppercase hexadecimal and branch/tag names are rejected so recovery evidence cannot be ambiguously attributed to a release.
 
 For a live/production-data drill also set:
 
@@ -98,22 +102,25 @@ artifacts/backup-restore/<timestamp>-<commit>/
 
 Files:
 
-- `backup-restore-evidence.json` — PASS/FAIL evidence manifest;
+- `backup-restore-evidence.json` — PASS evidence manifest;
 - `cloud-backup.dump.sha256` — dump checksum;
 - `cloud-backup.dump` — present only when `BACKUP_KEEP_DUMP=true` or when a failure occurs before cleanup.
 
-The JSON manifest includes:
+The schema-version-2 JSON manifest includes:
 
-- release commit and named operator;
+- the full exact release commit and named operator;
 - source/restore database identity without passwords;
-- source snapshot/backup/restore timestamps;
-- measured backup and restore durations;
+- source snapshot timestamp;
+- actual `pg_dump` process start/completion timestamps and measured duration;
+- actual `pg_restore` process start/completion timestamps and measured duration;
 - measured recovery-point age when restore begins;
 - configured RPO/RTO targets and pass/fail against the drill measurements;
 - dump SHA-256 and size;
 - representative-domain checks;
 - every public table's row count and deterministic content fingerprint;
 - PostgreSQL dump/restore tool versions.
+
+The timestamps come from the same clock used to calculate each process duration. `backupCompletedAt` is therefore the actual observed `pg_dump` completion time, not a value reconstructed from the source snapshot time.
 
 The manifest does **not** contain business rows, customer/payment card data, bearer credentials or database passwords.
 
@@ -136,7 +143,7 @@ For a developer smoke test only, this may be disabled:
 export BACKUP_REQUIRE_REPRESENTATIVE_DATA=false
 ```
 
-A smoke test with that override is **not** SEC-006 release evidence.
+A smoke test with that override is **not** SEC-006 release evidence and cannot satisfy the controlled-pilot `representativeRecovery` gate.
 
 ## RPO and RTO interpretation
 
@@ -149,7 +156,7 @@ A single successful drill cannot prove operational RPO by itself. Real RPO also 
 
 ## Failure handling
 
-A failed stage writes a sanitized `result: "FAIL"` manifest where possible, including the failed stage and error message.
+The script fails closed before writing PASS evidence if any required precondition or verification stage fails.
 
 If failure occurs after the restore target has been reset, treat the restore database as disposable/partial. Do not use it as a recovery source. Correct the cause and run a fresh drill.
 
@@ -159,7 +166,7 @@ Do not weaken fingerprint checks to make a restore pass. If a table list, row co
 
 SEC-006 is complete only when the evidence pack contains:
 
-- a PASS manifest from the exact release-candidate commit;
+- a PASS manifest from the exact full release-candidate commit;
 - representative-data checks all true;
 - no table fingerprint mismatch;
 - RTO drill target passed;
@@ -167,3 +174,5 @@ SEC-006 is complete only when the evidence pack contains:
 - encrypted backup-storage evidence for live data;
 - named operator/reviewer sign-off;
 - a retained copy of the evidence manifest/checksum outside the disposable restore environment.
+
+When preparing the controlled-pilot evidence manifest, retain this recovery evidence under the pilot evidence directory and generate its digest-bound reference with `pnpm pilot:evidence:hash` before human review.

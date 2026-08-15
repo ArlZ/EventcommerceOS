@@ -77,7 +77,7 @@ function quoteIdentifier(value) {
 }
 
 async function run(command, args, options = {}) {
-  const startedAt = Date.now();
+  const startedAtMs = Date.now();
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(command, args, {
       env: options.env ?? process.env,
@@ -105,10 +105,13 @@ async function run(command, args, options = {}) {
         );
         return;
       }
+      const completedAtMs = Date.now();
       resolvePromise({
         stdout: stdout.trim(),
         stderr: stderr.trim(),
-        durationMs: Date.now() - startedAt,
+        startedAt: new Date(startedAtMs).toISOString(),
+        completedAt: new Date(completedAtMs).toISOString(),
+        durationMs: completedAtMs - startedAtMs,
       });
     });
   });
@@ -247,8 +250,8 @@ if (sameDatabase(sourceDatabase, restoreDatabase)) {
 
 const operator = required('BACKUP_OPERATOR');
 const releaseCommitSha = required('RELEASE_COMMIT_SHA');
-if (!/^[0-9a-f]{7,64}$/i.test(releaseCommitSha)) {
-  throw new Error('RELEASE_COMMIT_SHA must be a Git commit SHA');
+if (!/^[0-9a-f]{40}$/.test(releaseCommitSha)) {
+  throw new Error('RELEASE_COMMIT_SHA must be a full lowercase 40-character Git commit SHA');
 }
 const rpoTargetMinutes = positiveInteger('BACKUP_RPO_TARGET_MINUTES');
 const rtoTargetMinutes = positiveInteger('BACKUP_RTO_TARGET_MINUTES');
@@ -283,8 +286,6 @@ let dumpSha256;
 let dumpBytes;
 let restoreResult;
 let restoredSnapshot;
-let restoreStartedAt;
-let restoreCompletedAt;
 
 try {
   await sourceClient.connect();
@@ -336,7 +337,6 @@ try {
 
   await restoreClient.connect();
   await resetRestoreTarget(restoreClient, restoreDatabase);
-  restoreStartedAt = new Date();
   restoreResult = await run(
     'pg_restore',
     [
@@ -349,7 +349,6 @@ try {
     ],
     { env: pgToolEnv(restoreDatabase) },
   );
-  restoreCompletedAt = new Date();
   restoredSnapshot = await databaseFingerprint(restoreClient);
 
   const mismatches = compareFingerprints(sourceSnapshot, restoredSnapshot);
@@ -359,21 +358,22 @@ try {
 
   const recoveryPointAgeAtRestoreStartMs = Math.max(
     0,
-    restoreStartedAt.getTime() - snapshotAt.getTime(),
+    Date.parse(restoreResult.startedAt) - snapshotAt.getTime(),
   );
   const rpoTargetMs = rpoTargetMinutes * 60_000;
   const rtoTargetMs = rtoTargetMinutes * 60_000;
   const evidence = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     result: 'PASS',
     releaseCommitSha,
     operator,
     source: publicDatabaseDescriptor(sourceDatabase),
     restoreTarget: publicDatabaseDescriptor(restoreDatabase),
     sourceSnapshotAt: snapshotAt.toISOString(),
-    backupCompletedAt: new Date(snapshotAt.getTime() + dumpResult.durationMs).toISOString(),
-    restoreStartedAt: restoreStartedAt.toISOString(),
-    restoreCompletedAt: restoreCompletedAt.toISOString(),
+    backupStartedAt: dumpResult.startedAt,
+    backupCompletedAt: dumpResult.completedAt,
+    restoreStartedAt: restoreResult.startedAt,
+    restoreCompletedAt: restoreResult.completedAt,
     backupDurationMs: dumpResult.durationMs,
     restoreDurationMs: restoreResult.durationMs,
     recoveryPointAgeAtRestoreStartMs,
