@@ -39,7 +39,7 @@ Machine credentials cannot satisfy the human authorization boundary, and human o
 
 **Status: remediated in `security/edge-cloud-trust`, pending permanent CI and stack merge.**
 
-The remediation closes both Edge-originated Cloud ingestion paths:
+The remediation closes both Edge-originated machine routes:
 
 - `POST /sync/edge-events`;
 - `POST /inventory/edge-events`.
@@ -100,7 +100,7 @@ Implemented controls:
 - stable POS `deviceId` explicitly provisioned at Event Edge;
 - cryptographically random 256-bit per-device bearer credential with digest-only storage;
 - credential uniqueness, versioning, rotation and revocation;
-- server-side device assignment to an installed event plus optional sales location/register metadata;
+- server-side device assignment to an installed event plus optional sales-location/register metadata;
 - database foreign keys enforce installed event/location assignment;
 - POS sync requires authenticated device ID, event assignment and assigned sales location for orders;
 - POS-facing payment initiation/reconciliation/rail-health/order-history routes require an active device credential;
@@ -152,21 +152,42 @@ Per-process memory buckets are not represented as globally distributed protectio
 
 Payment semantics remain unchanged under throttling: a `429`/timeout is transport uncertainty, never invented provider failure, and delayed callbacks still reconcile through authoritative provider status.
 
-### SEC-006 — P1 — Backup/restore procedure is specified but not evidenced
+### SEC-006 — P1 — Backup/restore evidence
 
-Task 010 defines the exercise but has no executed restore evidence.
+**Status: executable in `reliability/backup-restore-evidence`, but not closed until a representative release-candidate restore drill passes and is signed off.**
 
-**Required evidence:** real Cloud backup, isolated restore, representative order/payment/inventory/audit/close verification, measured RPO/RTO and retained operator evidence.
+The repository now includes a destructive-safety-aware PostgreSQL drill that exports a consistent source snapshot, fingerprints every public table, creates/validates a custom-format dump, restores into a separately verified target database, compares table lists/counts/content fingerprints, checks restored sequence safety and records RPO/RTO evidence.
+
+The drill defaults to requiring representative organisation/event, synced commerce, payment, inventory, audit, event-close and machine/human identity data. Live/production data additionally requires explicit encrypted-storage acknowledgement before dump creation.
+
+This is an evidence mechanism, not evidence itself. SEC-006 remains a release blocker until `docs/BACKUP_RESTORE.md` has been followed against the exact release candidate and the retained PASS manifest is reviewed by a named operator/reviewer.
 
 ### SEC-007 — P1 — Permanent CI/security checks are externally blocked
 
-The permanent TypeScript and Android GitHub Actions jobs still fail before step 1 because GitHub does not allocate a runner. The latest stacked security PR again has both jobs with `steps: null`. No successful permanent gate exists for the current stack.
+The permanent GitHub Actions jobs still fail before step 1 because GitHub does not allocate a runner. No successful permanent gate exists for the current stack.
 
-**Required before merge/pilot:** permanent CI must execute and pass on the exact release commit.
+**Required before merge/pilot:** permanent TypeScript, Android and SCA CI must execute and pass on the exact release commit. A workflow definition or a zero-step failed job is not release evidence.
 
-### SEC-008 — P2 — Dependency vulnerability evidence is incomplete
+### SEC-008 — P2 — Dependency vulnerability / SCA evidence
 
-A locked install/package-manager audit or approved SCA equivalent plus Android dependency/security review remains required. No claim is made that the current dependency graph is vulnerability-free.
+**Status: executable in `security/dependency-sca-evidence`, but not closed until the exact release candidate has a real passing scan and named reviewer sign-off.**
+
+The release gate now:
+
+- inventories the installed pnpm workspace dependency graph after a frozen-lockfile install;
+- resolves Android transitive runtime/test/KSP Maven dependencies through Gradle rather than relying only on direct declarations;
+- includes pinned Android/Kotlin/KSP build-plugin coordinates;
+- queries OSV.dev directly for exact npm/Maven package versions;
+- follows batch pagination and fetches full advisory records;
+- fails closed on scanner/network/API errors;
+- fails if either npm or Maven inventory is unexpectedly empty;
+- treats `HIGH`, `CRITICAL` and severity-`UNKNOWN` findings as blockers;
+- supports only exact package/version vulnerability acceptances with named approver, substantive reason and a maximum 90-day lifetime;
+- invalidates an acceptance automatically when the dependency version changes;
+- generates secret-safe machine-readable evidence under `artifacts/sca/`;
+- runs as a permanent CI job and uploads evidence on both pass and failure.
+
+`docs/DEPENDENCY_SECURITY.md` defines the command, evidence format, acceptance policy and remediation workflow. The repository does not claim the current dependency graph is vulnerability-free until that job actually executes on the exact release stack.
 
 ## Positive controls already present
 
@@ -225,6 +246,10 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 - public/fake-session request flood is rate-limited before operator-auth database work;
 - Event Edge throttles a runaway test POS while another registered POS remains usable;
 - request-flood/rate-limit exercise does not starve local event operations;
+- dependency scanner/API failure produces FAIL rather than a clean release result;
+- unaccepted HIGH/CRITICAL/UNKNOWN dependency finding blocks release;
+- expired or version-mismatched SCA acceptance cannot suppress a finding;
+- backup/restore drill reproduces representative release-candidate database truth and sequence safety;
 - privileged inventory/close actions create immutable audit evidence;
 - audit/ledger records cannot be mutated/deleted through application APIs;
 - secrets/card data absent from logs/database/sample exports.
@@ -233,13 +258,13 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
+SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. SEC-006 and SEC-008 now have executable evidence mechanisms, but release evidence has not yet been produced. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
 
 Remaining mandatory release blockers are:
 
-1. SEC-006 tested backup/restore evidence;
-2. SEC-007 green permanent CI on the exact release stack;
-3. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk;
+1. SEC-006 executed representative backup/restore PASS evidence and sign-off;
+2. SEC-007 green permanent TypeScript + Android + SCA CI on the exact release stack;
+3. SEC-008 executed SCA PASS evidence with no unaccepted HIGH/CRITICAL/UNKNOWN finding and named review sign-off;
 4. SEC-005 real deployment abuse-test evidence before live exposure.
 
 External OIDC/SSO/MFA is still recommended before graduating beyond a tightly controlled pilot, but the repository no longer trusts browser-supplied role/actor headers for operational authority.
