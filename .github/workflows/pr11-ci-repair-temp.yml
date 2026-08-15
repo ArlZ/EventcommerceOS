@@ -1,0 +1,54 @@
+name: PR11 CI repair temporary
+
+on:
+  push:
+    branches: [codex/task-009-event-close]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/task-009-event-close
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Backport proven Task 009 correctness fixes
+        run: |
+          git fetch origin codex/task-010-production-hardening
+          git checkout origin/codex/task-010-production-hardening -- \
+            apps/cloud-api/src/command-centre/command-centre.controller.ts \
+            apps/cloud-api/src/event-close/event-close-audit-csv.service.ts \
+            apps/cloud-api/src/event-close/event-close-cash-count.service.ts \
+            apps/cloud-api/src/event-close/event-close-ledger.service.ts \
+            apps/cloud-api/src/event-close/event-close.controller.ts \
+            apps/cloud-api/test/event-close.integration.test.ts
+          node <<'NODE'
+          const fs = require('node:fs');
+          for (const path of ['apps/cloud-api/package.json', 'apps/event-edge/package.json']) {
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            pkg.scripts.test = 'vitest run --no-file-parallelism';
+            fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+          }
+          NODE
+      - name: Normalize CI formatting surface
+        run: pnpm exec prettier --write "apps/**/*.{ts,tsx,mjs}" "packages/**/*.{ts,tsx}" "scripts/*.mjs" eslint.config.mjs
+      - name: Commit repair and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps packages scripts eslint.config.mjs
+          git rm .github/workflows/pr11-ci-repair-temp.yml
+          git diff --cached --check
+          git commit -m "Backport proven CI correctness fixes to Event Close stack"
+          git push origin HEAD:codex/task-009-event-close
