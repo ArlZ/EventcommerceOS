@@ -30,7 +30,7 @@ interface ResponseLike {
 
 export interface EdgeAbuseClassification {
   policy: EdgeAbusePolicyName;
-  principal?: string;
+  principal?: string | undefined;
 }
 
 function first(value: HeaderValue): string | undefined {
