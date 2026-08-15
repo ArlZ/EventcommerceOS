@@ -10,3 +10,5 @@ export interface LoggerPort {
   warn(message: string, context?: LogContext): void;
   error(message: string, context?: LogContext): void;
 }
+
+export * from './metrics';
