@@ -24,6 +24,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out/cloud-api ./
 USER node
 EXPOSE 3001
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]
 
 FROM ${NODE_IMAGE} AS event-edge
@@ -33,6 +35,8 @@ WORKDIR /app
 COPY --from=build --chown=node:node /out/event-edge ./
 USER node
 EXPOSE 3002
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]
 
 FROM ${NODE_IMAGE} AS control-web
@@ -44,4 +48,6 @@ COPY --from=build --chown=node:node /workspace/apps/control-web/.next/standalone
 COPY --from=build --chown=node:node /workspace/apps/control-web/.next/static ./.next/static
 USER node
 EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]
