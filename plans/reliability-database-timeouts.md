@@ -3,7 +3,8 @@
 Status: **in progress**
 Original base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
 Pinned-CI base: `main` at `bcad290f556b2c250d2f11252ec8abfc126bbf0c`
-Readiness-integration revalidation base: `main` at `0b9296333d84699c774b82fd6efb7b0bdd856ec1`
+Readiness base: `main` at `0b9296333d84699c774b82fd6efb7b0bdd856ec1`
+Graceful-shutdown revalidation base: `main` at `bae5eb9c549282ccbf571bb9d782d131d274a155`
 
 ## Objective
 
