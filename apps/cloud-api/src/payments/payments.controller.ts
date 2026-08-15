@@ -45,10 +45,7 @@ export class PaymentsController {
   @Post('refunds')
   async refund(@Headers() headers: HeadersRecord, @Body() body: unknown) {
     const request = parseRefundPaymentRequest(body);
-    const context = await this.operators.contextForPayment(headers, request.paymentId, [
-      'ADMIN',
-      'FINANCE',
-    ]);
+    const context = await this.operators.contextForPayment(headers, request.paymentId, ['FINANCE']);
     this.operators.assertActor(context.actorId, request.requestingActorId, 'requestingActorId');
     if (request.approvingActorId !== undefined) {
       throw new ForbiddenException(
@@ -61,10 +58,7 @@ export class PaymentsController {
   @Post('reversals')
   async reverse(@Headers() headers: HeadersRecord, @Body() body: unknown) {
     const request = parseReversePaymentRequest(body);
-    const context = await this.operators.contextForPayment(headers, request.paymentId, [
-      'ADMIN',
-      'FINANCE',
-    ]);
+    const context = await this.operators.contextForPayment(headers, request.paymentId, ['FINANCE']);
     this.operators.assertActor(context.actorId, request.requestingActorId, 'requestingActorId');
     return this.adjustments.reverse(request);
   }
