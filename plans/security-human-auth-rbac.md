@@ -1,6 +1,6 @@
 # Security remediation — human operator authentication and RBAC
 
-Status: implementation complete; permanent CI pending
+Status: implementation complete; repository CI revalidation in progress
 Base: `security/cloud-payment-machine-trust` (PR #16)
 
 ## Objective
@@ -69,6 +69,13 @@ Control-web exposes an **Operator session** control mounted at the root layout. 
 
 This bridge is intentionally a controlled-pilot compatibility layer for existing client screens. A later UI hardening/refactor should move individual clients to a typed shared authenticated API client rather than relying on a global fetch bridge.
 
+## Repository CI checkpoint
+
+- The first real runner pass reached a successful TypeScript build but failed on eight cross-stack import-hygiene errors: Nest runtime DI tokens had been made type-only and two test helpers used value imports only as types.
+- DI-safe imports/tokens, stale auth/payment/FK integration fixtures, and deterministic shared-PostgreSQL test execution have now been backported from the green abuse-controls stack without bringing abuse-control implementation into this PR.
+- The complete CI formatting surface was normalized in the same repair so the branch is tested against the repository's actual Prettier gate.
+- A fresh permanent TypeScript + Android CI pass on this repaired tree is required before merge readiness.
+
 ## Non-goals / remaining blockers
 
 This slice does **not** claim to solve:
@@ -79,7 +86,6 @@ This slice does **not** claim to solve:
 - two-person refund approval UI/step-up;
 - global abuse/rate limiting;
 - backup/restore evidence;
-- dependency/SCA evidence;
-- permanent CI, currently blocked before runner assignment.
+- dependency/SCA evidence.
 
-SEC-001 through SEC-004 are now closed at code/review level across the stacked security branches, subject to permanent CI and merge. Overall release status remains NO-GO until abuse controls, restore evidence, permanent CI and SCA evidence are resolved.
+SEC-001 through SEC-004 are closed at code/review level across the stacked security branches, subject to permanent CI and merge. Overall release status remains NO-GO until abuse controls, restore evidence, permanent CI and SCA evidence are resolved.
