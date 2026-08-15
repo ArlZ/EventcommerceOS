@@ -865,7 +865,8 @@ export class CommandCentreService {
     }
 
     return alerts.sort((left, right) => {
-      const severityDifference = alertSeverityRank(left.severity) - alertSeverityRank(right.severity);
+      const severityDifference =
+        alertSeverityRank(left.severity) - alertSeverityRank(right.severity);
       return severityDifference !== 0
         ? severityDifference
         : left.openedAt.localeCompare(right.openedAt);

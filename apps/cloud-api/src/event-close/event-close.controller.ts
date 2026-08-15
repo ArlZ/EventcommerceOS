@@ -72,7 +72,11 @@ export class EventCloseController {
       normalizedEventId,
       CORRECTION_ROLES,
     );
-    return this.ledger.recordOrderAdjustment(context, normalizedEventId, parseOrderAdjustment(body));
+    return this.ledger.recordOrderAdjustment(
+      context,
+      normalizedEventId,
+      parseOrderAdjustment(body),
+    );
   }
 
   @Post('cash-declarations')

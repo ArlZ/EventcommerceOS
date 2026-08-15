@@ -86,12 +86,18 @@ describe('Pesapal Sabi provider', () => {
   it('requires complete verified financial identity before success', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({ ...successVerification, currency: undefined, payment_option: undefined }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              ...successVerification,
+              currency: undefined,
+              payment_option: undefined,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
         ),
-      ),
     );
     const provider = new PesapalSabiProvider();
     const result = await provider.parseAndVerifyWebhook(notification(), context());
@@ -124,12 +130,14 @@ describe('Pesapal Sabi provider', () => {
   it('turns verification amount/reference mismatch into UNKNOWN', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({ ...successVerification, amount: 200, merchant_ref: 'other-attempt' }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(
+            JSON.stringify({ ...successVerification, amount: 200, merchant_ref: 'other-attempt' }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
         ),
-      ),
     );
     const provider = new PesapalSabiProvider();
     const result = await provider.parseAndVerifyWebhook(notification(), context());

@@ -2,10 +2,7 @@ import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Observable } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import {
-  classifyAbuseRequest,
-  type AbuseRequestLike,
-} from './abuse-protection.guard';
+import { classifyAbuseRequest, type AbuseRequestLike } from './abuse-protection.guard';
 import { AbuseProtectionService } from './abuse-protection.service';
 
 interface HttpResponse {
@@ -14,7 +11,9 @@ interface HttpResponse {
 
 @Injectable()
 export class AbuseConcurrencyInterceptor implements NestInterceptor {
-  constructor(@Inject(AbuseProtectionService) private readonly protection: AbuseProtectionService) {}
+  constructor(
+    @Inject(AbuseProtectionService) private readonly protection: AbuseProtectionService,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     if (context.getType() !== 'http') return next.handle();

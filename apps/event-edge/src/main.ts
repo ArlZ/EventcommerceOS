@@ -3,12 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
-function boundedInteger(
-  name: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   if (!/^\d+$/.test(raw)) throw new Error(`${name} must be an integer`);
@@ -40,18 +35,8 @@ async function bootstrap(): Promise<void> {
     extended: false,
   });
 
-  const requestTimeoutMs = boundedInteger(
-    'EDGE_HTTP_REQUEST_TIMEOUT_MS',
-    15_000,
-    5_000,
-    60_000,
-  );
-  const headersTimeoutMs = boundedInteger(
-    'EDGE_HTTP_HEADERS_TIMEOUT_MS',
-    5_000,
-    1_000,
-    30_000,
-  );
+  const requestTimeoutMs = boundedInteger('EDGE_HTTP_REQUEST_TIMEOUT_MS', 15_000, 5_000, 60_000);
+  const headersTimeoutMs = boundedInteger('EDGE_HTTP_HEADERS_TIMEOUT_MS', 5_000, 1_000, 30_000);
   if (headersTimeoutMs > requestTimeoutMs) {
     throw new Error('EDGE_HTTP_HEADERS_TIMEOUT_MS must not exceed EDGE_HTTP_REQUEST_TIMEOUT_MS');
   }
@@ -59,12 +44,7 @@ async function bootstrap(): Promise<void> {
   const server = await app.listen(parsePort(process.env.PORT, 3002));
   server.requestTimeout = requestTimeoutMs;
   server.headersTimeout = headersTimeoutMs;
-  server.keepAliveTimeout = boundedInteger(
-    'EDGE_HTTP_KEEP_ALIVE_TIMEOUT_MS',
-    5_000,
-    1_000,
-    30_000,
-  );
+  server.keepAliveTimeout = boundedInteger('EDGE_HTTP_KEEP_ALIVE_TIMEOUT_MS', 5_000, 1_000, 30_000);
   server.maxHeadersCount = boundedInteger('EDGE_HTTP_MAX_HEADERS_COUNT', 100, 20, 200);
 }
 

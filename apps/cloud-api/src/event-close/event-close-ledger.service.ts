@@ -155,7 +155,8 @@ export class EventCloseLedgerService {
       if (!order || order.event_id !== eventId) {
         throw new NotFoundException('Closed order not found for event');
       }
-      if (order.state !== 'CLOSED') throw new ConflictException('Only closed orders can be adjusted');
+      if (order.state !== 'CLOSED')
+        throw new ConflictException('Only closed orders can be adjusted');
       if (order.currency !== request.currency) {
         throw new ConflictException('Adjustment currency must match the order');
       }
@@ -237,7 +238,8 @@ export class EventCloseLedgerService {
          WHERE id=$1 AND event_id=$2 AND organisation_id=$3`,
         [request.salesLocationId, eventId, event.organisation_id],
       );
-      if (location.rowCount !== 1) throw new NotFoundException('Sales location not found for event');
+      if (location.rowCount !== 1)
+        throw new NotFoundException('Sales location not found for event');
 
       const inserted = await client.query<CashRow>(
         `INSERT INTO event_cash_declarations(
@@ -353,10 +355,7 @@ export class EventCloseLedgerService {
     return result.rows[0];
   }
 
-  private async adjustmentById(
-    client: PoolClient,
-    id: string,
-  ): Promise<AdjustmentRow | undefined> {
+  private async adjustmentById(client: PoolClient, id: string): Promise<AdjustmentRow | undefined> {
     const result = await client.query<AdjustmentRow>(
       `${this.adjustmentSelect()} WHERE id=$1 FOR UPDATE`,
       [id],
@@ -426,7 +425,9 @@ export class EventCloseLedgerService {
       row.actor_id !== context.actorId ||
       row.reason !== request.reason
     ) {
-      throw new ConflictException('Cash declaration idempotency key was reused for different content');
+      throw new ConflictException(
+        'Cash declaration idempotency key was reused for different content',
+      );
     }
   }
 
@@ -464,7 +465,9 @@ export class EventCloseLedgerService {
       row.actor_id !== context.actorId ||
       row.reason !== request.reason
     ) {
-      throw new ConflictException('Inventory cost idempotency key was reused for different content');
+      throw new ConflictException(
+        'Inventory cost idempotency key was reused for different content',
+      );
     }
   }
 }

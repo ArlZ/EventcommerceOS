@@ -69,11 +69,7 @@ function pgToolEnv(database) {
 }
 
 function sameDatabase(left, right) {
-  return (
-    left.host === right.host &&
-    left.port === right.port &&
-    left.database === right.database
-  );
+  return left.host === right.host && left.port === right.port && left.database === right.database;
 }
 
 function quoteIdentifier(value) {
@@ -343,7 +339,14 @@ try {
   restoreStartedAt = new Date();
   restoreResult = await run(
     'pg_restore',
-    ['--exit-on-error', '--no-owner', '--no-privileges', '--dbname', restoreDatabase.database, dumpPath],
+    [
+      '--exit-on-error',
+      '--no-owner',
+      '--no-privileges',
+      '--dbname',
+      restoreDatabase.database,
+      dumpPath,
+    ],
     { env: pgToolEnv(restoreDatabase) },
   );
   restoreCompletedAt = new Date();
@@ -354,7 +357,10 @@ try {
     throw new Error(`restore fingerprint verification failed:\n- ${mismatches.join('\n- ')}`);
   }
 
-  const recoveryPointAgeAtRestoreStartMs = Math.max(0, restoreStartedAt.getTime() - snapshotAt.getTime());
+  const recoveryPointAgeAtRestoreStartMs = Math.max(
+    0,
+    restoreStartedAt.getTime() - snapshotAt.getTime(),
+  );
   const rpoTargetMs = rpoTargetMinutes * 60_000;
   const rtoTargetMs = rtoTargetMinutes * 60_000;
   const evidence = {
@@ -383,7 +389,9 @@ try {
       bytes: dumpBytes,
       retained: keepDump,
       archiveListValidated: archiveValidation.stdout.length > 0,
-      encryptedStorageConfirmed: liveData ? true : process.env.BACKUP_ENCRYPTED_STORAGE_CONFIRMED === 'true',
+      encryptedStorageConfirmed: liveData
+        ? true
+        : process.env.BACKUP_ENCRYPTED_STORAGE_CONFIRMED === 'true',
     },
     representativeData: representativeChecks(sourceSnapshot),
     publicTableCount: sourceSnapshot.tables.length,

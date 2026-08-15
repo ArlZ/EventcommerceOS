@@ -160,7 +160,11 @@ async function collectAndroidInventory() {
     const version = match[2];
     const coordinate = pluginCoordinates.get(pluginId);
     if (!coordinate || !version) continue;
-    addInventory(target, { ecosystem: 'Maven', name: coordinate, version }, `gradle-plugin:${pluginId}`);
+    addInventory(
+      target,
+      { ecosystem: 'Maven', name: coordinate, version },
+      `gradle-plugin:${pluginId}`,
+    );
   }
   return target;
 }
@@ -174,7 +178,9 @@ function materializeInventory(map) {
       scopes: [...item.scopes].sort(),
     }))
     .sort((a, b) =>
-      `${a.ecosystem}:${a.name}:${a.version}`.localeCompare(`${b.ecosystem}:${b.name}:${b.version}`),
+      `${a.ecosystem}:${a.name}:${a.version}`.localeCompare(
+        `${b.ecosystem}:${b.name}:${b.version}`,
+      ),
     );
 }
 
@@ -232,7 +238,9 @@ async function queryOsv(inventory, osvBase) {
       if (typeof result?.next_page_token === 'string' && result.next_page_token) {
         pageCounts[query.index] += 1;
         if (pageCounts[query.index] > 20) {
-          throw new Error(`OSV pagination exceeded 20 pages for ${query.item.name}@${query.item.version}`);
+          throw new Error(
+            `OSV pagination exceeded 20 pages for ${query.item.name}@${query.item.version}`,
+          );
         }
         pending.push({ ...query, pageToken: result.next_page_token });
       }
@@ -279,7 +287,10 @@ function advisorySeverity(record, item) {
   for (const affected of Array.isArray(record?.affected) ? record.affected : []) {
     const pkg = affected?.package;
     if (pkg?.ecosystem === item.ecosystem && pkg?.name === item.name) {
-      candidates.push(affected?.ecosystem_specific?.severity, affected?.database_specific?.severity);
+      candidates.push(
+        affected?.ecosystem_specific?.severity,
+        affected?.database_specific?.severity,
+      );
     }
   }
   for (const severity of Array.isArray(record?.severity) ? record.severity : []) {
@@ -308,7 +319,9 @@ function validRfc3339(value) {
 async function loadAcceptances(now) {
   const parsed = JSON.parse(await readFile(acceptancePath, 'utf8'));
   if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.acceptances)) {
-    throw new Error('security/sca-acceptances.json must have schemaVersion 1 and an acceptances array');
+    throw new Error(
+      'security/sca-acceptances.json must have schemaVersion 1 and an acceptances array',
+    );
   }
   const map = new Map();
   const validationErrors = [];
@@ -414,7 +427,11 @@ async function main() {
   const inventory = [...npmInventory, ...androidInventory].sort((a, b) =>
     `${a.ecosystem}:${a.name}:${a.version}`.localeCompare(`${b.ecosystem}:${b.name}:${b.version}`),
   );
-  const { map: acceptances, validationErrors, entries } = await loadAcceptances(generatedAt.getTime());
+  const {
+    map: acceptances,
+    validationErrors,
+    entries,
+  } = await loadAcceptances(generatedAt.getTime());
   errors.push(...validationErrors);
 
   const { idsByIndex, records } = await queryOsv(inventory, osvBase);

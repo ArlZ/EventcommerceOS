@@ -106,9 +106,7 @@ export function requiredScenarios(): SimulationConfig[] {
 
   const slowDatabase = base('slow-cloud-database-under-load', 1010);
   slowDatabase.transactionsPerMinutePerRegister = 12;
-  slowDatabase.faults.slowDatabase = [
-    { startSecond: 70, endSecond: 205, extraLatencyMs: 850 },
-  ];
+  slowDatabase.faults.slowDatabase = [{ startSecond: 70, endSecond: 205, extraLatencyMs: 850 }];
 
   const wanFailover = base('application-level-wan-failover', 1011);
   wanFailover.faults.wanFailovers = [{ startSecond: 100, endSecond: 155 }];
@@ -135,9 +133,7 @@ export function requiredScenarios(): SimulationConfig[] {
   combinedPeak.faults.callbackDelayMaxSeconds = 30;
   combinedPeak.faults.providerTimeoutRate = 0.08;
   combinedPeak.faults.notificationOutages = [{ startSecond: 150, endSecond: 205 }];
-  combinedPeak.faults.slowDatabase = [
-    { startSecond: 250, endSecond: 320, extraLatencyMs: 700 },
-  ];
+  combinedPeak.faults.slowDatabase = [{ startSecond: 250, endSecond: 320, extraLatencyMs: 700 }];
 
   return [
     cloudOutage,

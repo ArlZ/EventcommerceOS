@@ -54,12 +54,7 @@ export class EdgeAbuseProtectionService {
     this.policies = Object.fromEntries(
       (Object.keys(DEFAULTS) as EdgeAbusePolicyName[]).map((name) => {
         const defaults = DEFAULTS[name];
-        const requestsPerMinute = bounded(
-          rateEnv(name),
-          defaults.requestsPerMinute,
-          30,
-          100_000,
-        );
+        const requestsPerMinute = bounded(rateEnv(name), defaults.requestsPerMinute, 30, 100_000);
         const burst = bounded(burstEnv(name), defaults.burst, 5, 10_000);
         if (burst > requestsPerMinute) {
           throw new Error(`${burstEnv(name)} must not exceed ${rateEnv(name)}`);

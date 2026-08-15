@@ -636,7 +636,9 @@ export class EventCloseReportService {
     }));
     const providerReconciliation: EventCloseProviderReconciliation[] = providerRows.map((row) => {
       const unresolved =
-        Number(row.pending_count) + Number(row.unknown_count) + Number(row.adjustment_unresolved_count);
+        Number(row.pending_count) +
+        Number(row.unknown_count) +
+        Number(row.adjustment_unresolved_count);
       return {
         providerId: row.provider_id,
         currency: row.currency,
@@ -816,9 +818,7 @@ export class EventCloseReportService {
         declaredAt: iso(row.declared_at),
       });
     }
-    return [...scopes.values()].sort((left, right) =>
-      cashKey(left).localeCompare(cashKey(right)),
-    );
+    return [...scopes.values()].sort((left, right) => cashKey(left).localeCompare(cashKey(right)));
   }
 
   private cashSummary(scopes: EventCloseCashScope[]): EventCloseCashSummary[] {
@@ -826,11 +826,10 @@ export class EventCloseReportService {
     return currencies.map((currency) => {
       const currencyScopes = scopes.filter((scope) => scope.currency === currency);
       const expected = currencyScopes.reduce((sum, scope) => sum + big(scope.expectedMinor), 0n);
-      const declaredScopes = currencyScopes.filter((scope) => scope.declarationStatus === 'DECLARED');
-      const declared = declaredScopes.reduce(
-        (sum, scope) => sum + big(scope.declaredMinor),
-        0n,
+      const declaredScopes = currencyScopes.filter(
+        (scope) => scope.declarationStatus === 'DECLARED',
       );
+      const declared = declaredScopes.reduce((sum, scope) => sum + big(scope.declaredMinor), 0n);
       const status: EventCloseCashSummary['declarationStatus'] =
         declaredScopes.length === 0
           ? 'MISSING'
@@ -859,7 +858,9 @@ export class EventCloseReportService {
       refundMinor: row.refund_minor,
       reversalMinor: row.reversal_minor,
       netTenderMinor: (
-        big(row.gross_minor) - big(row.refund_minor) - big(row.reversal_minor)
+        big(row.gross_minor) -
+        big(row.refund_minor) -
+        big(row.reversal_minor)
       ).toString(),
       unresolvedAttemptCount: Number(row.unresolved_count),
     }));
@@ -891,30 +892,29 @@ export class EventCloseReportService {
       ...paymentMethods.map((row) => row.currency),
       ...cashSummary.map((row) => row.currency),
     ]);
-    return [...currencies]
-      .sort()
-      .map((currency) => {
-        const electronic = paymentMethods
-          .filter((row) => row.currency === currency && row.methodId !== 'cash')
-          .reduce((sum, row) => sum + big(row.netTenderMinor), 0n);
-        const cash = cashSummary.find((row) => row.currency === currency);
-        const cashExpected = big(cash?.expectedMinor);
-        const declared = cash?.declaredMinor === null || cash === undefined ? 0n : big(cash.declaredMinor);
-        const hasCash = cash !== undefined && big(cash.expectedMinor) !== 0n;
-        const cashComplete = !hasCash || cash?.declarationStatus === 'COMPLETE';
-        const hasUnresolved = unresolvedPayments.some((row) => row.currency === currency);
-        const accounted = electronic + (cashComplete ? declared : declared);
-        const net = netSales.get(currency) ?? 0n;
-        return {
-          currency,
-          netSalesMinor: net.toString(),
-          electronicNetTenderMinor: electronic.toString(),
-          cashExpectedMinor: cashExpected.toString(),
-          accountedTenderMinor: accounted.toString(),
-          salesToTenderVarianceMinor: (accounted - net).toString(),
-          conclusive: !hasUnresolved && cashComplete,
-        };
-      });
+    return [...currencies].sort().map((currency) => {
+      const electronic = paymentMethods
+        .filter((row) => row.currency === currency && row.methodId !== 'cash')
+        .reduce((sum, row) => sum + big(row.netTenderMinor), 0n);
+      const cash = cashSummary.find((row) => row.currency === currency);
+      const cashExpected = big(cash?.expectedMinor);
+      const declared =
+        cash?.declaredMinor === null || cash === undefined ? 0n : big(cash.declaredMinor);
+      const hasCash = cash !== undefined && big(cash.expectedMinor) !== 0n;
+      const cashComplete = !hasCash || cash?.declarationStatus === 'COMPLETE';
+      const hasUnresolved = unresolvedPayments.some((row) => row.currency === currency);
+      const accounted = electronic + (cashComplete ? declared : declared);
+      const net = netSales.get(currency) ?? 0n;
+      return {
+        currency,
+        netSalesMinor: net.toString(),
+        electronicNetTenderMinor: electronic.toString(),
+        cashExpectedMinor: cashExpected.toString(),
+        accountedTenderMinor: accounted.toString(),
+        salesToTenderVarianceMinor: (accounted - net).toString(),
+        conclusive: !hasUnresolved && cashComplete,
+      };
+    });
   }
 
   private async sourceVersion(source: RowSource, eventId: string): Promise<string> {

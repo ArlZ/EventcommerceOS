@@ -108,7 +108,9 @@ export class AbuseProtectionGuard implements CanActivate {
   private readonly logger = new Logger(AbuseProtectionGuard.name);
   private readonly lastWarningAt = new Map<string, number>();
 
-  constructor(@Inject(AbuseProtectionService) private readonly protection: AbuseProtectionService) {}
+  constructor(
+    @Inject(AbuseProtectionService) private readonly protection: AbuseProtectionService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     if (context.getType() !== 'http') return true;
@@ -119,11 +121,7 @@ export class AbuseProtectionGuard implements CanActivate {
 
     const now = Date.now();
     const source = this.sourceKey(request);
-    const sourceDecision = this.protection.consume(
-      classified.policy,
-      `source:${source}`,
-      now,
-    );
+    const sourceDecision = this.protection.consume(classified.policy, `source:${source}`, now);
     let principalDecision: RateLimitDecision | undefined;
     if (classified.principalKey) {
       principalDecision = this.protection.consume(

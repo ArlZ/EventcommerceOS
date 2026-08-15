@@ -56,12 +56,29 @@ const client = new Client({ connectionString });
 await client.connect();
 const output = [];
 
-async function audit({ actorId = null, organisationId = null, auditAction, targetActorId = null, sessionId = null, role = null, details = {} }) {
+async function audit({
+  actorId = null,
+  organisationId = null,
+  auditAction,
+  targetActorId = null,
+  sessionId = null,
+  role = null,
+  details = {},
+}) {
   await client.query(
     `INSERT INTO operator_auth_audit(
        actor_id,organisation_id,action,target_actor_id,session_id,role,performed_by,details
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-    [actorId, organisationId, auditAction, targetActorId, sessionId, role, performedBy, JSON.stringify(details)],
+    [
+      actorId,
+      organisationId,
+      auditAction,
+      targetActorId,
+      sessionId,
+      role,
+      performedBy,
+      JSON.stringify(details),
+    ],
   );
 }
 
@@ -73,7 +90,9 @@ try {
     const displayName = required('OPERATOR_DISPLAY_NAME');
     const email = optional('OPERATOR_EMAIL') ?? null;
     const platformAdmin = bool('OPERATOR_PLATFORM_ADMIN');
-    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`operator-identity:${actorId}`]);
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      `operator-identity:${actorId}`,
+    ]);
     await client.query(
       `INSERT INTO operator_identities(id,display_name,email,platform_role)
        VALUES ($1,$2,$3,$4)`,
@@ -100,7 +119,9 @@ try {
       [actorId],
     );
     if (identity.rowCount !== 1) throw new Error('OPERATOR_ID is not an active operator');
-    const organisation = await client.query('SELECT 1 FROM organisations WHERE id=$1', [organisationId]);
+    const organisation = await client.query('SELECT 1 FROM organisations WHERE id=$1', [
+      organisationId,
+    ]);
     if (organisation.rowCount !== 1) throw new Error('OPERATOR_ORGANISATION_ID does not exist');
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
       `operator-membership:${actorId}:${organisationId}`,
@@ -167,7 +188,9 @@ try {
     });
     output.push(`OPERATOR_SESSION_ID=${sessionId}`);
     output.push(`OPERATOR_ACCESS_TOKEN=${token}`);
-    output.push(`Session expires in ${ttlMinutes} minutes. Store the access token in a managed secret/session store now; Cloud retains only its digest.`);
+    output.push(
+      `Session expires in ${ttlMinutes} minutes. Store the access token in a managed secret/session store now; Cloud retains only its digest.`,
+    );
   }
 
   if (action === 'revoke-session') {

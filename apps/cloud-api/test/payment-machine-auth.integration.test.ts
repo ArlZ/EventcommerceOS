@@ -83,7 +83,10 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('rejects unauthenticated machine payment initiation before durable payment effect', async () => {
-    await request(app.getHttpServer()).post('/payments/initiate').send(paymentRequest()).expect(401);
+    await request(app.getHttpServer())
+      .post('/payments/initiate')
+      .send(paymentRequest())
+      .expect(401);
     const rows = await database.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM payments',
     );
@@ -111,10 +114,7 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('rejects initiation for an event outside the authenticated Edge organisation', async () => {
-    await applyHeaders(
-      request(app.getHttpServer()).post('/payments/initiate'),
-      primaryHeaders,
-    )
+    await applyHeaders(request(app.getHttpServer()).post('/payments/initiate'), primaryHeaders)
       .send(paymentRequest(OTHER_EVENT_ID))
       .expect(401);
   });
@@ -129,10 +129,7 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('authorizes reconciliation only to the payment tenant', async () => {
-    await applyHeaders(
-      request(app.getHttpServer()).post('/payments/initiate'),
-      primaryHeaders,
-    )
+    await applyHeaders(request(app.getHttpServer()).post('/payments/initiate'), primaryHeaders)
       .send(paymentRequest())
       .expect(201);
 
@@ -197,11 +194,14 @@ describeIntegration('Cloud payment machine authentication', () => {
     { method: 'GET', path: '/payments/payment-locked/history' },
     { method: 'GET', path: '/payments/payment-locked/manual-terminal-confirmations' },
     { method: 'GET', path: `/payments/events/${DEFAULT_SYNC_EVENT_ID}/health` },
-  ])('fails privileged human payment route closed: $method $path', async ({ method, path, body }) => {
-    const call =
-      method === 'GET'
-        ? request(app.getHttpServer()).get(path)
-        : request(app.getHttpServer()).post(path).send(body);
-    await applyHeaders(call, primaryHeaders).expect(401);
-  });
+  ])(
+    'fails privileged human payment route closed: $method $path',
+    async ({ method, path, body }) => {
+      const call =
+        method === 'GET'
+          ? request(app.getHttpServer()).get(path)
+          : request(app.getHttpServer()).post(path).send(body);
+      await applyHeaders(call, primaryHeaders).expect(401);
+    },
+  );
 });
