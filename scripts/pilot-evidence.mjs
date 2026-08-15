@@ -5,7 +5,9 @@ import { pathToFileURL } from 'node:url';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'FAIL']);
+const DEPLOYMENT_MODES = new Set(['single_instance_pilot', 'upstream_distributed']);
 
 export const REQUIRED_GATES = [
   'branchProtection',
@@ -131,10 +133,18 @@ export function validateManifest(manifest, expectedReleaseCommit) {
     blockers.push('createdAt must be an RFC3339 timestamp.');
   }
 
-  for (const field of ['eventName', 'eventDate', 'venue', 'deploymentMode']) {
+  for (const field of ['eventName', 'venue']) {
     if (!isNonEmpty(manifest.pilot?.[field])) {
       blockers.push(`pilot.${field} is required.`);
     }
+  }
+
+  if (!isNonEmpty(manifest.pilot?.eventDate) || !DATE_PATTERN.test(manifest.pilot.eventDate)) {
+    blockers.push('pilot.eventDate must use YYYY-MM-DD.');
+  }
+
+  if (!DEPLOYMENT_MODES.has(manifest.pilot?.deploymentMode)) {
+    blockers.push('pilot.deploymentMode must be single_instance_pilot or upstream_distributed.');
   }
 
   for (const owner of REQUIRED_OWNERS) {
