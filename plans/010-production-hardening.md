@@ -1,7 +1,7 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: **feature-complete; final green Task 009 base merged; permanent repository CI revalidation in progress; release still gated by security + real pilot evidence**
-Base: final Task 009 (`codex/task-009-event-close` at `bb531f8dc5fcf91cf3a76649e812e275ab88a0d9`)
+Status: **feature/security-control implementation complete; permanent CI is operational and exact-release CI acceptance is enforced; operational/pilot evidence remains outstanding**
+Base: Task 009 (`codex/task-009-event-close`)
 
 ## Objective
 
@@ -10,9 +10,10 @@ Create release evidence for live-event reliability without adding product featur
 ## Evidence layers
 
 1. **Deterministic model simulation** — repeatable fault/load regression in `packages/simulator`.
-2. **Repository acceptance tests** — existing TypeScript, integration and Android gates plus Task 010 invariant tests.
-3. **Threat-focused review** — payments, callbacks, auth/RBAC, sync, device trust and privileged inventory/close actions.
-4. **Real pilot evidence** — supported Android devices, event Wi-Fi/LAN, Edge hardware and sandbox/live provider rails using `docs/PILOT_RUNBOOK.md`.
+2. **Repository acceptance tests** — TypeScript, integration, Android and dependency-security gates.
+3. **Threat-focused review/remediation** — payments, callbacks, auth/RBAC, sync, device trust, abuse controls and privileged inventory/close actions.
+4. **Operational recovery evidence** — executable backup/isolated-restore drill against representative release-candidate data.
+5. **Real pilot evidence** — supported Android devices, event Wi-Fi/LAN, Edge hardware, abuse/flood exercise and sandbox/live provider rails using `docs/PILOT_RUNBOOK.md`.
 
 A pass at one layer does not substitute for the next layer.
 
@@ -69,7 +70,7 @@ The modeled suite fails if any of these occur:
 
 The latency assertions are **model regression checks only**. Real hardware must independently prove the SLOs.
 
-## Executed evidence
+## Executed model evidence
 
 A strict TypeScript 5.8.3 compile of the simulator source passed in the available execution environment using the repository's core strictness settings.
 
@@ -89,37 +90,57 @@ The deterministic required suite was executed with fixed seeds/timestamp and pas
 
 Full deterministic baseline: `docs/SIMULATION_BASELINE_2026-08-14.md`.
 
-## Security/release review
+## Security/release remediation stack
 
-Documented in `docs/RELEASE_SECURITY_REVIEW.md`.
+The threat review is documented in `docs/RELEASE_SECURITY_REVIEW.md`. The original code-level blockers have now been addressed in the stacked branches:
 
-The review identified release-blocking areas that are being remediated in the later stacked security/reliability PRs: authenticated machine ingress, POS and human identity/RBAC, abuse controls, backup/restore evidence and dependency/SCA evidence. This Task 010 slice must not claim those later controls as part of its own feature scope.
+- SEC-001 Cloud payment caller separation: Event Edge machine payment traffic authenticated; privileged human payment actions use separate human authorization.
+- SEC-002 Event Edge -> Cloud ingress: revocable, tenant-bound Edge machine identity.
+- SEC-003 human administration: expiring/revocable operator sessions with database-derived organisation RBAC; caller role/actor headers are not trusted.
+- SEC-004 POS -> Event Edge: revocable device identity and server-side event/location assignment, with Android secret storage in Keystore-backed encryption.
+- SEC-005 abuse/resource exhaustion: Cloud and Event Edge rate, burst, concurrency, request-size and timeout controls plus explicit distributed-upstream deployment contract.
+- SEC-006 recovery evidence: executable consistent-snapshot backup + isolated restore/fingerprint/sequence/RPO/RTO drill.
+- SEC-008 dependency evidence: executable exact-release npm + Android/Maven SCA gate using resolved inventories, OSV advisories and exact expiring risk acceptances.
 
-Current security disposition remains **NO-GO for internet-exposed production or a live-money pilot** until the full stack and required operational evidence are complete.
+Permanent GitHub Actions execution is functioning and the workflow exercises build, lint, typecheck, repository tests, formatting, architecture boundaries, Android and SCA. Repository-wide formatting drift found during the first complete gate execution was normalized with the pinned Prettier version. Every release candidate must retain one consolidated exact-candidate run; an earlier commit's pass or a partial run is not substituted for that evidence.
 
-## Repository CI checkpoint
+SEC-006 remains an **evidence mechanism**, not passed recovery evidence by itself. SEC-008 has produced real zero-blocker passing SCA evidence on the stacked code lineage, while every exact release candidate still requires its retained PASS evidence and named review/sign-off.
 
-The first real permanent runner pass reached a successful build and then exposed five shared Command Centre/Event Close Nest DI import-hygiene errors. Those dependencies are runtime injection tokens, so the repair preserves runtime class imports with explicit `@Inject(...)` rather than applying unsafe type-only conversion.
+## Remaining mandatory release blockers
 
-The repaired Task 010 tree also carries the already-proven shared Event Close correctness needed by its own existing tests: consistent Command Centre SQL typing, correct CSV response handling, explicit correction-window conflict enforcement, inconclusive financial reconciliation when provider adjustment truth is unresolved, and deterministic serial execution for the Cloud API/Event Edge integration suites that share PostgreSQL/process state.
+Current security disposition remains **NO-GO for internet-exposed production or a live-money pilot**.
 
-No later Edge credential, POS identity, human-auth, abuse-control, backup/SCA feature scope was pulled into this PR. The complete repository Prettier surface was normalized as part of the repair.
+The remaining blockers are evidence/environment gates rather than missing anonymous trust boundaries:
 
-A fresh permanent TypeScript + Android CI pass on this exact repaired tree is now required before this PR is merge-ready.
+1. **SEC-005 deployment evidence** — run the documented flood/abuse exercise on the actual pilot topology and retain upstream distributed-protection evidence if applicable.
+2. **SEC-006 restore evidence** — execute the representative backup/isolated-restore drill on the exact release candidate, pass fingerprints/sequence/RPO/RTO checks and obtain named sign-off.
+3. **Exact-release CI evidence** — retain one consolidated run where TypeScript/build/lint/typecheck/tests/format/architecture, Android and SCA all pass on the exact release candidate.
+4. **SEC-008 review/sign-off** — retain the exact-release SCA PASS manifest with no unaccepted HIGH/CRITICAL/UNKNOWN finding and obtain named sign-off. Moderate/low findings remain visible and are not silently treated as absent.
+5. **Real hardware/network/provider pilot evidence** — complete the durability, payment-fault, network partition/recovery, inventory and close/reconciliation exercises in `docs/PILOT_RUNBOOK.md`.
+
+No PASS artifact should be fabricated or inferred from the existence of a script/workflow definition.
+
+## Validation limitation
+
+The prior GitHub Actions runner-allocation blocker is closed: permanent jobs now receive runners and execute. Permanent CI is therefore no longer an environment limitation; release acceptance is tied to the consolidated result for the exact candidate being considered.
+
+The backup/restore and pilot-topology gates require representative databases, hardware, network and provider conditions that are not present in this chat execution environment. Those gates cannot be substituted by synthetic unit/integration evidence.
 
 ## Pilot graduation rule
 
-Task 010 must not mark the product "festival ready". After the security blockers and permanent CI are closed, the maximum recommendation from automated evidence is **controlled pilot candidate**.
+Task 010 must not mark the product "festival ready". After the mandatory evidence gates are closed, the maximum recommendation from automated/review evidence is **controlled pilot candidate**.
 
-Graduation to a larger event requires all of:
+A controlled pilot may graduate to a materially larger event only when all of the following are retained and reviewed:
 
-- green permanent TypeScript + Android gates on the exact release commit;
-- no open P0/P1 security findings;
+- green permanent TypeScript + Android + SCA gates on the exact release commit;
+- no unaccepted HIGH/CRITICAL/UNKNOWN dependency finding;
+- no open P0/P1 security finding;
 - supported-device local latency evidence meeting SLOs;
 - 100-order offline/restart durability test with zero loss;
 - provider sandbox payment fault matrix passed, including timeout/duplicate/late callback cases;
 - successful event-network partition/reconnect exercise;
+- abuse/flood exercise passed without starving local commerce or corrupting payment truth;
 - inventory opening/count/transfer reconciliation with zero unexplained ledger divergence;
-- completed backup restore exercise;
+- representative backup restore PASS evidence and reviewer sign-off;
 - one controlled live pilot closed and reconciled with documented incident/evidence pack;
 - explicit human go/no-go review before any materially larger deployment.

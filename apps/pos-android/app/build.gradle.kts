@@ -28,4 +28,39 @@ dependencies {
   testImplementation("androidx.room:room-testing:2.6.1")
   testImplementation("androidx.test:core:1.6.1")
   testImplementation("org.robolectric:robolectric:4.14.1")
+  testImplementation("org.bouncycastle:bcprov-jdk18on:1.80.2")
+}
+
+tasks.register("scaResolvedDependencies") {
+  group = "verification"
+  description = "Prints resolved Maven dependencies for release SCA evidence"
+
+  doLast {
+    val lines = mutableSetOf<String>()
+    configurations
+      .filter {
+        it.isCanBeResolved &&
+          (it.name.endsWith("RuntimeClasspath") || it.name.startsWith("ksp"))
+      }
+      .forEach { configuration ->
+        configuration.incoming.resolutionResult.allComponents.forEach componentLoop@{ component ->
+          val module = component.moduleVersion ?: return@componentLoop
+          if (module.group.isBlank() || module.name.isBlank() || module.version.isBlank()) {
+            return@componentLoop
+          }
+          lines.add(
+            listOf(
+                "SCA_DEP",
+                module.group,
+                module.name,
+                module.version,
+                configuration.name,
+              )
+              .joinToString("\t"),
+          )
+        }
+      }
+
+    lines.sorted().forEach(::println)
+  }
 }
