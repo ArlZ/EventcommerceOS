@@ -1,5 +1,8 @@
 # Task 008 — Live Event Command Centre
 
+Status: implementation complete; repository CI revalidation in progress
+Base: merged Task 007 (`main` at `e534310d0228e2b4fa93c1ab93d24bd2921f939c`)
+
 ## Objective
 
 Build an event-manager command centre that prioritizes operational exceptions and answers whether sales, stock, payments, devices and sync are healthy without introducing any dependency into checkout.
@@ -39,3 +42,11 @@ Build an event-manager command centre that prioritizes operational exceptions an
 - alert acknowledgement/assignment is event-scoped, monotonic and append-only audited;
 - Edge RESOLVED alert state overrides any older Cloud acknowledgement/assignment overlay;
 - payment retries do not inflate settled payment-method totals.
+
+## Repository CI checkpoint
+
+The first permanent runner pass reached build, lint and typecheck successfully, with Android also green. The only reported application failures were three Command Centre integration assertions caused by one SQL type mismatch in the location-sales join: `sync_order_state.sales_location_id` is text while `sales_locations.event_id` was being compared through a UUID-cast parameter in the same query.
+
+The query now compares the event identifier consistently as text (`location.event_id::text = $1`). Cloud API and Event Edge integration files also run serially within their packages so tests that mutate the shared PostgreSQL/process state are deterministic. The repository's existing Prettier surface was normalized without changing product behavior.
+
+A fresh permanent TypeScript + Android CI pass on this exact repaired tree is required before Task 008 is merge-ready.
