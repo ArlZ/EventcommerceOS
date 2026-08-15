@@ -16,7 +16,7 @@ jobs:
         with:
           ref: security/edge-cloud-trust
           fetch-depth: 0
-      - name: Merge final Task 010 base
+      - name: Merge final Task 010 base with verified resolutions
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -26,10 +26,20 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "Merge conflicts:"
-            git diff --name-only --diff-filter=U
-            git status --short
-            exit "$status"
+            conflicts="$(git diff --name-only --diff-filter=U | sort)"
+            expected="$(printf '%s\n' \
+              apps/cloud-api/test/pesapal-sabi.provider.test.ts \
+              apps/cloud-api/test/sync-command-centre-projection.integration.test.ts | sort)"
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$conflicts"
+              exit 1
+            fi
+            git checkout --theirs apps/cloud-api/test/pesapal-sabi.provider.test.ts
+            git checkout --ours apps/cloud-api/test/sync-command-centre-projection.integration.test.ts
+            git add apps/cloud-api/test/pesapal-sabi.provider.test.ts \
+                    apps/cloud-api/test/sync-command-centre-projection.integration.test.ts
+            git commit --no-edit
           fi
       - name: Self-remove and push
         run: |
