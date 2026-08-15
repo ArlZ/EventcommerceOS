@@ -1,0 +1,35 @@
+name: PR16 format normalization temporary
+
+on:
+  push:
+    branches: [security/cloud-payment-machine-trust]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/cloud-payment-machine-trust
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Normalize exactly the CI formatting surface
+        run: pnpm exec prettier --write "apps/**/*.{ts,tsx,mjs}" "packages/**/*.{ts,tsx}" "scripts/*.mjs" eslint.config.mjs
+      - name: Commit formatting and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps packages scripts eslint.config.mjs
+          git rm .github/workflows/pr16-format-temp.yml
+          git diff --cached --check
+          git commit -m "Normalize cloud payment machine trust stack formatting"
+          git push origin HEAD:security/cloud-payment-machine-trust
