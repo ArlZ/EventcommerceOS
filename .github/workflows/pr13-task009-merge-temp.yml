@@ -1,0 +1,38 @@
+name: PR13 Task 009 merge temporary
+
+on:
+  push:
+    branches: [codex/task-010-production-hardening]
+
+permissions:
+  contents: write
+
+jobs:
+  merge-base:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/task-010-production-hardening
+          fetch-depth: 0
+      - name: Merge final Task 009 base
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin codex/task-009-event-close
+          set +e
+          git merge --no-ff --no-edit origin/codex/task-009-event-close
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Merge conflicts:"
+            git diff --name-only --diff-filter=U
+            git status --short
+            exit "$status"
+          fi
+      - name: Self-remove and push
+        run: |
+          git rm .github/workflows/pr13-task009-merge-temp.yml
+          git commit -m "Remove temporary PR13 Task 009 merge workflow"
+          git push origin HEAD:codex/task-010-production-hardening
