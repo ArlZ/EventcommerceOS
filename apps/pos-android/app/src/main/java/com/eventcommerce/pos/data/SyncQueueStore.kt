@@ -17,7 +17,7 @@ class SyncQueueStore(private val db: AppDatabase) {
            FROM outbox_events
            WHERE deviceId = ? AND sequence > ?
            ORDER BY sequence ASC LIMIT ?""",
-        arrayOf(deviceId, watermark, limit.coerceIn(1, 100)),
+        arrayOf<Any>(deviceId, watermark, limit.coerceIn(1, 100)),
       )
       db.query(query).use { cursor ->
         buildList {
@@ -50,7 +50,7 @@ class SyncQueueStore(private val db: AppDatabase) {
       db.query(
         SimpleSQLiteQuery(
           "SELECT COUNT(*) FROM outbox_events WHERE deviceId = ? AND sequence > ?",
-          arrayOf(deviceId, watermark),
+          arrayOf<Any>(deviceId, watermark),
         ),
       ).use { cursor -> if (cursor.moveToFirst()) cursor.getInt(0) else 0 }
     }
