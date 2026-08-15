@@ -19,10 +19,14 @@ class ProvisionedEdgePaymentTransport(
     delegate().railAvailability()
 
   private suspend fun delegate(): HttpsEdgePaymentTransport {
-    val syncEndpoint = requireNotNull(provisioning.endpoint()) { "Edge endpoint is not provisioned" }
-    val uri = URI(syncEndpoint)
+    val provisioned = requireNotNull(provisioning.current()) { "Event Edge device credential is not provisioned" }
+    val uri = URI(provisioned.endpoint)
     require(uri.scheme == "https") { "POS payment endpoint must use HTTPS" }
     val authority = uri.rawAuthority ?: throw IllegalArgumentException("Edge endpoint has no authority")
-    return HttpsEdgePaymentTransport("https://$authority")
+    return HttpsEdgePaymentTransport(
+      "https://$authority",
+      provisioned.deviceId,
+      provisioned.token,
+    )
   }
 }

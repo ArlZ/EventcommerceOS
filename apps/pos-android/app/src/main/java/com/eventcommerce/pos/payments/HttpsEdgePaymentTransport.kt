@@ -9,9 +9,15 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransport {
+class HttpsEdgePaymentTransport(
+  private val baseUrl: String,
+  private val deviceId: String,
+  private val token: String,
+) : EdgePaymentTransport {
   init {
     require(baseUrl.startsWith("https://")) { "POS payment endpoint must use HTTPS" }
+    require(deviceId.isNotBlank()) { "POS device ID must not be blank" }
+    require(token.length >= 32) { "POS device credential must be at least 32 characters" }
   }
 
   override suspend fun initiate(
@@ -51,6 +57,7 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
         connection.requestMethod = "GET"
         connection.connectTimeout = 5_000
         connection.readTimeout = 5_000
+        authenticate(connection)
         connection.setRequestProperty("Accept", "application/json")
         val code = connection.responseCode
         if (code !in 200..299) throw IllegalStateException("Edge payment rail health returned HTTP $code")
@@ -85,6 +92,7 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
       connection.connectTimeout = 10_000
       connection.readTimeout = 10_000
       connection.doOutput = true
+      authenticate(connection)
       connection.setRequestProperty("Content-Type", "application/json")
       connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(body.toString()) }
       val code = connection.responseCode
@@ -101,6 +109,11 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
     } finally {
       connection.disconnect()
     }
+  }
+
+  private fun authenticate(connection: HttpURLConnection) {
+    connection.setRequestProperty("Authorization", "Bearer $token")
+    connection.setRequestProperty("X-Device-Id", deviceId)
   }
 
   private fun urlComponent(value: String): String =

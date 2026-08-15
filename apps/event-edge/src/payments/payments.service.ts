@@ -16,6 +16,7 @@ interface CachedAttemptRow extends QueryResultRow {
   status: PaymentAttemptView['status'];
   provider_reference: string | null;
   failure_code: string | null;
+  device_id: string | null;
   updated_at: Date | string;
 }
 
@@ -72,7 +73,10 @@ export function parseEdgeInitiatePayment(value: unknown): InitiatePaymentRequest
 export class EdgePaymentsService {
   constructor(@Inject(EdgeDatabaseService) private readonly db: EdgeDatabaseService) {}
 
-  async initiate(request: InitiatePaymentRequest): Promise<PaymentAttemptView> {
+  async initiate(
+    request: InitiatePaymentRequest,
+    originDeviceId?: string,
+  ): Promise<PaymentAttemptView> {
     await this.cache(
       {
         eventId: request.eventId,
@@ -90,6 +94,7 @@ export class EdgePaymentsService {
         updatedAt: new Date().toISOString(),
       },
       request.idempotencyKey,
+      originDeviceId,
     );
 
     try {
@@ -101,7 +106,7 @@ export class EdgePaymentsService {
       });
       if (!response.ok) throw new Error(`cloud payments returned HTTP ${response.status}`);
       const view = this.parsePaymentView(await response.json());
-      return this.cache(view, request.idempotencyKey);
+      return this.cache(view, request.idempotencyKey, originDeviceId);
     } catch {
       const uncertain: PaymentAttemptView = {
         eventId: request.eventId,
@@ -118,7 +123,7 @@ export class EdgePaymentsService {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      return this.cache(uncertain, request.idempotencyKey);
+      return this.cache(uncertain, request.idempotencyKey, originDeviceId);
     }
   }
 
@@ -162,6 +167,7 @@ export class EdgePaymentsService {
   private async cache(
     view: PaymentAttemptView,
     idempotencyKey: string,
+    originDeviceId?: string,
   ): Promise<PaymentAttemptView> {
     return this.db.transaction(async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
@@ -177,8 +183,8 @@ export class EdgePaymentsService {
         await client.query(
           `INSERT INTO edge_payment_attempt_cache(
              payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
-             amount_minor,currency,status,provider_reference,failure_code,updated_at
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())`,
+             amount_minor,currency,status,provider_reference,failure_code,device_id,updated_at
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())`,
           [
             view.paymentAttemptId,
             view.paymentId,
@@ -191,6 +197,7 @@ export class EdgePaymentsService {
             view.status,
             view.providerReference,
             view.failureCode,
+            originDeviceId ?? null,
           ],
         );
         const inserted = await client.query<CachedAttemptRow>(
@@ -200,7 +207,14 @@ export class EdgePaymentsService {
         return this.toView(inserted.rows[0]!);
       }
 
-      this.assertSameIdentity(existing, view, idempotencyKey);
+      this.assertSameIdentity(existing, view, idempotencyKey, originDeviceId);
+      if (existing.device_id === null && originDeviceId !== undefined) {
+        await client.query(
+          `UPDATE edge_payment_attempt_cache SET device_id=$2 WHERE payment_attempt_id=$1`,
+          [view.paymentAttemptId, originDeviceId],
+        );
+        existing.device_id = originDeviceId;
+      }
 
       if (
         existing.provider_reference !== null &&
@@ -244,6 +258,7 @@ export class EdgePaymentsService {
     existing: CachedAttemptRow,
     view: PaymentAttemptView,
     idempotencyKey: string,
+    originDeviceId?: string,
   ): void {
     if (
       existing.payment_id !== view.paymentId ||
@@ -252,7 +267,10 @@ export class EdgePaymentsService {
       existing.provider_id !== view.providerId ||
       existing.idempotency_key !== idempotencyKey ||
       Number(existing.amount_minor) !== view.amountMinor ||
-      existing.currency !== view.currency
+      existing.currency !== view.currency ||
+      (originDeviceId !== undefined &&
+        existing.device_id !== null &&
+        existing.device_id !== originDeviceId)
     ) {
       throw new Error('payment attempt identity conflicts with Edge cache');
     }
@@ -260,7 +278,7 @@ export class EdgePaymentsService {
 
   private select(): string {
     return `SELECT payment_attempt_id,payment_id,event_id,order_id,provider_id,idempotency_key,
-                   amount_minor::text,currency,status,provider_reference,failure_code,updated_at
+                   amount_minor::text,currency,status,provider_reference,failure_code,device_id,updated_at
             FROM edge_payment_attempt_cache`;
   }
 

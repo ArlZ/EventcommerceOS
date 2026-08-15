@@ -6,13 +6,22 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class HttpsDeviceEdgeTransport(private val endpoint: String) : DeviceEdgeTransport {
+class HttpsDeviceEdgeTransport(
+  private val endpoint: String,
+  private val provisionedDeviceId: String,
+  private val token: String,
+) : DeviceEdgeTransport {
   init {
     require(endpoint.startsWith("https://")) { "POS sync endpoint must use HTTPS" }
+    require(provisionedDeviceId.isNotBlank()) { "POS device ID must not be blank" }
+    require(token.length >= 32) { "POS device credential must be at least 32 characters" }
   }
 
   override suspend fun send(deviceId: String, events: List<OutboxEventEntity>): DeviceEdgeAck =
     withContext(Dispatchers.IO) {
+      require(deviceId == provisionedDeviceId) {
+        "local POS device identity does not match provisioned Event Edge identity"
+      }
       val connection = URL(endpoint).openConnection() as HttpURLConnection
       try {
         connection.requestMethod = "POST"
@@ -20,6 +29,8 @@ class HttpsDeviceEdgeTransport(private val endpoint: String) : DeviceEdgeTranspo
         connection.readTimeout = 5_000
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
+        connection.setRequestProperty("Authorization", "Bearer $token")
+        connection.setRequestProperty("X-Device-Id", provisionedDeviceId)
         connection.outputStream.bufferedWriter(Charsets.UTF_8).use {
           it.write(SyncJson.request(deviceId, events))
         }
