@@ -228,6 +228,31 @@ function pathEscapesRoot(root, candidate) {
   return rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel);
 }
 
+function inspectedEvidencePath(manifestPath, evidencePath) {
+  const manifestAbsolute = resolve(manifestPath);
+  const evidenceRoot = realpathSync(dirname(manifestAbsolute));
+  const requested = resolve(evidencePath);
+  const actualPath = realpathSync(requested);
+
+  if (pathEscapesRoot(evidenceRoot, actualPath)) {
+    throw new Error('evidence file must be retained under the manifest directory.');
+  }
+
+  if (!lstatSync(actualPath).isFile()) {
+    throw new Error('evidence path must resolve to a regular file.');
+  }
+
+  return { evidenceRoot, actualPath };
+}
+
+export function createEvidenceRef(manifestPath, evidencePath) {
+  const { evidenceRoot, actualPath } = inspectedEvidencePath(manifestPath, evidencePath);
+  return {
+    path: relative(evidenceRoot, actualPath).replaceAll('\\', '/'),
+    sha256: sha256File(actualPath),
+  };
+}
+
 export function validateEvidenceFiles(manifest, manifestPath) {
   const blockers = [];
   const manifestAbsolute = resolve(manifestPath);
@@ -302,6 +327,13 @@ function initCommand(outputPath) {
   );
 }
 
+function hashCommand(manifestPath, evidencePath) {
+  if (!manifestPath || !evidencePath) {
+    throw new Error('hash requires a manifest path and an evidence file path.');
+  }
+  console.log(JSON.stringify(createEvidenceRef(manifestPath, evidencePath)));
+}
+
 function validateCommand(inputPath) {
   if (!inputPath) throw new Error('validate requires a manifest path.');
   const manifestPath = resolve(inputPath);
@@ -319,6 +351,7 @@ function validateCommand(inputPath) {
 function usage() {
   console.log('Usage:');
   console.log('  node scripts/pilot-evidence.mjs init [output.json]');
+  console.log('  node scripts/pilot-evidence.mjs hash <manifest.json> <evidence-file>');
   console.log('  node scripts/pilot-evidence.mjs validate <manifest.json>');
 }
 
@@ -326,6 +359,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     const command = process.argv[2];
     if (command === 'init') initCommand(process.argv[3]);
+    else if (command === 'hash') hashCommand(process.argv[3], process.argv[4]);
     else if (command === 'validate') validateCommand(process.argv[3]);
     else {
       usage();
