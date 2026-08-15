@@ -1,7 +1,8 @@
 # Reliability — exact-release recovery provenance
 
 Status: **in progress**
-Base: `main` at `58dca72842aeb900334d614d4f8caa21e651f6b2`
+Original base: `main` at `58dca72842aeb900334d614d4f8caa21e651f6b2`
+Integration revalidation base: `main` at `ea868dd00a884bf1f930847ee7b025a7e747ca9e`
 
 ## Objective
 
