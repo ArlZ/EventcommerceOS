@@ -116,18 +116,41 @@ Implemented controls:
 
 **Offline-first caveat:** remote revocation cannot prevent a physically isolated stolen device from continuing local-only cash/order capture while it cannot reach Event Edge. Revocation blocks sync, electronic-payment access and POS-facing payment reads at the next Edge request. Lost-device handling therefore also requires physical recovery/quarantine and reconciliation procedures; the system will not introduce a Cloud lease that breaks offline sale durability.
 
-### SEC-005 — P1 — Public endpoint abuse/rate limiting is not wired globally
+### SEC-005 — P1 — HTTP abuse and resource-exhaustion controls
 
-No reviewed production-grade application/upstream abuse control is currently evidenced at the global HTTP boundary. Provider callbacks and payment initiation/reconciliation are especially sensitive to floods, expensive verification calls and database contention.
+**Status: remediated at application/code level in `security/abuse-controls`, pending permanent CI, stack merge and deployment evidence.**
 
-**Required remediation:**
+Implemented Cloud controls:
 
-- rate limits by endpoint/caller/provider contract;
-- payload/body size limits;
-- connection/request timeouts;
-- provider callback limits that preserve legitimate retry bursts;
-- sustained-reject/abuse alerting;
-- documented upstream WAF/reverse-proxy controls.
+- global token-bucket policies for Edge sync/inventory, Edge payment, provider callbacks, operator reads, operator mutations and public/invalid traffic;
+- dual source-IP and caller-fingerprint limits where a stable caller exists;
+- bearer/session credentials are SHA-256 fingerprinted before bucket use and are never logged as raw keys;
+- abuse throttling executes before operator/session database authentication, preventing random fake operator tokens from turning authentication itself into a database-amplification path;
+- hard-bounded in-memory bucket cardinality with least-recently-used eviction;
+- sampled structured `HTTP_ABUSE_RATE_REJECT` warnings instead of one log entry per rejected packet;
+- `429`, `Retry-After` and rate-limit response metadata;
+- explicit JSON/urlencoded body-size bounds;
+- inbound header/request/keep-alive timeout bounds and maximum parsed header count;
+- Edge sync/inventory request validators still cap batches at 100 business events.
+
+Implemented Event Edge controls:
+
+- independent local token buckets for POS sync, POS payment and other LAN HTTP traffic;
+- device/source fingerprinting without storing raw device bearer credentials;
+- bounded bucket cardinality and sampled `EDGE_HTTP_ABUSE_RATE_REJECT` warnings;
+- independent body/header/request/keep-alive limits;
+- no Cloud/shared limiter dependency, preserving offline-first local commerce.
+
+The rate values are intentionally higher for Edge replay/payment and provider callback traffic than generic public traffic so recovery/retry bursts are bounded without being treated like human/public abuse.
+
+Per-process memory buckets are not represented as globally distributed protection. Production must explicitly select `ABUSE_DEPLOYMENT_MODE`:
+
+- `single_instance_pilot` for a tightly controlled single-Cloud-instance pilot;
+- `upstream_distributed` for multi-instance internet production, which additionally requires an explicitly confirmed upstream WAF/API gateway/reverse-proxy layer and a configured trusted proxy hop count.
+
+`docs/ABUSE_PROTECTION.md` defines the upstream contract, proxy-trust rules, default/tunable limits and the mandatory pilot flood exercise. The deployment evidence pack must prove the real upstream configuration when distributed mode is used; setting the confirmation environment variable is not itself evidence.
+
+Payment semantics remain unchanged under throttling: a `429`/timeout is transport uncertainty, never invented provider failure, and delayed callbacks still reconcile through authoritative provider status.
 
 ### SEC-006 — P1 — Backup/restore procedure is specified but not evidenced
 
@@ -199,6 +222,8 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 - valid duplicate provider callback has one business effect;
 - provider timeout yields `UNKNOWN`, not failure;
 - delayed authoritative success resolves the original attempt without a second charge;
+- public/fake-session request flood is rate-limited before operator-auth database work;
+- Event Edge throttles a runaway test POS while another registered POS remains usable;
 - request-flood/rate-limit exercise does not starve local event operations;
 - privileged inventory/close actions create immutable audit evidence;
 - audit/ledger records cannot be mutated/deleted through application APIs;
@@ -208,15 +233,15 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-SEC-001 through SEC-004 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. The remaining release blockers are now operational/security evidence and abuse-control gates rather than anonymous identity boundaries.
+SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
 
 Remaining mandatory release blockers are:
 
-1. SEC-005 rate limiting/abuse controls;
-2. SEC-006 tested backup/restore evidence;
-3. SEC-007 green permanent CI on the exact release stack;
-4. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk.
+1. SEC-006 tested backup/restore evidence;
+2. SEC-007 green permanent CI on the exact release stack;
+3. SEC-008 dependency/SCA evidence with no unaccepted critical/high risk;
+4. SEC-005 real deployment abuse-test evidence before live exposure.
 
 External OIDC/SSO/MFA is still recommended before graduating beyond a tightly controlled pilot, but the repository no longer trusts browser-supplied role/actor headers for operational authority.
 
-After the mandatory blockers are closed, the correct next status is **controlled live pilot candidate**, not major-festival ready. Graduation criteria remain in `docs/PILOT_RUNBOOK.md`.
+After those mandatory blockers are closed, the correct next status is **controlled live pilot candidate**, not major-festival ready. Graduation criteria remain in `docs/PILOT_RUNBOOK.md`.
