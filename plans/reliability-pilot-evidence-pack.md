@@ -1,6 +1,6 @@
 # Reliability — Pilot evidence pack validator
 
-Status: implementation in progress
+Status: **implemented; exact PR CI/SCA validation pending**
 Base: Task 010 production hardening
 
 ## Objective
@@ -43,7 +43,10 @@ Make the remaining real-world pilot gates machine-checkable without pretending C
 - initial manifest validates as blocked, not passed;
 - a complete valid fixture passes;
 - release SHA mismatch fails;
+- invalid deployment mode fails;
 - PASS without reviewer/evidence timestamp/reference fails;
 - non-representative recovery fails;
 - dependency-security blockers fail;
-- existing TypeScript/Android/SCA CI remains green.
+- existing TypeScript/Android/SCA CI remains green on the exact generated merge candidate.
+
+No real-world gate is closed by this implementation. Branch protection, representative recovery, deployment abuse/flood, supported hardware/network, provider fault testing and the controlled live pilot still require external evidence and named human review.
