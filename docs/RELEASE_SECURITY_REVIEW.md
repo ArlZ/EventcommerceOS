@@ -26,7 +26,8 @@ Provider callbacks remain on their separate provider-specific verification bound
 Privileged human payment operations are re-enabled only through revocable operator sessions and server-derived organisation roles:
 
 - manual terminal confirmation: `ADMIN` or `SUPERVISOR`, plus the existing event-specific `PAYMENT_MANUAL_CONFIRM` permission;
-- refunds/reversals and financial history: `ADMIN` or `FINANCE`;
+- refund/reversal mutations: `FINANCE` only for organisation-scoped operators; `PLATFORM_ADMIN` retains platform override authority;
+- financial history reads: `ADMIN` or `FINANCE`;
 - manual-terminal evidence history: `ADMIN`, `FINANCE` or `SUPERVISOR`;
 - event payment health: authenticated organisation roles including read-only `VIEWER`.
 
@@ -81,13 +82,14 @@ Implemented controls:
 - organisation creation is platform-admin-only;
 - configuration remains `ADMIN`/`PLATFORM_ADMIN`;
 - command-centre and event-close distinguish read, operational-action, financial-correction and close/reopen roles;
+- refund/reversal mutation authority is separated from general event administration and requires `FINANCE` for organisation-scoped operators;
 - privileged payment actor IDs must match the authenticated session;
 - operator/session/membership lifecycle actions have append-only audit records;
 - control-web stores the temporary access token in browser `sessionStorage`, injects it only for the configured Cloud origin and strips obsolete actor/role headers.
 
 The controlled-pilot provisioning path is an audited Cloud DB-admin CLI, not a password login flow. No claim is made that this is final enterprise IAM: external OIDC/SSO, MFA and organization-specific identity-policy integration remain appropriate P2 hardening/graduation work beyond a bounded pilot.
 
-Adversarial coverage includes legacy-header privilege spoofing, role inflation, wrong-organisation selection, platform-only organisation creation, expired/revoked session rejection, revoked-identity rejection, machine-token rejection on human routes, role separation and privileged payment actor spoof rejection before business effect.
+Adversarial coverage includes legacy-header privilege spoofing, role inflation, wrong-organisation selection, platform-only organisation creation, expired/revoked session rejection, revoked-identity rejection, machine-token rejection on human routes, role separation, organisation-admin denial for refund/reversal mutation and privileged payment actor spoof rejection before business effect.
 
 ### SEC-004 — P1 — POS device registration/revocation lifecycle
 
@@ -183,6 +185,7 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 - caller-supplied actor/role headers cannot inflate authority;
 - expired/revoked human session rejected;
 - revoked human identity rejected;
+- `ADMIN` denied refund/reversal mutation unless operating as platform administrator;
 - `VIEWER`/`SUPERVISOR`/`FINANCE` denied actions outside their explicit role;
 - privileged payment body cannot name a different requesting actor;
 - machine Edge credential cannot satisfy a human administrative route;
