@@ -1,6 +1,6 @@
 # Task 008 — Live Event Command Centre
 
-Status: implementation complete; repository CI revalidation in progress
+Status: implementation complete; final repository CI validation in progress
 Base: merged Task 007 (`main` at `e534310d0228e2b4fa93c1ab93d24bd2921f939c`)
 
 ## Objective
@@ -49,4 +49,6 @@ The first permanent runner pass reached build, lint and typecheck successfully, 
 
 The query now compares the event identifier consistently as text (`location.event_id::text = $1`). Cloud API and Event Edge integration files also run serially within their packages so tests that mutate the shared PostgreSQL/process state are deterministic. The repository's existing Prettier surface was normalized without changing product behavior.
 
-A fresh permanent TypeScript + Android CI pass on this exact repaired tree is required before Task 008 is merge-ready.
+Task 008 had diverged from `main` while Task 007 was finalized. The branch has now performed a real merge of current `main`, preserving all eight Task 007 repair commits. The only merge conflict was the Pesapal provider test, and both sides were semantically identical; it was resolved to `main`'s verified Prettier form. The branch is now zero commits behind `main`.
+
+A fresh permanent TypeScript + Android CI pass on this exact merged tree is required before Task 008 is merge-ready.
