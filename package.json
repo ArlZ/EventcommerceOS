@@ -9,7 +9,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "pnpm -r --if-present test",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
@@ -31,10 +31,10 @@
       "body-parser@1.20.4": "1.20.6",
       "glob@10.4.5": "10.5.0",
       "multer@2.0.2": "2.2.0",
-      "next@15.5.22>postcss": "8.5.26",
       "picomatch@4.0.1": "4.0.5",
       "postcss@8.4.31": "8.5.26",
       "postcss@8.5.18": "8.5.26",
+      "next@15.5.22>postcss": "8.5.26",
       "qs@6.14.2": "6.15.3",
       "sharp@0.34.5": "0.35.0",
       "tmp@0.0.33": "0.2.7"
