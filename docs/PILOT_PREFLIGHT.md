@@ -19,7 +19,7 @@ The validation workstation needs:
 - `TRUST_PROXY_HOPS`;
 - `ABUSE_UPSTREAM_CONFIRMED`.
 
-The evidence manifest must already identify the event, event date, venue, deployment mode and all five named owners. Gates may still be `NOT_RUN` or `FAIL` at this point. Any gate already claiming `PASS` must carry evidence references and named review.
+The evidence manifest must already identify the event, event date, venue, deployment mode and all five named owners. Gates may still be `NOT_RUN` or `FAIL` at this point. The manifest must use schema version 2. Any gate already claiming `PASS` must carry digest-bound evidence references and named review.
 
 ## Run
 
@@ -51,8 +51,9 @@ The report verifies:
 
 - exact release SHA and Git tree;
 - clean tracked checkout;
-- matching pilot evidence manifest;
+- matching schema-v2 pilot evidence manifest;
 - named pilot ownership;
+- valid structure for any already-claimed digest-bound PASS evidence;
 - valid deployment-mode configuration;
 - reachable Cloud API and Event Edge health endpoints;
 - correct service identities;
@@ -60,8 +61,10 @@ The report verifies:
 
 The report includes a SHA-256 digest and deliberately does not serialize unrelated environment values.
 
+Preflight validates the structure of any existing PASS evidence references. Final `pilot:evidence:validate` additionally opens the retained evidence files and verifies their SHA-256 digests.
+
 ## What PASS does not prove
 
 Preflight does not replace branch protection, dependency review, representative restore evidence, the deployment flood exercise, supported-device/network testing, offline/restart durability, payment fault testing, inventory reconciliation, controlled pilot close or human go/no-go review.
 
-Continue with `docs/PILOT_RUNBOOK.md`, retain the evidence, and finish with `pnpm pilot:evidence:validate`.
+Continue with `docs/PILOT_RUNBOOK.md`, retain and hash the evidence as described in `docs/PILOT_EVIDENCE.md`, and finish with `pnpm pilot:evidence:validate`.

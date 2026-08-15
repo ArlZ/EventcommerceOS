@@ -15,6 +15,7 @@
     "arch:check": "node scripts/check-architecture.mjs",
     "security:sca": "node scripts/sca-evidence.mjs",
     "pilot:evidence:init": "node scripts/pilot-evidence.mjs init",
+    "pilot:evidence:hash": "node scripts/pilot-evidence.mjs hash",
     "pilot:evidence:validate": "node scripts/pilot-evidence.mjs validate",
     "pilot:preflight": "node scripts/pilot-preflight.mjs",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
