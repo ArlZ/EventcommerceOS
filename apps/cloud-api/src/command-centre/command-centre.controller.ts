@@ -46,10 +46,7 @@ export class CommandCentreController {
     @Headers() headers: HeadersRecord,
     @Param('eventId') eventId: string,
   ): Observable<MessageEvent> {
-    return this.commandCentre.stream(
-      adminContextFromHeaders(headers),
-      uuid(eventId, 'eventId'),
-    );
+    return this.commandCentre.stream(adminContextFromHeaders(headers), uuid(eventId, 'eventId'));
   }
 
   @Post('events/:eventId/inventory-alerts/:alertId/actions')

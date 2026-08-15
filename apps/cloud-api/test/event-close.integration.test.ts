@@ -362,9 +362,9 @@ describeIntegration('event operational close and post-close reconciliation', () 
     });
     expect(closed.body.report.unresolvedPayments).toHaveLength(1);
     expect(closed.body.sha256).toHaveLength(64);
-    expect(
-      createHash('sha256').update(JSON.stringify(closed.body.report)).digest('hex'),
-    ).toBe(closed.body.sha256);
+    expect(createHash('sha256').update(JSON.stringify(closed.body.report)).digest('hex')).toBe(
+      closed.body.sha256,
+    );
 
     const closeReplay = await request(app.getHttpServer())
       .post(`/event-close/events/${eventId}/close`)

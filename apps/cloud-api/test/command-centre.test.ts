@@ -35,10 +35,7 @@ describe('command centre aggregation shape', () => {
     const rails = { availability: () => [] } as unknown as PaymentRailService;
     const service = new CommandCentreService(database, rails);
 
-    const snapshot = await service.snapshot(
-      { actorId, organisationId, role: 'ADMIN' },
-      eventId,
-    );
+    const snapshot = await service.snapshot({ actorId, organisationId, role: 'ADMIN' }, eventId);
 
     expect(calls).toHaveLength(10);
     expect(snapshot.sales.transactionCount).toBe(0);

@@ -5,10 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
-import {
-  DEFAULT_SYNC_EVENT_ID,
-  provisionSyncEdge,
-} from './sync-auth-testkit';
+import { DEFAULT_SYNC_EVENT_ID, provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const OTHER_ORG_ID = '33333333-3333-4333-8333-333333333333';
@@ -85,7 +82,10 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('rejects unauthenticated machine payment initiation before durable payment effect', async () => {
-    await request(app.getHttpServer()).post('/payments/initiate').send(paymentRequest()).expect(401);
+    await request(app.getHttpServer())
+      .post('/payments/initiate')
+      .send(paymentRequest())
+      .expect(401);
     const rows = await database.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM payments',
     );
@@ -113,10 +113,7 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('rejects initiation for an event outside the authenticated Edge organisation', async () => {
-    await applyHeaders(
-      request(app.getHttpServer()).post('/payments/initiate'),
-      primaryHeaders,
-    )
+    await applyHeaders(request(app.getHttpServer()).post('/payments/initiate'), primaryHeaders)
       .send(paymentRequest(OTHER_EVENT_ID))
       .expect(401);
   });
@@ -131,10 +128,7 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it('authorizes reconciliation only to the payment tenant', async () => {
-    await applyHeaders(
-      request(app.getHttpServer()).post('/payments/initiate'),
-      primaryHeaders,
-    )
+    await applyHeaders(request(app.getHttpServer()).post('/payments/initiate'), primaryHeaders)
       .send(paymentRequest())
       .expect(201);
 

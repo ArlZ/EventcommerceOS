@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { DeviceSyncBatch, InitiatePaymentRequest } from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';
@@ -107,11 +102,15 @@ export class DeviceEdgeAuthService {
 
   authorizeSyncBatch(identity: PosDeviceIdentity, batch: DeviceSyncBatch): void {
     if (batch.deviceId !== identity.deviceId) {
-      throw new UnauthorizedException('sync batch deviceId does not match authenticated POS device');
+      throw new UnauthorizedException(
+        'sync batch deviceId does not match authenticated POS device',
+      );
     }
     for (const event of batch.events) {
       if (event.deviceId !== identity.deviceId) {
-        throw new UnauthorizedException('sync event deviceId does not match authenticated POS device');
+        throw new UnauthorizedException(
+          'sync event deviceId does not match authenticated POS device',
+        );
       }
       const eventId = event.payload.eventId;
       if (typeof eventId !== 'string' || eventId.trim() !== identity.eventId) {
@@ -137,7 +136,10 @@ export class DeviceEdgeAuthService {
     }
   }
 
-  async authorizePaymentAttempt(identity: PosDeviceIdentity, paymentAttemptId: string): Promise<void> {
+  async authorizePaymentAttempt(
+    identity: PosDeviceIdentity,
+    paymentAttemptId: string,
+  ): Promise<void> {
     const rows = await this.database.query<EventOwnerRow>(
       `SELECT event_id,device_id FROM edge_payment_attempt_cache WHERE payment_attempt_id=$1`,
       [paymentAttemptId],
@@ -157,7 +159,8 @@ export class DeviceEdgeAuthService {
       `SELECT DISTINCT event_id,device_id FROM edge_payment_attempt_cache WHERE order_id=$1`,
       [orderId],
     );
-    if (rows.length === 0) throw new BadRequestException('order has no cached Edge payment attempts');
+    if (rows.length === 0)
+      throw new BadRequestException('order has no cached Edge payment attempts');
     if (rows.some((row) => row.event_id !== identity.eventId)) {
       throw new UnauthorizedException('order is outside the POS device event assignment');
     }
