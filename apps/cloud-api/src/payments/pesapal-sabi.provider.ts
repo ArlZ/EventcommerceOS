@@ -97,7 +97,9 @@ function secureEqual(actual: string | undefined, expected: string): boolean {
   if (actual === undefined) return false;
   const actualBuffer = Buffer.from(actual);
   const expectedBuffer = Buffer.from(expected);
-  return actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+  return (
+    actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer)
+  );
 }
 
 function minorUnits(amount: number): number {
@@ -183,12 +185,14 @@ export class PesapalSabiProvider implements PaymentProvider {
     const currency = text(notification, 'currency').toUpperCase();
     if (!/^[A-Z]{3}$/.test(currency)) throw new Error('Invalid Pesapal Sabi currency');
     const rawAmount = notification.amount;
-    if (typeof rawAmount !== 'number') throw new Error('Pesapal Sabi payload missing numeric amount');
+    if (typeof rawAmount !== 'number')
+      throw new Error('Pesapal Sabi payload missing numeric amount');
     const notificationAmountMinor = minorUnits(rawAmount);
 
     const verified = await this.verify(confirmationCode);
     const verificationMismatch =
-      (verified.paymentAttemptId !== undefined && verified.paymentAttemptId !== merchantReference) ||
+      (verified.paymentAttemptId !== undefined &&
+        verified.paymentAttemptId !== merchantReference) ||
       (verified.amountMinor !== undefined && verified.amountMinor !== notificationAmountMinor) ||
       (verified.currency !== undefined && verified.currency !== currency);
 
@@ -274,7 +278,10 @@ export class PesapalSabiProvider implements PaymentProvider {
         body.status_description?.trim().toLowerCase() === 'completed' &&
         body.posting_status_description?.trim().toLowerCase() === 'success';
       const completeFinancialIdentity =
-        amountMinor !== undefined && currency !== undefined && paymentAttemptId !== undefined && verifiedCardOption;
+        amountMinor !== undefined &&
+        currency !== undefined &&
+        paymentAttemptId !== undefined &&
+        verifiedCardOption;
       const succeeded = completed && completeFinancialIdentity;
 
       return {

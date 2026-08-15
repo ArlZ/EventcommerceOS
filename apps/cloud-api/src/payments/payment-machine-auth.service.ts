@@ -1,10 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
-import {
-  EdgeCloudAuthService,
-  type EdgeCloudIdentity,
-} from '../sync/edge-cloud-auth.service';
+import { EdgeCloudAuthService, type EdgeCloudIdentity } from '../sync/edge-cloud-auth.service';
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
 

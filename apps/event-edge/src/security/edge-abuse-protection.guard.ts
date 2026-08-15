@@ -121,12 +121,7 @@ export class EdgeAbuseProtectionGuard implements CanActivate {
     );
   }
 
-  private warn(
-    policy: EdgeAbusePolicyName,
-    source: string,
-    retryAfter: number,
-    now: number,
-  ): void {
+  private warn(policy: EdgeAbusePolicyName, source: string, retryAfter: number, now: number): void {
     const key = `${policy}:${source}`;
     const prior = this.warnedAt.get(key) ?? 0;
     if (now - prior < 60_000) return;

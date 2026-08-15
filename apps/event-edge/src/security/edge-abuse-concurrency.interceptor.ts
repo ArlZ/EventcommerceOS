@@ -9,10 +9,7 @@ import {
 } from '@nestjs/common';
 import type { Observable } from 'rxjs';
 import { finalize } from 'rxjs/operators';
-import {
-  classifyEdgeAbuseRequest,
-  type EdgeAbuseRequestLike,
-} from './edge-abuse-protection.guard';
+import { classifyEdgeAbuseRequest, type EdgeAbuseRequestLike } from './edge-abuse-protection.guard';
 import { EdgeAbuseProtectionService } from './edge-abuse-protection.service';
 
 interface ResponseLike {

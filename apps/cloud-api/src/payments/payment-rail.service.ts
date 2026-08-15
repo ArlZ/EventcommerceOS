@@ -4,9 +4,7 @@ import { PAYMENT_PROVIDERS, type PaymentProvider } from './payment-provider';
 
 @Injectable()
 export class PaymentRailService {
-  constructor(
-    @Inject(PAYMENT_PROVIDERS) private readonly providers: readonly PaymentProvider[],
-  ) {}
+  constructor(@Inject(PAYMENT_PROVIDERS) private readonly providers: readonly PaymentProvider[]) {}
 
   availability(): PaymentRailAvailabilityView[] {
     return this.providers

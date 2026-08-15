@@ -3,12 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
-function boundedInteger(
-  name: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   if (!/^\d+$/.test(raw)) throw new Error(`${name} must be an integer`);
@@ -58,12 +53,7 @@ async function bootstrap(): Promise<void> {
   });
   if (trustProxyHops > 0) app.set('trust proxy', trustProxyHops);
 
-  const jsonBodyLimit = boundedInteger(
-    'HTTP_JSON_BODY_LIMIT_BYTES',
-    1_048_576,
-    65_536,
-    2_097_152,
-  );
+  const jsonBodyLimit = boundedInteger('HTTP_JSON_BODY_LIMIT_BYTES', 1_048_576, 65_536, 2_097_152);
   const urlencodedBodyLimit = boundedInteger(
     'HTTP_URLENCODED_BODY_LIMIT_BYTES',
     65_536,

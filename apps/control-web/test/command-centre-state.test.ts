@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CommandCentreSnapshot } from '@event-commerce/contracts';
-import {
-  nextRealtimeMode,
-  snapshotIsStale,
-} from '../src/app/command-centre/command-centre-state';
+import { nextRealtimeMode, snapshotIsStale } from '../src/app/command-centre/command-centre-state';
 
 function snapshot(generatedAt: string, staleAfterSeconds = 30): CommandCentreSnapshot {
   return {

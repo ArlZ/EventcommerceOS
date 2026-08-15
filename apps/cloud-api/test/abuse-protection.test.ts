@@ -1,10 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import type { OperatorIdentityGuard } from '../src/auth/operator-identity.guard';
-import {
-  AbuseProtectionGuard,
-  classifyAbuseRequest,
-} from '../src/security/abuse-protection.guard';
+import { AbuseProtectionGuard, classifyAbuseRequest } from '../src/security/abuse-protection.guard';
 import { AbuseProtectionService } from '../src/security/abuse-protection.service';
 import { GlobalSecurityGuard } from '../src/security/global-security.guard';
 

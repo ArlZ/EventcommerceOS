@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { EdgeCloudBatch, InventoryEdgeBatch } from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';

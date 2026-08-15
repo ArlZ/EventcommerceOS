@@ -26,11 +26,14 @@ describe('payment card-data boundary', () => {
     ['pin', 'prohibited-value'],
     ['track2', 'prohibited-value'],
     ['emv', { blob: 'prohibited-value' }],
-  ])('rejects prohibited field %s before it becomes an application payment request', (key, value) => {
-    expect(() => parseInitiatePaymentRequest({ ...initiation(), [key]: value })).toThrow(
-      'Prohibited raw card field',
-    );
-  });
+  ])(
+    'rejects prohibited field %s before it becomes an application payment request',
+    (key, value) => {
+      expect(() => parseInitiatePaymentRequest({ ...initiation(), [key]: value })).toThrow(
+        'Prohibited raw card field',
+      );
+    },
+  );
 
   it('rejects prohibited card fields nested inside arbitrary external payloads', () => {
     expect(() =>
@@ -40,7 +43,10 @@ describe('payment card-data boundary', () => {
 
   it('rejects all unexpected command fields rather than silently carrying arbitrary data', () => {
     expect(() =>
-      parseInitiatePaymentRequest({ ...initiation(), arbitraryTerminalBlob: 'not-part-of-contract' }),
+      parseInitiatePaymentRequest({
+        ...initiation(),
+        arbitraryTerminalBlob: 'not-part-of-contract',
+      }),
     ).toThrow('Unexpected payment request field: arbitraryTerminalBlob');
   });
 
