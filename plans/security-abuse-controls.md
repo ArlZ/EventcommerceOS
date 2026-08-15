@@ -1,6 +1,6 @@
 # Security remediation — HTTP abuse controls
 
-Status: implementation complete; repository CI revalidation in progress; deployment abuse evidence remains pending
+Status: implementation complete; post-format repository CI revalidation in progress; deployment abuse evidence remains pending
 Base: `security/human-auth-rbac` (PR #17)
 
 ## Objective
@@ -87,7 +87,8 @@ Event Edge tests cover:
 
 - The first real runner pass failed only on cross-stack TypeScript import/DI hygiene: Nest constructor tokens had been converted to type-only imports, and two test helpers still used value imports only as types.
 - The DI-safe source fixes, stale auth/payment/FK integration fixtures, and deterministic shared-database test execution were proven on the green PR #19 stack and have now been backported here without bringing backup/restore implementation or SCA scope into this PR.
-- A fresh permanent TypeScript + Android CI pass on this branch is required before merge readiness.
+- CI run 492 passed Android, build, lint, typecheck and the complete test suite; its only failure was repository-wide Prettier drift across the existing formatting surface.
+- That formatting surface has now been normalized with Prettier only. A fresh permanent TypeScript + Android CI pass on the post-format tree is required before merge readiness.
 
 ## Remaining release evidence
 
