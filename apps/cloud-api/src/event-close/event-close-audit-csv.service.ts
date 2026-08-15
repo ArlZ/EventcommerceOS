@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { EventCloseActionView, EventCloseReport } from '@event-commerce/contracts';
-import { EventCloseService } from './event-close.service';
+import type { EventCloseService } from './event-close.service';
 
 @Injectable()
 export class EventCloseAuditCsvService {

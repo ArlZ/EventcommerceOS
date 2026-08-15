@@ -1,11 +1,5 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  HttpException,
-  HttpStatus,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
+import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { OperatorIdentityGuard } from '../auth/operator-identity.guard';
 import {
   AbuseProtectionGuard,

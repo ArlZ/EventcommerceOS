@@ -1,11 +1,21 @@
-import { BadRequestException, Body, Controller, Get, Headers, Inject, Param, Post, Sse } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Param,
+  Post,
+  Sse,
+} from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
 import { from, type Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
-import { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
-import { CommandCentreService } from './command-centre.service';
+import type { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
+import type { CommandCentreService } from './command-centre.service';
 import { parseInventoryAlertAction } from './command-centre-validation';
 
 @Controller('command-centre')

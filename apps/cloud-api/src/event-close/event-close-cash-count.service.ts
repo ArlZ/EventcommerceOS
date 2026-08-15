@@ -13,10 +13,7 @@ export class EventCloseCashCountService {
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
   async enrichLive(eventId: string, report: EventCloseReport): Promise<EventCloseReport> {
-    const rows = await this.database.query<CashCountRow>(
-      this.query(),
-      [eventId],
-    );
+    const rows = await this.database.query<CashCountRow>(this.query(), [eventId]);
     return this.enrich(report, rows);
   }
 

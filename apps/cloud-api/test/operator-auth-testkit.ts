@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { DatabaseService } from '../src/database/database.service';
+import type { DatabaseService } from '../src/database/database.service';
 import type { OperatorOrganisationRole } from '../src/auth/operator-auth.service';
 
 function digest(value: string): string {
@@ -37,7 +37,12 @@ export async function provisionOperator(
   );
 
   for (const membership of options.memberships ?? []) {
-    await grantOperatorMembership(database, options.actorId, membership.organisationId, membership.role);
+    await grantOperatorMembership(
+      database,
+      options.actorId,
+      membership.organisationId,
+      membership.role,
+    );
   }
 
   await database.query(
@@ -77,10 +82,9 @@ export async function revokeOperatorSession(
   database: DatabaseService,
   token: string,
 ): Promise<void> {
-  await database.query(
-    'UPDATE operator_sessions SET revoked_at=now() WHERE token_sha256=$1',
-    [digest(token)],
-  );
+  await database.query('UPDATE operator_sessions SET revoked_at=now() WHERE token_sha256=$1', [
+    digest(token),
+  ]);
 }
 
 export async function revokeOperatorIdentity(

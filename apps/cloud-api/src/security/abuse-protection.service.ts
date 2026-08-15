@@ -49,12 +49,7 @@ function inFlightEnv(policy: AbusePolicyName): string {
   return `ABUSE_MAX_IN_FLIGHT_${policy}`;
 }
 
-function boundedInteger(
-  name: string,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   if (!/^\d+$/.test(raw)) throw new Error(`${name} must be an integer`);
@@ -92,12 +87,7 @@ export class AbuseProtectionService {
             name,
             requestsPerMinute,
             burst,
-            maxInFlight: boundedInteger(
-              inFlightEnv(name),
-              defaults.maxInFlight,
-              1,
-              5_000,
-            ),
+            maxInFlight: boundedInteger(inFlightEnv(name), defaults.maxInFlight, 1, 5_000),
           },
         ];
       }),

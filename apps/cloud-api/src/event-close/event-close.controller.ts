@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
-import { EventCloseLedgerService } from './event-close-ledger.service';
-import { EventCloseService } from './event-close.service';
+import type { EventCloseLedgerService } from './event-close-ledger.service';
+import type { EventCloseService } from './event-close.service';
 import {
   parseCashDeclaration,
   parseCloseAction,
@@ -72,7 +72,11 @@ export class EventCloseController {
       normalizedEventId,
       CORRECTION_ROLES,
     );
-    return this.ledger.recordOrderAdjustment(context, normalizedEventId, parseOrderAdjustment(body));
+    return this.ledger.recordOrderAdjustment(
+      context,
+      normalizedEventId,
+      parseOrderAdjustment(body),
+    );
   }
 
   @Post('cash-declarations')

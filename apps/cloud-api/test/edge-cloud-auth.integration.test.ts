@@ -2,7 +2,11 @@ import 'reflect-metadata';
 import { createHash } from 'node:crypto';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import type { EdgeCloudBatch, InventoryEdgeBatch, SyncEventEnvelope } from '@event-commerce/contracts';
+import type {
+  EdgeCloudBatch,
+  InventoryEdgeBatch,
+  SyncEventEnvelope,
+} from '@event-commerce/contracts';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -191,7 +195,13 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
   });
 
   it('attributes accepted sync truth to the authenticated Edge and organisation', async () => {
-    const event = orderEvent('accepted', DEFAULT_SYNC_EVENT_ID, 'accepted-device', 1, 'accepted-order');
+    const event = orderEvent(
+      'accepted',
+      DEFAULT_SYNC_EVENT_ID,
+      'accepted-device',
+      1,
+      'accepted-order',
+    );
     await request(app.getHttpServer())
       .post('/sync/edge-events')
       .set(syncEdgeHeaders(edgeA, tokenA))

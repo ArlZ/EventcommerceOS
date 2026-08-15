@@ -111,11 +111,7 @@ describeIntegration('live event command centre', () => {
        ) VALUES (
          'order-1','device-1',4,'CLOSED',10000,'KES',$1,$2,$3::jsonb,now()-interval '2 minutes'
        )`,
-      [
-        eventId,
-        salesLocationId,
-        JSON.stringify([{ skuId, quantity: 2, unitPriceMinor: 5000 }]),
-      ],
+      [eventId, salesLocationId, JSON.stringify([{ skuId, quantity: 2, unitPriceMinor: 5000 }])],
     );
     await database.query(
       `INSERT INTO sync_device_state(

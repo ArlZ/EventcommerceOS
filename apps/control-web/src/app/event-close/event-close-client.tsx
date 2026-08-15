@@ -1,9 +1,6 @@
 'use client';
 
-import type {
-  EventCloseReport,
-  EventCloseStoredReportView,
-} from '@event-commerce/contracts';
+import type { EventCloseReport, EventCloseStoredReportView } from '@event-commerce/contracts';
 import { useMemo, useState } from 'react';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -97,7 +94,9 @@ function ExceptionBox({
         padding: 14,
       }}
     >
-      <strong>{title} • {count}</strong>
+      <strong>
+        {title} • {count}
+      </strong>
       <div style={{ marginTop: 8 }}>{children}</div>
     </section>
   );
@@ -192,7 +191,9 @@ export function EventCloseClient() {
       anchor.remove();
       URL.revokeObjectURL(url);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Unable to export reconciliation report');
+      setError(
+        failure instanceof Error ? failure.message : 'Unable to export reconciliation report',
+      );
     } finally {
       setBusy(false);
     }
@@ -215,7 +216,8 @@ export function EventCloseClient() {
       <header style={{ marginBottom: 20 }}>
         <h1 style={{ marginBottom: 6 }}>Event Close & Reconciliation</h1>
         <p style={{ marginTop: 0 }}>
-          Operational close snapshots truth. It does not erase uncertainty or rewrite source ledgers.
+          Operational close snapshots truth. It does not erase uncertainty or rewrite source
+          ledgers.
         </p>
         <div
           style={{
@@ -268,7 +270,8 @@ export function EventCloseClient() {
             </div>
             {report.close.sourceChangedSinceLastClose ? (
               <p style={{ color: '#a32626', fontWeight: 700 }}>
-                Source truth changed after the last close. The stored close revision is unchanged; review the live reconciliation and re-close only after an audited reopen.
+                Source truth changed after the last close. The stored close revision is unchanged;
+                review the live reconciliation and re-close only after an audited reopen.
               </p>
             ) : null}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
@@ -313,9 +316,17 @@ export function EventCloseClient() {
               {report.unresolvedPayments.length === 0 ? <span>None.</span> : null}
               {report.unresolvedPayments.map((payment) => (
                 <div key={payment.paymentAttemptId} style={{ marginBottom: 8 }}>
-                  <strong>{payment.providerId} • {payment.status}</strong>
-                  <div>{payment.orderId} • {money(payment.currency, payment.amountMinor)}</div>
-                  <small>{payment.reconciliationErrorCode ?? payment.failureCode ?? 'Awaiting provider truth'}</small>
+                  <strong>
+                    {payment.providerId} • {payment.status}
+                  </strong>
+                  <div>
+                    {payment.orderId} • {money(payment.currency, payment.amountMinor)}
+                  </div>
+                  <small>
+                    {payment.reconciliationErrorCode ??
+                      payment.failureCode ??
+                      'Awaiting provider truth'}
+                  </small>
                 </div>
               ))}
             </ExceptionBox>
@@ -323,7 +334,8 @@ export function EventCloseClient() {
               {report.openTransfers.length === 0 ? <span>None.</span> : null}
               {report.openTransfers.map((transfer) => (
                 <div key={transfer.transferId} style={{ marginBottom: 8 }}>
-                  <strong>{transfer.state}</strong> • {transfer.sourceLocationId} → {transfer.destinationLocationId}
+                  <strong>{transfer.state}</strong> • {transfer.sourceLocationId} →{' '}
+                  {transfer.destinationLocationId}
                 </div>
               ))}
             </ExceptionBox>
@@ -335,7 +347,9 @@ export function EventCloseClient() {
               {report.unresolvedCriticalAlerts.map((alert) => (
                 <div key={alert.alertId} style={{ marginBottom: 8 }}>
                   <strong>{alert.alertType}</strong> • {alert.state}
-                  <div>{alert.skuId} • available {alert.availableQuantityBase}</div>
+                  <div>
+                    {alert.skuId} • available {alert.availableQuantityBase}
+                  </div>
                 </div>
               ))}
             </ExceptionBox>
@@ -360,7 +374,9 @@ export function EventCloseClient() {
             <Panel title="Sales vs tender">
               {report.financialReconciliation.map((row) => (
                 <div key={row.currency} style={{ marginBottom: 12 }}>
-                  <strong>{row.currency} • {row.conclusive ? 'CONCLUSIVE' : 'UNRESOLVED'}</strong>
+                  <strong>
+                    {row.currency} • {row.conclusive ? 'CONCLUSIVE' : 'UNRESOLVED'}
+                  </strong>
                   <div>Net sales: {money(row.currency, row.netSalesMinor)}</div>
                   <div>Electronic: {money(row.currency, row.electronicNetTenderMinor)}</div>
                   <div>Cash expected: {money(row.currency, row.cashExpectedMinor)}</div>
@@ -373,10 +389,21 @@ export function EventCloseClient() {
             <Panel title="Provider reconciliation">
               {report.providerReconciliation.length === 0 ? <p>No provider payments.</p> : null}
               {report.providerReconciliation.map((provider) => (
-                <div key={`${provider.providerId}:${provider.currency}`} style={{ marginBottom: 12 }}>
-                  <strong>{provider.providerId} • {provider.transactionReconciliationStatus}</strong>
-                  <div>{provider.succeededCount} success • {money(provider.currency, provider.succeededValueMinor)}</div>
-                  <div>{provider.pendingCount} pending • {provider.unknownCount} unknown • {provider.failedCount} failed</div>
+                <div
+                  key={`${provider.providerId}:${provider.currency}`}
+                  style={{ marginBottom: 12 }}
+                >
+                  <strong>
+                    {provider.providerId} • {provider.transactionReconciliationStatus}
+                  </strong>
+                  <div>
+                    {provider.succeededCount} success •{' '}
+                    {money(provider.currency, provider.succeededValueMinor)}
+                  </div>
+                  <div>
+                    {provider.pendingCount} pending • {provider.unknownCount} unknown •{' '}
+                    {provider.failedCount} failed
+                  </div>
                   <small>{provider.settlementStatus}</small>
                 </div>
               ))}
@@ -398,19 +425,36 @@ export function EventCloseClient() {
                   style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
                 >
                   <strong>{scope.salesLocationName ?? scope.salesLocationId}</strong>
-                  <div>{scope.deviceId} • {scope.cashierId}</div>
-                  <div>Expected {money(scope.currency, scope.expectedMinor)} • Declared {money(scope.currency, scope.declaredMinor)}</div>
-                  <small>{scope.declarationStatus} • variance {money(scope.currency, scope.varianceMinor)}</small>
+                  <div>
+                    {scope.deviceId} • {scope.cashierId}
+                  </div>
+                  <div>
+                    Expected {money(scope.currency, scope.expectedMinor)} • Declared{' '}
+                    {money(scope.currency, scope.declaredMinor)}
+                  </div>
+                  <small>
+                    {scope.declarationStatus} • variance{' '}
+                    {money(scope.currency, scope.varianceMinor)}
+                  </small>
                 </div>
               ))}
             </Panel>
 
             <Panel title="Inventory count variance">
-              {report.inventoryVariances.length === 0 ? <p>No closed count variance detail.</p> : null}
+              {report.inventoryVariances.length === 0 ? (
+                <p>No closed count variance detail.</p>
+              ) : null}
               {report.inventoryVariances.map((variance) => (
-                <div key={`${variance.inventoryLocationId}|${variance.skuId}`} style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}>
-                  <strong>{variance.skuName}</strong> • {variance.inventoryLocationName ?? variance.inventoryLocationId}
-                  <div>Expected {variance.expectedQuantityBase} • Physical {variance.physicalQuantityBase} • Variance {variance.varianceQuantityBase}</div>
+                <div
+                  key={`${variance.inventoryLocationId}|${variance.skuId}`}
+                  style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
+                >
+                  <strong>{variance.skuName}</strong> •{' '}
+                  {variance.inventoryLocationName ?? variance.inventoryLocationId}
+                  <div>
+                    Expected {variance.expectedQuantityBase} • Physical{' '}
+                    {variance.physicalQuantityBase} • Variance {variance.varianceQuantityBase}
+                  </div>
                   <small>
                     {variance.valuationStatus === 'VALUED'
                       ? `Value ${money(variance.valuationCurrency ?? '', variance.varianceValueMinor)}`
@@ -494,13 +538,15 @@ export function EventCloseClient() {
           <Panel title="Immutable close revisions">
             {stored.length === 0 ? <p>No operational close revision stored yet.</p> : null}
             {stored.map((item) => (
-              <div
-                key={item.reportId}
-                style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}
-              >
-                <strong>Revision {item.revision}</strong> • {new Date(item.createdAt).toLocaleString()}
-                <div>SHA-256: <code>{item.sha256}</code></div>
-                <div>Source version: <code>{item.sourceVersionToken}</code></div>
+              <div key={item.reportId} style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}>
+                <strong>Revision {item.revision}</strong> •{' '}
+                {new Date(item.createdAt).toLocaleString()}
+                <div>
+                  SHA-256: <code>{item.sha256}</code>
+                </div>
+                <div>
+                  Source version: <code>{item.sourceVersionToken}</code>
+                </div>
                 <button
                   type="button"
                   disabled={busy || !active}
