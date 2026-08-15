@@ -7,7 +7,7 @@ RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 WORKDIR /workspace
 
 FROM pnpm-base AS build
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json eslint.config.mjs ./
 COPY apps ./apps
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
