@@ -6,19 +6,29 @@ import process from 'node:process';
 const root = process.cwd();
 const evidenceDir = path.resolve(root, process.env.SCA_EVIDENCE_DIR ?? 'artifacts/sca');
 const acceptancePath = path.resolve(root, 'security/sca-acceptances.json');
-const osvBase = (process.env.SCA_OSV_API_BASE ?? 'https://api.osv.dev/v1').replace(/\/+$/, '');
+const configuredOsvBase = process.env.SCA_OSV_API_BASE ?? 'https://api.osv.dev/v1';
 const requireCleanGit = process.env.SCA_REQUIRE_CLEAN_GIT !== 'false';
 const maxAcceptanceMs = 90 * 24 * 60 * 60 * 1000;
-
-if (!osvBase.startsWith('https://')) {
-  throw new Error('SCA_OSV_API_BASE must use HTTPS');
-}
+const rfc3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function sanitized(value) {
   return String(value)
     .replace(/https?:\/\/[^/@\s]+:[^/@\s]+@/g, 'https://[redacted]@')
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
     .replace(/(token|password|secret)=([^\s&]+)/gi, '$1=[redacted]');
+}
+
+function osvBaseUrl() {
+  let parsed;
+  try {
+    parsed = new URL(configuredOsvBase);
+  } catch {
+    throw new Error('SCA_OSV_API_BASE must be a valid HTTPS URL');
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw new Error('SCA_OSV_API_BASE must use HTTPS and must not contain credentials');
+  }
+  return parsed.toString().replace(/\/+$/, '');
 }
 
 function run(command, args, options = {}) {
@@ -46,7 +56,9 @@ function run(command, args, options = {}) {
 function normalizeVersion(value) {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim().replace(/^v(?=\d)/, '');
-  if (!trimmed || /^(link:|workspace:|file:|git\+|github:|https?:)/i.test(trimmed)) return undefined;
+  if (!trimmed || /^(link:|workspace:|file:|git\+|github:|https?:|npm:)/i.test(trimmed)) {
+    return undefined;
+  }
   const withoutPeers = trimmed.split('(')[0]?.trim();
   if (!withoutPeers || !/^\d/.test(withoutPeers)) return undefined;
   return withoutPeers;
@@ -73,7 +85,15 @@ function addInventory(target, item, scope) {
   target.set(key, { ...normalized, scopes: new Set([scope]) });
 }
 
-function collectDependencyMaps(node, target, inheritedScope = 'workspace') {
+function isLocalWorkspacePath(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const resolved = path.resolve(value);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return false;
+  return !relative.split(path.sep).includes('node_modules');
+}
+
+function collectDependencyMaps(node, target) {
   if (!node || typeof node !== 'object') return;
   const sections = [
     ['dependencies', 'production'],
@@ -89,9 +109,11 @@ function collectDependencyMaps(node, target, inheritedScope = 'workspace') {
         continue;
       }
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
-      const actualName = typeof raw.name === 'string' ? raw.name : declaredName;
-      addInventory(target, { ecosystem: 'npm', name: actualName, version: raw.version }, scope);
-      collectDependencyMaps(raw, target, scope ?? inheritedScope);
+      if (!isLocalWorkspacePath(raw.path)) {
+        const actualName = typeof raw.name === 'string' ? raw.name : declaredName;
+        addInventory(target, { ecosystem: 'npm', name: actualName, version: raw.version }, scope);
+      }
+      collectDependencyMaps(raw, target);
     }
   }
 }
@@ -170,9 +192,7 @@ async function fetchJson(url, init = {}, attempts = 3) {
         },
         signal: AbortSignal.timeout(20_000),
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
       return await response.json();
     } catch (error) {
       lastError = error;
@@ -182,7 +202,7 @@ async function fetchJson(url, init = {}, attempts = 3) {
   throw new Error(`OSV request failed after ${attempts} attempts: ${sanitized(lastError)}`);
 }
 
-async function queryOsv(inventory) {
+async function queryOsv(inventory, osvBase) {
   const idsByIndex = inventory.map(() => new Set());
   const pageCounts = inventory.map(() => 0);
   let pending = inventory.map((item, index) => ({ item, index, pageToken: undefined }));
@@ -255,8 +275,7 @@ function normalizeSeverity(value) {
 }
 
 function advisorySeverity(record, item) {
-  const candidates = [];
-  candidates.push(record?.database_specific?.severity);
+  const candidates = [record?.database_specific?.severity];
   for (const affected of Array.isArray(record?.affected) ? record.affected : []) {
     const pkg = affected?.package;
     if (pkg?.ecosystem === item.ecosystem && pkg?.name === item.name) {
@@ -282,6 +301,10 @@ function acceptanceKey(value) {
   return `${value.vulnerabilityId}\u0000${value.ecosystem}\u0000${value.packageName}\u0000${value.version}`;
 }
 
+function validRfc3339(value) {
+  return typeof value === 'string' && rfc3339.test(value) && Number.isFinite(Date.parse(value));
+}
+
 async function loadAcceptances(now) {
   const parsed = JSON.parse(await readFile(acceptancePath, 'utf8'));
   if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.acceptances)) {
@@ -291,28 +314,41 @@ async function loadAcceptances(now) {
   const validationErrors = [];
   for (const [index, entry] of parsed.acceptances.entries()) {
     const label = `acceptances[${index}]`;
-    const required = ['vulnerabilityId', 'ecosystem', 'packageName', 'version', 'acceptedAt', 'expiresAt', 'approvedBy', 'reason'];
+    const entryErrors = [];
+    const required = [
+      'vulnerabilityId',
+      'ecosystem',
+      'packageName',
+      'version',
+      'acceptedAt',
+      'expiresAt',
+      'approvedBy',
+      'reason',
+    ];
     for (const key of required) {
       if (typeof entry?.[key] !== 'string' || !entry[key].trim()) {
-        validationErrors.push(`${label}.${key} is required`);
+        entryErrors.push(`${label}.${key} is required`);
       }
     }
     if (typeof entry?.reason === 'string' && entry.reason.trim().length < 20) {
-      validationErrors.push(`${label}.reason must be at least 20 characters`);
+      entryErrors.push(`${label}.reason must be at least 20 characters`);
     }
-    const acceptedAt = Date.parse(entry?.acceptedAt ?? '');
-    const expiresAt = Date.parse(entry?.expiresAt ?? '');
-    if (!Number.isFinite(acceptedAt) || !Number.isFinite(expiresAt)) {
-      validationErrors.push(`${label} acceptedAt/expiresAt must be RFC3339 timestamps`);
+    if (!validRfc3339(entry?.acceptedAt) || !validRfc3339(entry?.expiresAt)) {
+      entryErrors.push(`${label} acceptedAt/expiresAt must be RFC3339 timestamps`);
     } else {
-      if (acceptedAt > now) validationErrors.push(`${label}.acceptedAt cannot be in the future`);
-      if (expiresAt <= now) validationErrors.push(`${label} is expired`);
-      if (expiresAt <= acceptedAt) validationErrors.push(`${label}.expiresAt must be after acceptedAt`);
+      const acceptedAt = Date.parse(entry.acceptedAt);
+      const expiresAt = Date.parse(entry.expiresAt);
+      if (acceptedAt > now) entryErrors.push(`${label}.acceptedAt cannot be in the future`);
+      if (expiresAt <= now) entryErrors.push(`${label} is expired`);
+      if (expiresAt <= acceptedAt) entryErrors.push(`${label}.expiresAt must be after acceptedAt`);
       if (expiresAt - acceptedAt > maxAcceptanceMs) {
-        validationErrors.push(`${label} may not exceed 90 days`);
+        entryErrors.push(`${label} may not exceed 90 days`);
       }
     }
-    const key = acceptanceKey(entry ?? {});
+
+    validationErrors.push(...entryErrors);
+    if (entryErrors.length > 0) continue;
+    const key = acceptanceKey(entry);
     if (map.has(key)) validationErrors.push(`${label} duplicates another acceptance`);
     else map.set(key, entry);
   }
@@ -326,10 +362,19 @@ function commandVersion(command, args) {
 }
 
 function resolveCommit() {
-  const explicit = process.env.SCA_RELEASE_COMMIT?.trim() || process.env.GITHUB_SHA?.trim();
-  const value = explicit || run('git', ['rev-parse', 'HEAD']).stdout.trim();
-  if (!/^[0-9a-f]{40}$/i.test(value)) throw new Error('Release commit must be a 40-character git SHA');
-  return value.toLowerCase();
+  const git = run('git', ['rev-parse', 'HEAD'], { allowFailure: true });
+  const head = git.status === 0 ? git.stdout.trim().toLowerCase() : undefined;
+  const explicit = process.env.SCA_RELEASE_COMMIT?.trim().toLowerCase();
+  if (explicit && !/^[0-9a-f]{40}$/i.test(explicit)) {
+    throw new Error('SCA_RELEASE_COMMIT must be a 40-character git SHA');
+  }
+  if (head && !/^[0-9a-f]{40}$/i.test(head)) throw new Error('git HEAD is not a 40-character SHA');
+  if (explicit && head && explicit !== head) {
+    throw new Error('SCA_RELEASE_COMMIT does not match the checked-out git HEAD');
+  }
+  const value = explicit ?? head;
+  if (!value) throw new Error('Release commit could not be resolved from git HEAD');
+  return value;
 }
 
 function gitState() {
@@ -353,6 +398,7 @@ async function main() {
   const generatedAt = new Date();
   const commit = resolveCommit();
   const git = gitState();
+  const osvBase = osvBaseUrl();
   const errors = [];
   if (requireCleanGit && (!git.available || !git.clean)) {
     errors.push('Release SCA evidence requires a clean git working tree');
@@ -371,7 +417,7 @@ async function main() {
   const { map: acceptances, validationErrors, entries } = await loadAcceptances(generatedAt.getTime());
   errors.push(...validationErrors);
 
-  const { idsByIndex, records } = await queryOsv(inventory);
+  const { idsByIndex, records } = await queryOsv(inventory, osvBase);
   const findings = [];
   const matchedAcceptanceKeys = new Set();
   inventory.forEach((item, index) => {
@@ -395,7 +441,9 @@ async function main() {
         version: item.version,
         scopes: item.scopes,
         summary: typeof record.summary === 'string' ? record.summary : null,
-        aliases: Array.isArray(record.aliases) ? record.aliases.filter((alias) => typeof alias === 'string') : [],
+        aliases: Array.isArray(record.aliases)
+          ? record.aliases.filter((alias) => typeof alias === 'string')
+          : [],
         modified: typeof record.modified === 'string' ? record.modified : null,
         advisoryUrl: advisoryUrl(record),
         accepted: Boolean(acceptance),
@@ -480,8 +528,12 @@ try {
     schemaVersion: 1,
     status: 'FAIL',
     generatedAt: new Date().toISOString(),
-    releaseCommit: process.env.SCA_RELEASE_COMMIT ?? process.env.GITHUB_SHA ?? null,
-    scanner: { source: 'OSV.dev API v1', apiBase: osvBase, failureMode: 'fail-closed' },
+    releaseCommit: null,
+    scanner: {
+      source: 'OSV.dev API v1',
+      apiBase: sanitized(configuredOsvBase),
+      failureMode: 'fail-closed',
+    },
     errors: [message],
   };
   const target = await writeEvidence(failed, 'sca-evidence-failed.json');
