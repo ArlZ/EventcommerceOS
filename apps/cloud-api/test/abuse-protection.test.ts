@@ -27,20 +27,34 @@ function requestContext(
 }
 
 describe('HTTP abuse protection', () => {
-  it('depletes and continuously refills a token bucket', () => {
+  it('bounds immediate burst separately from sustained refill rate', () => {
     const service = new AbuseProtectionService();
-    const limit = service.policy('PUBLIC').requestsPerMinute;
+    const policy = service.policy('PUBLIC');
     const now = 10_000;
 
-    for (let index = 0; index < limit; index += 1) {
+    for (let index = 0; index < policy.burst; index += 1) {
       expect(service.consume('PUBLIC', 'source:test', now).allowed).toBe(true);
     }
     const rejected = service.consume('PUBLIC', 'source:test', now);
     expect(rejected.allowed).toBe(false);
     expect(rejected.remaining).toBe(0);
+    expect(rejected.limit).toBe(policy.requestsPerMinute);
+    expect(rejected.burst).toBe(policy.burst);
 
-    const refillMs = Math.ceil(60_000 / limit);
+    const refillMs = Math.ceil(60_000 / policy.requestsPerMinute);
     expect(service.consume('PUBLIC', 'source:test', now + refillMs).allowed).toBe(true);
+  });
+
+  it('caps global in-flight work independently from token rate', () => {
+    const service = new AbuseProtectionService();
+    const max = service.policy('OPERATOR_MUTATION').maxInFlight;
+    for (let index = 0; index < max; index += 1) {
+      expect(service.tryEnter('OPERATOR_MUTATION')).toBe(true);
+    }
+    expect(service.inFlightCount('OPERATOR_MUTATION')).toBe(max);
+    expect(service.tryEnter('OPERATOR_MUTATION')).toBe(false);
+    service.leave('OPERATOR_MUTATION');
+    expect(service.tryEnter('OPERATOR_MUTATION')).toBe(true);
   });
 
   it('classifies high-throughput machine and provider routes separately from operators', () => {
@@ -97,10 +111,10 @@ describe('HTTP abuse protection', () => {
     expect(classified?.principalKey).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('returns 429 with retry metadata after the source bucket is exhausted', () => {
+  it('returns 429 with retry metadata after the source burst is exhausted', () => {
     const service = new AbuseProtectionService();
     const guard = new AbuseProtectionGuard(service);
-    const limit = service.policy('PUBLIC').requestsPerMinute;
+    const policy = service.policy('PUBLIC');
     const responseHeaders: Record<string, string> = {};
     const request = {
       method: 'GET',
@@ -110,12 +124,13 @@ describe('HTTP abuse protection', () => {
     };
     const context = requestContext(request, responseHeaders);
 
-    for (let index = 0; index < limit; index += 1) {
+    for (let index = 0; index < policy.burst; index += 1) {
       expect(guard.canActivate(context)).toBe(true);
     }
     expect(() => guard.canActivate(context)).toThrowError(/Request rate exceeded/);
     expect(Number(responseHeaders['Retry-After'])).toBeGreaterThanOrEqual(1);
     expect(responseHeaders['X-RateLimit-Policy']).toBe('PUBLIC');
+    expect(responseHeaders['X-RateLimit-Burst']).toBe(String(policy.burst));
     expect(responseHeaders['X-RateLimit-Remaining']).toBe('0');
   });
 
