@@ -90,40 +90,11 @@ describeIntegration('sync and inventory acceptance boundary', () => {
        WHERE source_event_instance_id = $1 AND movement_type = 'SALE'`,
       [sale.eventInstanceId],
     );
-    const ledgerRows = await database.query<{
-      event_id: string;
-      movement_type: string;
-      quantity_delta: string;
-      source_type: string;
-      source_id: string;
-      source_event_instance_id: string | null;
-      idempotency_key: string;
-      reversal_of_ledger_id: string | null;
-    }>(
-      `SELECT event_id, movement_type, quantity_delta::text, source_type, source_id,
-              source_event_instance_id, idempotency_key, reversal_of_ledger_id
-       FROM edge_inventory_ledger
-       WHERE inventory_location_id = $1 AND sku_id = $2
-       ORDER BY occurred_at, created_at, id`,
-      [mainLocationId, beerSkuId],
-    );
-    const directStock = await database.query<{ on_hand: string }>(
-      `SELECT COALESCE(SUM(quantity_delta), 0)::text AS on_hand
-       FROM edge_inventory_ledger
-       WHERE event_id = $1 AND inventory_location_id = $2 AND sku_id = $3`,
-      [inventoryEventId, mainLocationId, beerSkuId],
-    );
     const stock = await database.query<{ on_hand: string }>(
       `SELECT on_hand::text FROM edge_inventory_stock_projection
        WHERE event_id = $1 AND inventory_location_id = $2 AND sku_id = $3`,
       [inventoryEventId, mainLocationId, beerSkuId],
     );
-
-    console.log(
-      'INVENTORY_SYNC_BOUNDARY_DIAGNOSTIC',
-      JSON.stringify({ ledgerRows, directStock, stock }),
-    );
-
     expect(movement[0]).toEqual({ count: '1', quantity: '-2' });
     expect(stock[0]!.on_hand).toBe('98');
   });
