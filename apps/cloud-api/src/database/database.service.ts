@@ -6,7 +6,9 @@ const { Pool } = pg;
 const LOCAL_DATABASE_URL =
   'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_cloud';
 
-export function databaseConnectionString(environment: NodeJS.ProcessEnv = process.env): string {
+export function databaseConnectionString(
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
   const configured = environment.DATABASE_URL?.trim();
   if (configured) return configured;
   if (environment.NODE_ENV === 'production') {
