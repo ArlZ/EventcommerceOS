@@ -193,14 +193,20 @@ test('manifest readiness accepts digest-bound evidence on a claimed PASS', () =>
   };
 
   const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
-  assert.equal(errors.some((entry) => entry.includes('hardwareNetwork')), false);
+  assert.equal(
+    errors.some((entry) => entry.includes('hardwareNetwork')),
+    false,
+  );
 });
 
 test('manifest readiness rejects the legacy schema before field validation', () => {
   const manifest = readyManifest();
   manifest.schemaVersion = 1;
   const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
-  assert.equal(errors.some((entry) => entry.includes('schemaVersion must equal 2')), true);
+  assert.equal(
+    errors.some((entry) => entry.includes('schemaVersion must equal 2')),
+    true,
+  );
 });
 
 test('preflight report does not serialize unrelated secret environment values', async () => {
