@@ -37,8 +37,16 @@ const DEFAULTS: Record<AbusePolicyName, Omit<AbusePolicy, 'name'>> = {
   PUBLIC: { requestsPerMinute: 120, burst: 30, maxInFlight: 64 },
 };
 
-function envName(policy: AbusePolicyName, suffix: string): string {
-  return `ABUSE_${policy}_${suffix}`;
+function rateEnv(policy: AbusePolicyName): string {
+  return `ABUSE_LIMIT_${policy}_PER_MINUTE`;
+}
+
+function burstEnv(policy: AbusePolicyName): string {
+  return `ABUSE_BURST_${policy}`;
+}
+
+function inFlightEnv(policy: AbusePolicyName): string {
+  return `ABUSE_MAX_IN_FLIGHT_${policy}`;
 }
 
 function boundedInteger(
@@ -69,14 +77,14 @@ export class AbuseProtectionService {
       (Object.keys(DEFAULTS) as AbusePolicyName[]).map((name) => {
         const defaults = DEFAULTS[name];
         const requestsPerMinute = boundedInteger(
-          envName(name, 'PER_MINUTE'),
+          rateEnv(name),
           defaults.requestsPerMinute,
           10,
           100_000,
         );
-        const burst = boundedInteger(envName(name, 'BURST'), defaults.burst, 5, 10_000);
+        const burst = boundedInteger(burstEnv(name), defaults.burst, 5, 10_000);
         if (burst > requestsPerMinute) {
-          throw new Error(`ABUSE_${name}_BURST must not exceed ABUSE_${name}_PER_MINUTE`);
+          throw new Error(`${burstEnv(name)} must not exceed ${rateEnv(name)}`);
         }
         return [
           name,
@@ -85,7 +93,7 @@ export class AbuseProtectionService {
             requestsPerMinute,
             burst,
             maxInFlight: boundedInteger(
-              envName(name, 'MAX_IN_FLIGHT'),
+              inFlightEnv(name),
               defaults.maxInFlight,
               1,
               5_000,
