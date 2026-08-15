@@ -9,6 +9,7 @@ import {
 
 const RELEASE = 'a'.repeat(40);
 const TREE = 'b'.repeat(40);
+const DIGEST = '0'.repeat(64);
 
 function readyManifest() {
   const manifest = createInitialManifest(RELEASE, '2026-08-15T16:00:00.000Z');
@@ -160,6 +161,46 @@ test('manifest readiness rejects a claimed PASS without evidence and review', ()
     errors.some((entry) => entry.includes('hardwareNetwork is PASS without a named reviewer')),
     true,
   );
+});
+
+test('manifest readiness rejects legacy string evidence on a claimed PASS', () => {
+  const manifest = readyManifest();
+  manifest.gates.hardwareNetwork = {
+    ...manifest.gates.hardwareNetwork,
+    status: 'PASS',
+    evidenceRefs: ['evidence/hardware.json'],
+    reviewer: 'Hardware reviewer',
+    reviewedAt: '2026-08-15T17:00:00Z',
+  };
+
+  const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
+  assert.equal(
+    errors.some((entry) =>
+      entry.includes('evidence reference must be an object with path and sha256'),
+    ),
+    true,
+  );
+});
+
+test('manifest readiness accepts digest-bound evidence on a claimed PASS', () => {
+  const manifest = readyManifest();
+  manifest.gates.hardwareNetwork = {
+    ...manifest.gates.hardwareNetwork,
+    status: 'PASS',
+    evidenceRefs: [{ path: 'evidence/hardware.json', sha256: DIGEST }],
+    reviewer: 'Hardware reviewer',
+    reviewedAt: '2026-08-15T17:00:00Z',
+  };
+
+  const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
+  assert.equal(errors.some((entry) => entry.includes('hardwareNetwork')), false);
+});
+
+test('manifest readiness rejects the legacy schema before field validation', () => {
+  const manifest = readyManifest();
+  manifest.schemaVersion = 1;
+  const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
+  assert.equal(errors.some((entry) => entry.includes('schemaVersion must equal 2')), true);
 });
 
 test('preflight report does not serialize unrelated secret environment values', async () => {
