@@ -64,9 +64,7 @@ function moneyList(values: CommandCentreCurrencyAmount[]): string {
 function averageList(values: CommandCentreCurrencyAverage[]): string {
   return values.length === 0
     ? '—'
-    : values
-        .map((value) => formatMinor(value.currency, value.averageOrderValueMinor))
-        .join(' • ');
+    : values.map((value) => formatMinor(value.currency, value.averageOrderValueMinor)).join(' • ');
 }
 
 function velocityList(values: CommandCentreCurrencyVelocity[]): string {
@@ -386,7 +384,9 @@ export function CommandCentreClient() {
               <strong style={{ fontSize: 22 }}>{snapshot.sales.transactionCount}</strong>
             </Panel>
             <Panel title="Average order value">
-              <strong style={{ fontSize: 22 }}>{averageList(snapshot.sales.averageOrderValue)}</strong>
+              <strong style={{ fontSize: 22 }}>
+                {averageList(snapshot.sales.averageOrderValue)}
+              </strong>
             </Panel>
             <Panel title="Current sales velocity">
               <strong style={{ fontSize: 22 }}>
@@ -472,8 +472,7 @@ export function CommandCentreClient() {
                 <strong>{(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%</strong> •
                 Unknown{' '}
                 <strong>{(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%</strong> •
-                Failed{' '}
-                <strong>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</strong>
+                Failed <strong>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</strong>
               </p>
               {snapshot.payments.rails.map((rail) => (
                 <div key={rail.providerId}>
@@ -508,7 +507,8 @@ export function CommandCentreClient() {
                     </div>
                     {salesAvailable ? (
                       <div>
-                        {device.transactionCount} transactions • {moneyList(device.grossSales ?? [])} •{' '}
+                        {device.transactionCount} transactions •{' '}
+                        {moneyList(device.grossSales ?? [])} •{' '}
                         {velocityList(device.currentSalesVelocity ?? [])}
                       </div>
                     ) : (
