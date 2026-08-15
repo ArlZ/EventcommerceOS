@@ -35,6 +35,12 @@ export class EventCloseCashCountService {
 
   private enrich(report: EventCloseReport, rows: CashCountRow[]): EventCloseReport {
     const counts = new Map(rows.map((row) => [row.currency, Number(row.transaction_count)]));
+    const unresolvedCurrencies = new Set(
+      report.providerReconciliation
+        .filter((row) => row.transactionReconciliationStatus === 'UNRESOLVED')
+        .map((row) => row.currency),
+    );
+
     return {
       ...report,
       paymentMethods: report.paymentMethods.map((method) =>
@@ -42,6 +48,10 @@ export class EventCloseCashCountService {
           ? { ...method, succeededCount: counts.get(method.currency) ?? 0 }
           : method,
       ),
+      financialReconciliation: report.financialReconciliation.map((row) => ({
+        ...row,
+        conclusive: row.conclusive && !unresolvedCurrencies.has(row.currency),
+      })),
     };
   }
 }
