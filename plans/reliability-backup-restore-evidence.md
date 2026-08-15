@@ -1,6 +1,6 @@
 # Reliability remediation — Cloud backup and restore evidence
 
-Status: implementation in progress
+Status: implementation complete; repository CI revalidation in progress; representative restore evidence remains a release-time requirement
 Base: `security/abuse-controls` (PR #18)
 
 ## Objective
@@ -51,6 +51,13 @@ Security credentials remain digest-only in the database; the evidence manifest c
 - Restore verification cannot pass on row counts alone; deterministic content fingerprints must match.
 - The source fingerprint and `pg_dump` use the same exported PostgreSQL snapshot, so normal concurrent event activity cannot create a false mismatch.
 - The drill records measured backup duration, restore duration and recovery-point age at restore completion. Actual operational RPO still depends on backup cadence and must be recorded separately in deployment policy.
+
+## Repository CI checkpoint
+
+- The first real runner pass exposed cross-stack correctness/test regressions introduced by later security hardening: Nest constructor DI tokens converted to type-only imports, stale authentication fixtures, FK-unsafe Event Edge cleanup, and integration suites mutating one shared database in parallel.
+- Those non-SCA fixes were proven on the fully green PR #20 stack and have now been backported here without bringing the SCA scanner, SCA dependency upgrades, lockfile changes, or SCA documentation into this PR.
+- Cloud API and Event Edge integration test files now run serially within their respective packages so shared PostgreSQL/process state is deterministic while package-level parallelism remains available elsewhere.
+- A fresh permanent CI pass on this branch is required before merge readiness.
 
 ## Remaining evidence gate
 
