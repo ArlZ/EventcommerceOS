@@ -16,9 +16,9 @@ describe('Cloud database configuration', () => {
   it.each(['0', '999', '30001', '-1', '1.5', 'not-a-number'])(
     'rejects invalid timeout %s',
     (value) => {
-      expect(() =>
-        databaseConnectionTimeoutMs({ DATABASE_CONNECTION_TIMEOUT_MS: value }),
-      ).toThrow(/DATABASE_CONNECTION_TIMEOUT_MS/);
+      expect(() => databaseConnectionTimeoutMs({ DATABASE_CONNECTION_TIMEOUT_MS: value })).toThrow(
+        /DATABASE_CONNECTION_TIMEOUT_MS/,
+      );
     },
   );
 
