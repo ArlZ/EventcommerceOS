@@ -16,7 +16,7 @@ jobs:
         with:
           ref: security/cloud-payment-machine-trust
           fetch-depth: 0
-      - name: Merge final PR15 base
+      - name: Merge final PR15 base with verified resolution
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -26,10 +26,16 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "Merge conflicts:"
-            git diff --name-only --diff-filter=U
-            git status --short
-            exit "$status"
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            expected="apps/cloud-api/src/sync/edge-cloud-auth.service.ts"
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$conflicts"
+              exit 1
+            fi
+            git checkout --ours apps/cloud-api/src/sync/edge-cloud-auth.service.ts
+            git add apps/cloud-api/src/sync/edge-cloud-auth.service.ts
+            git commit --no-edit
           fi
       - name: Self-remove and push
         run: |
