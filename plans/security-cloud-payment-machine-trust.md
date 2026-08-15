@@ -1,6 +1,6 @@
 # Security remediation — Cloud payment machine trust
 
-Status: implementation complete; permanent CI pending
+Status: implementation complete; repository CI revalidation in progress
 Base: POS device trust (`security/pos-edge-trust`, PR #15)
 
 ## Objective
@@ -62,6 +62,14 @@ This intentionally makes supervised external-terminal confirmation unavailable t
 - formerly anonymous Event Edge manual-confirmation route is absent;
 - existing payment state/cache/idempotency tests remain service-level and unchanged in authority semantics.
 
+## Repository CI checkpoint
+
+- The first real runner pass built successfully but failed on six cross-stack lint errors: Command Centre/Event Close constructor dependencies were runtime Nest tokens seen by ESLint as type-only usage, and the sync testkit imported `DatabaseService` as a value only for typing.
+- Those dependencies now use explicit `@Inject(...)` while retaining runtime class imports; the test helper uses a true type-only import. This fixes lint without erasing Nest runtime DI metadata.
+- Cloud API and Event Edge integration files now execute serially within their packages because they mutate shared PostgreSQL/process state; package-level parallelism elsewhere is unchanged.
+- The complete repository CI formatting surface has been normalized with Prettier only.
+- A fresh permanent TypeScript + Android CI pass on this repaired tree is required before merge readiness.
+
 ## Remaining blockers
 
 This slice does not solve human identity. Remaining release blockers include:
@@ -71,7 +79,6 @@ This slice does not solve human identity. Remaining release blockers include:
 - replacing caller-supplied admin role/organisation headers across configuration, command centre, inventory and event close;
 - global abuse/rate limiting;
 - backup/restore evidence;
-- permanent CI;
 - dependency/SCA evidence.
 
 Overall release disposition remains **NO-GO for live-money production**.
