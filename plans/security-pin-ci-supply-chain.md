@@ -6,15 +6,16 @@ Integration base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
 
 ## Objective
 
-Make repository CI and recovery-smoke execution reproducible by replacing moving third-party GitHub Action tags and mutable PostgreSQL service tags with the exact immutable revisions already resolved by current green workflows, while minimizing credential exposure inside checked-out build workspaces.
+Make repository CI and recovery-smoke execution reproducible by replacing moving third-party GitHub Action tags and mutable PostgreSQL service tags with exact immutable revisions, minimizing credential exposure inside checked-out build workspaces, and preventing those controls from regressing silently.
 
 ## Scope
 
 1. Pin every third-party GitHub Action in `ci.yml` and `recovery-smoke.yml` to its exact commit SHA while retaining a human-readable major-version comment.
 2. Pin PostgreSQL 16 Alpine service containers in both workflows to the exact image digest observed in current successful workflow runs.
 3. Set checkout `persist-credentials: false` so the GitHub token is not left in local Git configuration for later build/test steps.
-4. Preserve current permissions, job behavior, versions and test commands.
-5. Validate that the pinned workflows still execute successfully.
+4. Add a permanent workflow-dependency check that rejects future floating action refs or workflow image tags.
+5. Preserve current permissions, job behavior, versions and test commands.
+6. Validate that the pinned workflows still execute successfully.
 
 ## Pinned revisions
 
@@ -31,6 +32,7 @@ Make repository CI and recovery-smoke execution reproducible by replacing moving
 - No `uses:` entry in either workflow relies on a floating major-version tag.
 - Workflow PostgreSQL services no longer rely on an unpinned image tag.
 - Checkout credentials are not persisted into the working repository.
+- CI fails if a future workflow introduces a non-SHA action ref or non-digest image.
 - Existing least-privilege `contents: read` permissions remain unchanged.
 - TypeScript, Android, SCA and recovery-smoke execution remain green with the pinned dependencies.
 
