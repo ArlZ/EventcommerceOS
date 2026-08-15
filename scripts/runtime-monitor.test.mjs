@@ -124,7 +124,9 @@ test('runtime monitor rejects unsafe or incomplete configuration', () => {
   assert.throws(
     () =>
       runtimeMonitorConfig(
-        configEnvironment({ RUNTIME_MONITOR_CONTROL_URL: 'https://control.example.test/api/health?token=x' }),
+        configEnvironment({
+          RUNTIME_MONITOR_CONTROL_URL: 'https://control.example.test/api/health?token=x',
+        }),
       ),
     /query parameters/,
   );
