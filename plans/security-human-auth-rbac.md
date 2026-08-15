@@ -1,7 +1,7 @@
 # Security remediation — human operator authentication and RBAC
 
-Status: implementation complete; permanent CI pending
-Base: `security/cloud-payment-machine-trust` (PR #16)
+Status: implementation complete; final green Cloud-payment machine-trust base merged; permanent CI revalidation in progress
+Base: final `security/cloud-payment-machine-trust` at `93d3f56a1048ce149b98032dabb04b00ca0d3682`
 
 ## Objective
 
@@ -69,6 +69,12 @@ Control-web exposes an **Operator session** control mounted at the root layout. 
 
 This bridge is intentionally a controlled-pilot compatibility layer for existing client screens. A later UI hardening/refactor should move individual clients to a typed shared authenticated API client rather than relying on a global fetch bridge.
 
+## Repository CI checkpoint
+
+The final green PR #16 Cloud-payment machine-trust head has been merged into this branch. Three shared Command Centre/Event Close files conflicted during the ancestry relink. Both controllers retained this PR's server-derived operator-session authorization, while `CommandCentreService` retained this PR's text-safe sales-location/event joins, including the device/location join that remained UUID-cast on #16. All runtime `@Inject(...)` corrections and the previously proven Event Close behavior remain intact. The branch is now zero commits behind #16 and its diff is limited to the human-auth/RBAC feature boundary plus associated fixtures/docs.
+
+A fresh permanent TypeScript + Android CI pass on this exact re-linked head is required before merge readiness.
+
 ## Non-goals / remaining blockers
 
 This slice does **not** claim to solve:
@@ -79,7 +85,6 @@ This slice does **not** claim to solve:
 - two-person refund approval UI/step-up;
 - global abuse/rate limiting;
 - backup/restore evidence;
-- dependency/SCA evidence;
-- permanent CI, currently blocked before runner assignment.
+- dependency/SCA evidence.
 
-SEC-001 through SEC-004 are now closed at code/review level across the stacked security branches, subject to permanent CI and merge. Overall release status remains NO-GO until abuse controls, restore evidence, permanent CI and SCA evidence are resolved.
+SEC-001 through SEC-004 are closed at code/review level across the stacked security branches, subject to permanent CI and merge. Overall release status remains NO-GO until abuse controls, restore evidence, permanent CI and SCA evidence are resolved.
