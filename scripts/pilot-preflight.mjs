@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { REQUIRED_GATES, REQUIRED_OWNERS } from './pilot-evidence.mjs';
+import { REQUIRED_GATES, REQUIRED_OWNERS, validateEvidenceRef } from './pilot-evidence.mjs';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -113,8 +113,12 @@ function validateClaimedPass(gateName, gate, errors) {
 
   if (!Array.isArray(gate.evidenceRefs) || gate.evidenceRefs.length === 0) {
     errors.push(`${gateName} is PASS without evidenceRefs`);
-  } else if (gate.evidenceRefs.some((reference) => !nonEmptyString(reference))) {
-    errors.push(`${gateName} has an empty evidence reference`);
+  } else {
+    gate.evidenceRefs.forEach((reference, index) => {
+      for (const error of validateEvidenceRef(reference)) {
+        errors.push(`${gateName} evidenceRefs[${index}] ${error}`);
+      }
+    });
   }
 
   if (!nonEmptyString(gate.reviewer)) {
@@ -142,6 +146,10 @@ export function validatePilotManifestReadiness(manifest, releaseCommit, deployme
 
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
     return ['pilot evidence manifest must be a JSON object'];
+  }
+
+  if (manifest.schemaVersion !== 2) {
+    errors.push('pilot evidence manifest schemaVersion must equal 2');
   }
 
   if (manifest.releaseCommit !== releaseCommit) {
