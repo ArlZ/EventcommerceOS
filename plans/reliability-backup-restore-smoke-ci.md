@@ -1,7 +1,7 @@
 # Reliability follow-on — backup/restore smoke CI
 
-Status: implementation in progress; synthetic CI evidence must not be treated as SEC-006 release evidence
-Base: `security/dependency-sca-evidence` (PR #20)
+Status: implementation complete; exact-stack permanent CI revalidation in progress
+Base: merged dependency-SCA stack (`main` at `e2b6d3d2e60623f619e66ac33d42cd5c74269145`)
 
 ## Objective
 
@@ -47,3 +47,9 @@ The workflow then runs the real `backup-restore-evidence` command with `BACKUP_R
 - Synthetic RPO/RTO checks pass for the smoke thresholds.
 - JSON evidence is uploaded even when the smoke fails, where available.
 - Documentation and PR disposition explicitly state that representative SEC-006 evidence remains mandatory.
+
+## CI validation checkpoint
+
+The dedicated backup/restore smoke has already executed successfully on the pre-merge stack. The earlier general CI run also passed Android, build, lint, typecheck, all tests and SCA; its only failure was a pre-existing Pesapal test formatting drift that has since been normalized in the merged base.
+
+This branch now contains current `main` plus only the recovery-smoke workflow and this plan. A fresh permanent general CI + recovery-smoke pass on the exact final head is required before merge readiness.
