@@ -1,0 +1,84 @@
+name: Backup restore smoke
+
+on:
+  pull_request:
+    paths:
+      - 'apps/cloud-api/migrations/**'
+      - 'apps/cloud-api/scripts/backup-restore-evidence.mjs'
+      - 'apps/cloud-api/package.json'
+      - 'pnpm-lock.yaml'
+      - 'docs/BACKUP_RESTORE.md'
+      - 'plans/reliability-backup-restore-evidence.md'
+      - 'plans/reliability-backup-restore-smoke-ci.md'
+      - '.github/workflows/recovery-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore-smoke:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
+      RESTORE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5433/event_commerce_restore
+      RESTORE_TARGET_RESET_ACK: RESET:event_commerce_restore
+      BACKUP_OPERATOR: ci-backup-restore-smoke
+      RELEASE_COMMIT_SHA: ${{ github.sha }}
+      BACKUP_RPO_TARGET_MINUTES: '60'
+      BACKUP_RTO_TARGET_MINUTES: '10'
+      BACKUP_REQUIRE_REPRESENTATIVE_DATA: 'false'
+      BACKUP_KEEP_DUMP: 'false'
+      BACKUP_OUTPUT_DIR: artifacts/backup-restore-smoke
+    services:
+      source-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: event_commerce_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      restore-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: event_commerce_restore
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_restore"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pg_dump --version
+          pg_restore --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @event-commerce/cloud-api db:migrate
+      - name: Run disposable backup restore smoke
+        run: pnpm --filter @event-commerce/cloud-api backup-restore-evidence
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backup-restore-smoke-evidence
+          path: apps/cloud-api/artifacts/backup-restore-smoke/**
+          if-no-files-found: warn
+          retention-days: 14
