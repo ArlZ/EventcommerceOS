@@ -21,6 +21,9 @@ RUN pnpm --filter @event-commerce/control-web build
 
 FROM ${NODE_IMAGE} AS cloud-api
 ARG RELEASE_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
+  org.opencontainers.image.revision="$RELEASE_COMMIT" \
+  org.opencontainers.image.title="Event Commerce OS Cloud API"
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV RELEASE_COMMIT=$RELEASE_COMMIT
@@ -34,6 +37,9 @@ CMD ["node", "dist/main.js"]
 
 FROM ${NODE_IMAGE} AS event-edge
 ARG RELEASE_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
+  org.opencontainers.image.revision="$RELEASE_COMMIT" \
+  org.opencontainers.image.title="Event Commerce OS Event Edge"
 ENV NODE_ENV=production
 ENV PORT=3002
 ENV RELEASE_COMMIT=$RELEASE_COMMIT
@@ -46,6 +52,10 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
 CMD ["node", "dist/main.js"]
 
 FROM ${NODE_IMAGE} AS control-web
+ARG RELEASE_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
+  org.opencontainers.image.revision="$RELEASE_COMMIT" \
+  org.opencontainers.image.title="Event Commerce OS Control Web"
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
