@@ -2,7 +2,8 @@
 
 Status: **in progress**
 Original base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
-Pinned-CI revalidation base: `main` at `bcad290f556b2c250d2f11252ec8abfc126bbf0c`
+Pinned-CI base: `main` at `bcad290f556b2c250d2f11252ec8abfc126bbf0c`
+Readiness-integration revalidation base: `main` at `0b9296333d84699c774b82fd6efb7b0bdd856ec1`
 
 ## Objective
 
