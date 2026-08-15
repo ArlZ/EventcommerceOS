@@ -1,0 +1,34 @@
+name: PR15 provider formatting temporary
+
+on:
+  push:
+    branches: [security/pos-edge-trust]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/pos-edge-trust
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write apps/cloud-api/test/pesapal-sabi.provider.test.ts
+      - name: Commit formatting and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/cloud-api/test/pesapal-sabi.provider.test.ts
+          git rm .github/workflows/pr15-provider-format-temp.yml
+          git diff --cached --check
+          git commit -m "Normalize POS trust provider test formatting"
+          git push origin HEAD:security/pos-edge-trust
