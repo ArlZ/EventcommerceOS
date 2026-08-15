@@ -68,6 +68,8 @@ This intentionally makes supervised external-terminal confirmation unavailable t
 - Those dependencies now use explicit `@Inject(...)` while retaining runtime class imports; the test helper uses a true type-only import. This fixes lint without erasing Nest runtime DI metadata.
 - Cloud API and Event Edge integration files now execute serially within their packages because they mutate shared PostgreSQL/process state; package-level parallelism elsewhere is unchanged.
 - The complete repository CI formatting surface has been normalized with Prettier only.
+- The first post-lint runner pass then reached the full integration suite and exposed only stale fixtures/query expectations: a mixed text/UUID Command Centre join, CSV response decoding, POS-auth headers on two synchronization tests, FK-safe Edge cleanup, and the correct `UNKNOWN` payment result under transport uncertainty.
+- Those integration-only corrections have now been applied from the already-proven upper stack without importing human-auth controller behavior into this branch.
 - A fresh permanent TypeScript + Android CI pass on this repaired tree is required before merge readiness.
 
 ## Remaining blockers
