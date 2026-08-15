@@ -5,6 +5,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
+import { provisionOperator } from './operator-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -13,17 +14,10 @@ const actorId = '33333333-3333-4333-8333-333333333333';
 const salesLocationId = '44444444-4444-4444-8444-444444444444';
 const reportId = '55555555-5555-4555-8555-555555555555';
 
-function headers() {
-  return {
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
-    'x-organisation-id': organisationId,
-  };
-}
-
 describeIntegration('event close correction guard', () => {
   let app: INestApplication;
   let database: DatabaseService;
+  let headers: () => Record<string, string>;
 
   beforeAll(async () => {
     process.env.PAYMENT_RECONCILIATION_DISABLED = 'true';
@@ -42,6 +36,12 @@ describeIntegration('event close correction guard', () => {
     await database.query(`INSERT INTO organisations(id,name) VALUES ($1,'Operator')`, [
       organisationId,
     ]);
+    const operator = await provisionOperator(database, {
+      actorId,
+      memberships: [{ organisationId, role: 'ADMIN' }],
+    });
+    headers = () => operator.headers(organisationId);
+
     await database.query(
       `INSERT INTO events(id,organisation_id,name,timezone,lifecycle,starts_at,ends_at)
        VALUES ($1,$2,'Closed event','Africa/Nairobi','CLOSED',now()-interval '2 hours',now())`,
