@@ -1,6 +1,6 @@
 # Security remediation — POS device to Event Edge trust
 
-Status: implementation complete; permanent CI pending
+Status: implementation complete; repository CI revalidation in progress
 Base: `security/edge-cloud-trust`
 
 ## Objective
@@ -99,6 +99,13 @@ Android tests cover:
 - credential loss requires reprovisioning while preserving non-secret metadata;
 - insecure HTTP endpoint and weak token rejected.
 
+## Repository CI checkpoint
+
+- The first real runner pass built successfully but failed on the same six cross-stack import-hygiene issues later seen on PR #16: four Nest runtime dependencies were treated as type-only imports and the Cloud sync testkit used a value import only for typing.
+- Shared Command Centre/Event Close runtime-DI corrections, deterministic shared-database integration execution, POS-auth fixture cleanup, FK-safe cleanup, Event Close query/CSV handling and core close/reconciliation invariants have now been backported from the repaired PR #16 stack without importing PR #16's Cloud-payment machine-auth feature files.
+- The complete repository CI formatting surface was normalized in the same repair.
+- A fresh permanent TypeScript + Android CI pass on this exact repaired tree is required before merge readiness.
+
 ## Non-goals / remaining blockers
 
 This slice does not solve:
@@ -108,7 +115,6 @@ This slice does not solve:
 - supervisor authorization for manual terminal confirmation/refunds/reversals;
 - global request-rate/abuse controls;
 - backup/restore evidence;
-- dependency/SCA evidence;
-- permanent CI, currently blocked before runner assignment.
+- dependency/SCA evidence.
 
 Overall release status remains NO-GO for internet-exposed live-money production until the wider Task 010 blockers are closed.
