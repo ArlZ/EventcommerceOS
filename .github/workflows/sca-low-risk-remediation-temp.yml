@@ -1,0 +1,58 @@
+name: SCA low-risk remediation temporary
+
+on:
+  push:
+    branches: [security/sca-moderate-remediation]
+
+permissions:
+  contents: write
+
+jobs:
+  remediate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: event_commerce_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d event_commerce_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CLOUD_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/event_commerce_test
+      EDGE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/event_commerce_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/sca-moderate-remediation
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @event-commerce/cloud-api db:migrate
+      - run: pnpm --filter @event-commerce/event-edge db:migrate
+      - name: Verify dependency resolution
+        run: |
+          pnpm -r why ajv | grep -E 'ajv 8\.20\.0|ajv 6\.15\.0'
+          if pnpm -r why ajv | grep -q 'ajv 8\.12\.0'; then exit 1; fi
+          pnpm -r why qs | grep 'qs 6.15.3'
+          if pnpm -r why qs | grep -q 'qs 6\.14\.2'; then exit 1; fi
+      - run: pnpm check
+      - name: Commit lockfile and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git rm .github/workflows/sca-low-risk-remediation-temp.yml
+          git commit -m "Resolve low-risk moderate dependency findings"
+          git push origin HEAD:security/sca-moderate-remediation
