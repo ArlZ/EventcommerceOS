@@ -10,12 +10,13 @@
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test && node --test scripts/pilot-evidence.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
     "security:sca": "node scripts/sca-evidence.mjs",
     "pilot:evidence:init": "node scripts/pilot-evidence.mjs init",
     "pilot:evidence:validate": "node scripts/pilot-evidence.mjs validate",
+    "pilot:preflight": "node scripts/pilot-preflight.mjs",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
   "devDependencies": {

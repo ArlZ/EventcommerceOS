@@ -5,6 +5,6 @@ import { makeHealthResponse, type HealthResponse } from '@event-commerce/contrac
 export class HealthController {
   @Get()
   getHealth(): HealthResponse {
-    return makeHealthResponse('cloud-api');
+    return makeHealthResponse('cloud-api', new Date(), process.env.RELEASE_COMMIT);
   }
 }
