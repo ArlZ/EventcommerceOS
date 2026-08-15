@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-bookworm-slim AS build
+FROM node:22-bookworm-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46 AS build
 
 ARG APP_FILTER
 ARG RELEASE_COMMIT
@@ -25,7 +25,7 @@ RUN test -n "$APP_FILTER"
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter "$APP_FILTER"... build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-bookworm-slim@sha256:f32b81066cde10a75dbac96646099533316d94bac4150c55da1636e1f0ffdc46 AS runtime
 
 ARG APP_FILTER
 ARG RELEASE_COMMIT
