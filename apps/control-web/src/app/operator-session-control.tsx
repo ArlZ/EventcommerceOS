@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 
 const STORAGE_KEY = 'event-commerce.operator-access-token';
 const cloudApiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -13,7 +13,7 @@ export function OperatorSessionControl() {
   const [token, setToken] = useState('');
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const existing = window.sessionStorage.getItem(STORAGE_KEY) ?? '';
     setToken(existing);
     setSaved(validToken(existing));
@@ -23,7 +23,9 @@ export function OperatorSessionControl() {
 
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const requestUrl =
-        input instanceof Request ? new URL(input.url, window.location.href) : new URL(input, window.location.href);
+        input instanceof Request
+          ? new URL(input.url, window.location.href)
+          : new URL(input, window.location.href);
       if (requestUrl.origin !== cloudOrigin) return originalFetch(input, init);
 
       const headers = new Headers(input instanceof Request ? input.headers : undefined);
@@ -92,7 +94,9 @@ export function OperatorSessionControl() {
       <button type="button" onClick={clear} disabled={!token && !saved}>
         Clear
       </button>
-      <span style={{ fontSize: 12 }}>{saved ? 'Session active for this browser tab' : 'No active session'}</span>
+      <span style={{ fontSize: 12 }}>
+        {saved ? 'Session active for this browser tab' : 'No active session'}
+      </span>
     </aside>
   );
 }
