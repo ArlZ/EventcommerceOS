@@ -15,9 +15,7 @@ export function databaseConnectionString(environment: NodeJS.ProcessEnv = proces
   return LOCAL_DATABASE_URL;
 }
 
-export function databaseConnectionTimeoutMs(
-  environment: NodeJS.ProcessEnv = process.env,
-): number {
+export function databaseConnectionTimeoutMs(environment: NodeJS.ProcessEnv = process.env): number {
   const raw = environment.DATABASE_CONNECTION_TIMEOUT_MS?.trim();
   if (!raw) return 5_000;
   if (!/^\d+$/.test(raw)) {
