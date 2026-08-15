@@ -28,7 +28,10 @@ function parsePort(value: string | undefined, fallback: number): number {
 }
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    bodyParser: false,
+  });
   app.useBodyParser('json', {
     limit: boundedInteger('EDGE_HTTP_JSON_BODY_LIMIT_BYTES', 1_048_576, 65_536, 2_097_152),
   });
