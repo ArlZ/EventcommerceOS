@@ -13,6 +13,7 @@
     "test": "pnpm -r --if-present test",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
+    "security:sca": "node scripts/sca-evidence.mjs",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
   "devDependencies": {
