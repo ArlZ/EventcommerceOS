@@ -691,6 +691,30 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     return rows[0];
   }
 
+  private async loadAttemptByIdClient(
+    client: PoolClient,
+    id: string,
+    forUpdate: boolean,
+  ): Promise<AttemptRow | undefined> {
+    const result = await client.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.id=$1${forUpdate ? ' FOR UPDATE' : ''}`,
+      [id],
+    );
+    return result.rows[0];
+  }
+
+  private async loadAttemptByIdempotencyClient(
+    client: PoolClient,
+    key: string,
+    forUpdate: boolean,
+  ): Promise<AttemptRow | undefined> {
+    const result = await client.query<AttemptRow>(
+      `${this.attemptSelect()} WHERE pa.idempotency_key=$1${forUpdate ? ' FOR UPDATE' : ''}`,
+      [key],
+    );
+    return result.rows[0];
+  }
+
   private async loadAttemptByProviderReferenceClient(
     client: PoolClient,
     providerId: string,
