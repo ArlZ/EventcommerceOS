@@ -28,6 +28,8 @@ PILOT_EVIDENCE_RELEASE_COMMIT=<40-char-sha> pnpm pilot:evidence:init
 
 Record the pilot identity, named owners and the evidence references produced by the actual exercises. A gate may be changed to `PASS` only after its real exercise is complete and reviewed.
 
+`pilot.deploymentMode` must use the same Task 010 security meaning as the runtime: `single_instance_pilot` or `upstream_distributed`. Any other value fails validation.
+
 Required gates:
 
 - `branchProtection`
