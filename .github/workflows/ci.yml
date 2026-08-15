@@ -36,6 +36,8 @@ jobs:
         with:
           node-version: 22
           package-manager-cache: false
+      - name: Verify immutable workflow dependencies
+        run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
