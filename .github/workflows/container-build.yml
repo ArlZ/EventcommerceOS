@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 25
     env:
       DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
+      EDGE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
     services:
       postgres:
         image: postgres:16-alpine@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6
@@ -66,7 +67,7 @@ jobs:
             event-commerce-cloud-api:${GITHUB_SHA} \
             node scripts/migrate.mjs
           docker run --rm --network host \
-            -e DATABASE_URL="$DATABASE_URL" \
+            -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
             event-commerce-event-edge:${GITHUB_SHA} \
             node scripts/migrate.mjs
       - name: Boot packaged services
@@ -78,7 +79,7 @@ jobs:
             -e TRUST_PROXY_HOPS=0 \
             event-commerce-cloud-api:${GITHUB_SHA}
           docker run -d --network host --name event-edge \
-            -e DATABASE_URL="$DATABASE_URL" \
+            -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
             -e EDGE_FORWARDER_DISABLED=true \
             event-commerce-event-edge:${GITHUB_SHA}
           docker run -d --network host --name control-web \
