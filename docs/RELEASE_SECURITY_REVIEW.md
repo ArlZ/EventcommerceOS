@@ -17,7 +17,7 @@ This review distinguishes implemented domain safety from deployment/security con
 
 ### SEC-001 — P0 — Cloud payment caller authentication and authority separation
 
-**Status: remediated across `security/cloud-payment-machine-trust` and `security/human-auth-rbac`, pending permanent CI and stack merge.**
+**Status: remediated across `security/cloud-payment-machine-trust` and `security/human-auth-rbac`, pending stack merge and exact-release acceptance.**
 
 The Event Edge machine credential protects Cloud payment initiation, attempt reconciliation, payment-order reads and payment-rail availability. Cloud derives the Edge organisation from the server-side Edge registry and verifies event/payment tenant ownership before returning or mutating payment truth.
 
@@ -37,7 +37,7 @@ Machine credentials cannot satisfy the human authorization boundary, and human o
 
 ### SEC-002 — P0 — Event Edge to Cloud machine ingress
 
-**Status: remediated in `security/edge-cloud-trust`, pending permanent CI and stack merge.**
+**Status: remediated in `security/edge-cloud-trust`, pending stack merge and exact-release acceptance.**
 
 The remediation closes both Edge-originated machine routes:
 
@@ -67,7 +67,7 @@ Security tests cover missing/wrong/unknown/revoked credentials, body identity mi
 
 ### SEC-003 — P1 — Human administrative identity and RBAC
 
-**Status: remediated in `security/human-auth-rbac`, pending permanent CI and stack merge.**
+**Status: remediated in `security/human-auth-rbac`, pending stack merge and exact-release acceptance.**
 
 Cloud now uses revocable, expiring opaque operator sessions. Session secrets are generated with 256 bits of randomness and only SHA-256 digests are stored. Actor identity, platform authority and organisation membership/role are resolved from Cloud database state on each request.
 
@@ -93,7 +93,7 @@ Adversarial coverage includes legacy-header privilege spoofing, role inflation, 
 
 ### SEC-004 — P1 — POS device registration/revocation lifecycle
 
-**Status: remediated in `security/pos-edge-trust`, pending permanent CI and stack merge.**
+**Status: remediated in `security/pos-edge-trust`, pending stack merge and exact-release acceptance.**
 
 Implemented controls:
 
@@ -118,7 +118,7 @@ Implemented controls:
 
 ### SEC-005 — P1 — HTTP abuse and resource-exhaustion controls
 
-**Status: remediated at application/code level in `security/abuse-controls`, pending permanent CI, stack merge and deployment evidence.**
+**Status: remediated at application/code level in `security/abuse-controls`, pending stack merge and deployment evidence.**
 
 Implemented Cloud controls:
 
@@ -162,15 +162,17 @@ The drill defaults to requiring representative organisation/event, synced commer
 
 This is an evidence mechanism, not evidence itself. SEC-006 remains a release blocker until `docs/BACKUP_RESTORE.md` has been followed against the exact release candidate and the retained PASS manifest is reviewed by a named operator/reviewer.
 
-### SEC-007 — P1 — Permanent CI/security checks are externally blocked
+### SEC-007 — P1 — Permanent CI/security gate execution
 
-The permanent GitHub Actions jobs still fail before step 1 because GitHub does not allocate a runner. No successful permanent gate exists for the current stack.
+**Status: prior runner-allocation blocker closed; permanent GitHub Actions jobs now receive runners and execute.**
 
-**Required before merge/pilot:** permanent TypeScript, Android and SCA CI must execute and pass on the exact release commit. A workflow definition or a zero-step failed job is not release evidence.
+The permanent workflow exercises the repository TypeScript build/lint/typecheck/test/format/architecture checks, Android unit/lint checks and the SCA job on the pull request's generated merge commit. The earlier zero-step runner-allocation failure is no longer the release blocker.
+
+Exact-release acceptance is still fail-closed: the release candidate must retain one consolidated green permanent-CI result. A workflow definition, an earlier commit's pass or a partial run does not substitute for that exact candidate result.
 
 ### SEC-008 — P2 — Dependency vulnerability / SCA evidence
 
-**Status: executable in `security/dependency-sca-evidence`, but not closed until the exact release candidate has a real passing scan and named reviewer sign-off.**
+**Status: executable and producing real PASS evidence; exact-release retention plus named reviewer sign-off remain mandatory.**
 
 The release gate now:
 
@@ -187,7 +189,9 @@ The release gate now:
 - generates secret-safe machine-readable evidence under `artifacts/sca/`;
 - runs as a permanent CI job and uploads evidence on both pass and failure.
 
-`docs/DEPENDENCY_SECURITY.md` defines the command, evidence format, acceptance policy and remediation workflow. The repository does not claim the current dependency graph is vulnerability-free until that job actually executes on the exact release stack.
+The most recent retained technical evidence at the time of this review reports 13 findings: 0 critical, 0 high, 9 moderate, 4 low, 0 unknown, 0 accepted and 0 blocking. This is not described as a vulnerability-free dependency graph: moderate/low findings remain visible, and every release candidate must retain its own exact generated-merge-commit PASS manifest.
+
+`docs/DEPENDENCY_SECURITY.md` defines the command, evidence format, acceptance policy and remediation workflow. SEC-008 is not fully signed off until the exact release candidate's PASS manifest has been reviewed by a named reviewer.
 
 ## Positive controls already present
 
@@ -258,14 +262,15 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to permanent CI and merge. SEC-006 and SEC-008 now have executable evidence mechanisms, but release evidence has not yet been produced. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
+SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to exact-release CI acceptance and stack merge. SEC-006 has an executable evidence mechanism but no representative signed restore PASS yet. SEC-007's runner-allocation problem is closed and permanent CI is executable. SEC-008 is producing real zero-blocker SCA evidence, but exact-release retention and named sign-off remain release requirements. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
 
 Remaining mandatory release blockers are:
 
-1. SEC-006 executed representative backup/restore PASS evidence and sign-off;
-2. SEC-007 green permanent TypeScript + Android + SCA CI on the exact release stack;
-3. SEC-008 executed SCA PASS evidence with no unaccepted HIGH/CRITICAL/UNKNOWN finding and named review sign-off;
-4. SEC-005 real deployment abuse-test evidence before live exposure.
+1. SEC-006 executed representative backup/restore PASS evidence, RPO/RTO/cadence proof and named sign-off;
+2. one consolidated green permanent TypeScript + format + architecture + Android + SCA CI result on the exact release candidate;
+3. SEC-008 exact-release SCA PASS evidence with no unaccepted HIGH/CRITICAL/UNKNOWN finding and named review sign-off;
+4. SEC-005 real deployment abuse/flood evidence before live exposure;
+5. real supported-device, event-network, Edge-hardware and provider fault/reconciliation evidence from `docs/PILOT_RUNBOOK.md`.
 
 External OIDC/SSO/MFA is still recommended before graduating beyond a tightly controlled pilot, but the repository no longer trusts browser-supplied role/actor headers for operational authority.
 
