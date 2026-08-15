@@ -1,7 +1,7 @@
 # Security remediation — Cloud payment machine trust
 
-Status: implementation complete; final repository CI validation in progress
-Base: POS device trust (`security/pos-edge-trust`, PR #15)
+Status: implementation complete; final green POS-device trust base merged; permanent CI revalidation in progress
+Base: final POS device trust (`security/pos-edge-trust` at `72dfbdb42ef8d19251bd7ab5875d6d052d3d1041`)
 
 ## Objective
 
@@ -39,8 +39,6 @@ Until a real user session/RBAC layer exists, the public Cloud controller fails t
 
 The anonymous Event Edge manual-terminal-confirmation route is removed as well. The underlying services remain available internally for business-rule tests and for a future authenticated human controller.
 
-This intentionally makes supervised external-terminal confirmation unavailable through HTTP during the security remediation stack. That is safer than retaining an unauthenticated financial override.
-
 ## Reliability behavior
 
 - Missing/invalid Cloud machine credentials do not invent payment failure.
@@ -64,13 +62,9 @@ This intentionally makes supervised external-terminal confirmation unavailable t
 
 ## Repository CI checkpoint
 
-- The first real runner pass built successfully but failed on six cross-stack lint errors: Command Centre/Event Close constructor dependencies were runtime Nest tokens seen by ESLint as type-only usage, and the sync testkit imported `DatabaseService` as a value only for typing.
-- Those dependencies now use explicit `@Inject(...)` while retaining runtime class imports; the test helper uses a true type-only import. This fixes lint without erasing Nest runtime DI metadata.
-- Cloud API and Event Edge integration files now execute serially within their packages because they mutate shared PostgreSQL/process state; package-level parallelism elsewhere is unchanged.
-- The complete repository CI formatting surface has been normalized with Prettier only.
-- The first post-lint runner pass then exposed stale fixtures/query expectations: a mixed text/UUID Command Centre join, CSV response decoding, POS-auth headers on synchronization tests, FK-safe Edge cleanup, and the correct `UNKNOWN` payment result under transport uncertainty. Those are now fixed and the next runner pass proved the entire Event Edge suite plus the Cloud query/CSV paths green.
-- That second runner pass isolated two remaining Event Close core invariants: new close corrections needed an explicit application-level close-window conflict check, and unresolved provider refund/reversal truth needed to force financial reconciliation to remain inconclusive. The proven core service fixes have now been backported without importing human-auth controller behavior.
-- A final permanent TypeScript + Android CI pass on this exact repaired tree is required before merge readiness.
+The final green PR #15 POS→Edge trust head has been merged into this branch. The only merge conflict was `EdgeCloudAuthService`: this PR's version was retained because it extends the same proven Edge credential implementation with reusable event authorization required by Cloud payment machine traffic, while preserving the credential digest, version/status guard and tenant-binding controls from the base. The branch is now zero commits behind #15 and requires a fresh permanent TypeScript + Android CI pass on this exact head.
+
+Earlier repair validation had already proved Android, build, lint, typecheck and the full runtime test suite after fixing the shared Command Centre/Event Close invariants; canonical repository formatting is retained. No human-auth/RBAC behavior is included in this PR.
 
 ## Remaining blockers
 
