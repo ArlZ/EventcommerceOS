@@ -79,8 +79,14 @@ describeIntegration('validated command centre order projection', () => {
   });
 
   it('stores event, location and line dimensions only after order validation', async () => {
-    await request(app.getHttpServer()).post('/sync/edge-events').send(batch(orderEvent(1))).expect(201);
-    await request(app.getHttpServer()).post('/sync/edge-events').send(batch(orderEvent(2))).expect(201);
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .send(batch(orderEvent(1)))
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .send(batch(orderEvent(2)))
+      .expect(201);
 
     const rows = await database.query<{
       event_id: string;
@@ -104,7 +110,10 @@ describeIntegration('validated command centre order projection', () => {
   });
 
   it('rejects a higher sequence trying to move an order into another business event', async () => {
-    await request(app.getHttpServer()).post('/sync/edge-events').send(batch(orderEvent(1))).expect(201);
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .send(batch(orderEvent(1)))
+      .expect(201);
     const response = await request(app.getHttpServer())
       .post('/sync/edge-events')
       .send(batch(orderEvent(2, otherEventId)))
