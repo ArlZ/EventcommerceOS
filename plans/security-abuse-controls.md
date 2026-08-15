@@ -1,7 +1,7 @@
 # Security remediation — HTTP abuse controls
 
-Status: implementation complete; permanent CI and deployment evidence pending
-Base: `security/human-auth-rbac` (PR #17)
+Status: implementation complete; final green human-auth/RBAC base merged; permanent CI revalidation in progress; deployment abuse evidence remains pending
+Base: final `security/human-auth-rbac` at `d3e2b97a0bfff34517a057ccd545acf81790914d`
 
 ## Objective
 
@@ -82,6 +82,12 @@ Event Edge tests cover:
 - device credential fingerprinting;
 - immediate-burst `429` behavior;
 - device-payment in-flight cap.
+
+## Repository CI checkpoint
+
+The final green PR #17 human-auth/RBAC head merged into this branch without conflicts. The branch is now zero commits behind its base and its diff has collapsed to the intended abuse-control feature boundary plus its operational docs/tests. The previously proven DI-safe source fixes, authenticated integration fixtures, deterministic shared-database execution and canonical formatting are retained through ancestry rather than reintroduced as unrelated changes.
+
+A fresh permanent TypeScript + Android CI pass on this exact re-linked head is required before merge readiness.
 
 ## Remaining release evidence
 

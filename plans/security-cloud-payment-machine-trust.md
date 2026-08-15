@@ -1,7 +1,7 @@
 # Security remediation — Cloud payment machine trust
 
-Status: implementation complete; permanent CI pending
-Base: POS device trust (`security/pos-edge-trust`, PR #15)
+Status: implementation complete; final green POS-device trust base merged; permanent CI revalidation in progress
+Base: final POS device trust (`security/pos-edge-trust` at `72dfbdb42ef8d19251bd7ab5875d6d052d3d1041`)
 
 ## Objective
 
@@ -39,8 +39,6 @@ Until a real user session/RBAC layer exists, the public Cloud controller fails t
 
 The anonymous Event Edge manual-terminal-confirmation route is removed as well. The underlying services remain available internally for business-rule tests and for a future authenticated human controller.
 
-This intentionally makes supervised external-terminal confirmation unavailable through HTTP during the security remediation stack. That is safer than retaining an unauthenticated financial override.
-
 ## Reliability behavior
 
 - Missing/invalid Cloud machine credentials do not invent payment failure.
@@ -62,6 +60,12 @@ This intentionally makes supervised external-terminal confirmation unavailable t
 - formerly anonymous Event Edge manual-confirmation route is absent;
 - existing payment state/cache/idempotency tests remain service-level and unchanged in authority semantics.
 
+## Repository CI checkpoint
+
+The final green PR #15 POS→Edge trust head has been merged into this branch. The only merge conflict was `EdgeCloudAuthService`: this PR's version was retained because it extends the same proven Edge credential implementation with reusable event authorization required by Cloud payment machine traffic, while preserving the credential digest, version/status guard and tenant-binding controls from the base. The branch is now zero commits behind #15 and requires a fresh permanent TypeScript + Android CI pass on this exact head.
+
+Earlier repair validation had already proved Android, build, lint, typecheck and the full runtime test suite after fixing the shared Command Centre/Event Close invariants; canonical repository formatting is retained. No human-auth/RBAC behavior is included in this PR.
+
 ## Remaining blockers
 
 This slice does not solve human identity. Remaining release blockers include:
@@ -71,7 +75,6 @@ This slice does not solve human identity. Remaining release blockers include:
 - replacing caller-supplied admin role/organisation headers across configuration, command centre, inventory and event close;
 - global abuse/rate limiting;
 - backup/restore evidence;
-- permanent CI;
 - dependency/SCA evidence.
 
 Overall release disposition remains **NO-GO for live-money production**.
