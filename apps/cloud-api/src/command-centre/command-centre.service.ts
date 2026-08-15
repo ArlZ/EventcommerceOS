@@ -209,12 +209,13 @@ export class CommandCentreService {
     const transfers = this.transferViews(transferRows);
     const devices = this.deviceViews(deviceRows);
     const railAvailability = this.rails.availability();
-    const latestAttemptAt = attemptRows
-      .map((row) => row.latest_attempt_at)
-      .filter((value): value is Date | string => value !== null)
-      .map(iso)
-      .sort()
-      .at(-1) ?? null;
+    const latestAttemptAt =
+      attemptRows
+        .map((row) => row.latest_attempt_at)
+        .filter((value): value is Date | string => value !== null)
+        .map(iso)
+        .sort()
+        .at(-1) ?? null;
     const alerts = this.alerts(
       risks,
       paymentHealth,
@@ -409,7 +410,7 @@ export class CommandCentreService {
               max(state.occurred_at) AS last_sale_at
        FROM sync_order_state state
        LEFT JOIN sales_locations location
-         ON location.id::text = state.sales_location_id AND location.event_id = $1::uuid
+         ON location.id::text = state.sales_location_id AND location.event_id::text = $1
        WHERE state.event_id = $1 AND state.state = 'CLOSED'
        GROUP BY state.sales_location_id, location.name, state.currency
        ORDER BY max(state.occurred_at) ASC NULLS FIRST, name, state.currency`,
@@ -567,7 +568,7 @@ export class CommandCentreService {
        FROM event_devices event_device
        LEFT JOIN sync_device_state device ON device.device_id = event_device.device_id
        LEFT JOIN sales_locations location
-         ON location.id::text = event_device.sales_location_id AND location.event_id = $1::uuid
+         ON location.id::text = event_device.sales_location_id AND location.event_id::text = $1
        ORDER BY device.last_seen_at ASC NULLS FIRST, event_device.device_id`,
       [eventId],
     );
@@ -641,12 +642,13 @@ export class CommandCentreService {
       currency: row.currency,
       amountMinorPerMinute: row.velocity_minor_per_minute,
     }));
-    const lastSaleAt = rows
-      .map((row) => row.last_sale_at)
-      .filter((value): value is Date | string => value !== null)
-      .map(iso)
-      .sort()
-      .at(-1) ?? null;
+    const lastSaleAt =
+      rows
+        .map((row) => row.last_sale_at)
+        .filter((value): value is Date | string => value !== null)
+        .map(iso)
+        .sort()
+        .at(-1) ?? null;
     return { transactionCount, grossSales, averageOrderValue, currentSalesVelocity, lastSaleAt };
   }
 
@@ -668,7 +670,9 @@ export class CommandCentreService {
         amountMinorPerMinute: row.velocity_minor_per_minute,
       });
       const candidate = isoNullable(row.last_sale_at);
-      if (candidate && (!current.lastSaleAt || candidate > current.lastSaleAt)) current.lastSaleAt = candidate;
+      if (candidate && (!current.lastSaleAt || candidate > current.lastSaleAt)) {
+        current.lastSaleAt = candidate;
+      }
       grouped.set(row.sales_location_id, current);
     }
     return [...grouped.values()].sort((left, right) =>
@@ -693,7 +697,11 @@ export class CommandCentreService {
       .sort((left, right) => {
         const leftQuantity = BigInt(left.quantitySold);
         const rightQuantity = BigInt(right.quantitySold);
-        return leftQuantity === rightQuantity ? left.skuId.localeCompare(right.skuId) : leftQuantity > rightQuantity ? -1 : 1;
+        return leftQuantity === rightQuantity
+          ? left.skuId.localeCompare(right.skuId)
+          : leftQuantity > rightQuantity
+            ? -1
+            : 1;
       })
       .slice(0, 10);
   }
@@ -858,7 +866,9 @@ export class CommandCentreService {
 
     return alerts.sort((left, right) => {
       const severityDifference = alertSeverityRank(left.severity) - alertSeverityRank(right.severity);
-      return severityDifference !== 0 ? severityDifference : left.openedAt.localeCompare(right.openedAt);
+      return severityDifference !== 0
+        ? severityDifference
+        : left.openedAt.localeCompare(right.openedAt);
     });
   }
 }

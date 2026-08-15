@@ -95,6 +95,9 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
 
   beforeAll(async () => {
     process.env.EDGE_FORWARDER_DISABLED = 'true';
+    process.env.EDGE_ID = 'edge-pos-auth-test';
+    process.env.EDGE_CLOUD_SYNC_TOKEN =
+      'test-edge-cloud-sync-token-0123456789-abcdefghijklmnopqrstuvwxyz';
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     database = moduleRef.get(EdgeDatabaseService);
@@ -117,6 +120,8 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     delete process.env.EDGE_FORWARDER_DISABLED;
+    delete process.env.EDGE_ID;
+    delete process.env.EDGE_CLOUD_SYNC_TOKEN;
     await app.close();
   });
 

@@ -133,7 +133,8 @@ describeIntegration('operator authentication and server-derived RBAC', () => {
       memberships: [{ organisationId, role: 'ADMIN' }],
     });
     await database.query(
-      `UPDATE operator_sessions SET expires_at=now()-interval '1 minute'
+      `UPDATE operator_sessions
+       SET created_at=now()-interval '2 minutes',expires_at=now()-interval '1 minute'
        WHERE actor_id=$1 AND revoked_at IS NULL`,
       [expiredActor],
     );
