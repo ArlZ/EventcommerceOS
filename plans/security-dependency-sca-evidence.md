@@ -1,7 +1,7 @@
 # Security remediation — dependency/SCA evidence
 
-Status: implementation complete; permanent execution is producing PASS evidence; exact-release retention and named review remain required
-Base: `reliability/backup-restore-evidence` (PR #19)
+Status: implementation complete; final green backup/restore-evidence base merged; permanent exact-head CI + SCA revalidation in progress; exact-release retention and named review remain required
+Base: final `reliability/backup-restore-evidence` at `fc2b6424ba14242a6e1a26b9c802feccbb310c82`
 
 ## Objective
 
@@ -57,11 +57,11 @@ Make Task 010 SEC-008 executable against the exact release candidate instead of 
 - High/critical/unknown findings without exact active acceptance cause the gate to fail: **implemented**.
 - Empty dependency inventory causes the gate to fail: **implemented**.
 - The release security review records SEC-008 as executable and requires exact-release PASS evidence plus named reviewer sign-off: **implemented**.
-- Permanent CI receives runners, executes the SCA job and retains PASS evidence on the stacked merge candidate: **achieved**.
+- Permanent CI has previously received runners and produced green SCA evidence on the stacked lineage: **achieved on prior ancestry; exact re-linked head is being revalidated now**.
 - Exact-release SCA evidence is retained and reviewed by the named release/security reviewer for the candidate being promoted: **release-time requirement**.
 
 ## Current CI checkpoint
 
-- CI run 477 executed the corrected stack with Android, build, lint, typecheck, tests, and SCA all passing; its only failure was formatting in the Pesapal provider test.
-- Commit `c5640e2f906e8b8b9a7f806b6798462eaeea38b8` normalized that test with Prettier and removed the temporary formatting workflow.
-- A fresh full CI pass on the post-format tree remains required before this PR can be considered merge-ready.
+The final green PR #19 backup/restore-evidence head has been merged into this branch. The only ancestry conflicts were two plan documents: this SCA layer retained its Task 010 release-gate narrative, while the backup/restore plan retained #19's exact final checkpoint. No scanner code, lockfile, CI workflow, runtime code or security control conflicted. The branch is zero commits behind #19 and its diff has collapsed to the intended SCA/release-evidence surface.
+
+A fresh consolidated permanent run on this exact head must pass TypeScript/build/lint/typecheck/tests/format/architecture, Android and the separate fail-closed SCA job before this PR is merge-ready. A CI SCA PASS still requires retained exact-release evidence and named review/sign-off for promotion.
