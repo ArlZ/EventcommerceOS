@@ -19,10 +19,7 @@ export class DeviceSyncController {
   ) {}
 
   @Post('device-events')
-  async ingest(
-    @Headers() headers: HeadersRecord,
-    @Body() body: unknown,
-  ): Promise<DeviceSyncAck> {
+  async ingest(@Headers() headers: HeadersRecord, @Body() body: unknown): Promise<DeviceSyncAck> {
     const identity = await this.deviceAuth.authenticate(headers);
     const batch = parseDeviceBatch(body);
     this.deviceAuth.authorizeSyncBatch(identity, batch);

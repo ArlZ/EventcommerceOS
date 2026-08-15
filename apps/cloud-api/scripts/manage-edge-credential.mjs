@@ -38,10 +38,14 @@ try {
 
   if (action === 'provision') {
     const organisationId = required('EDGE_ORGANISATION_ID');
-    const organisation = await client.query('SELECT 1 FROM organisations WHERE id=$1', [organisationId]);
+    const organisation = await client.query('SELECT 1 FROM organisations WHERE id=$1', [
+      organisationId,
+    ]);
     if (organisation.rowCount !== 1) throw new Error('EDGE_ORGANISATION_ID does not exist');
 
-    const existing = await client.query('SELECT 1 FROM edge_sync_clients WHERE edge_id=$1', [edgeId]);
+    const existing = await client.query('SELECT 1 FROM edge_sync_clients WHERE edge_id=$1', [
+      edgeId,
+    ]);
     if (existing.rowCount !== 0) {
       throw new Error('Event Edge already exists; rotate or revoke it instead of reprovisioning');
     }
@@ -61,7 +65,9 @@ try {
     );
     output.push(`EDGE_ID=${edgeId}`);
     output.push(`EDGE_CLOUD_SYNC_TOKEN=${credential}`);
-    output.push('Store this one-time credential in the Edge runtime secret store; Cloud retains only its digest.');
+    output.push(
+      'Store this one-time credential in the Edge runtime secret store; Cloud retains only its digest.',
+    );
   } else {
     const existing = await client.query(
       `SELECT organisation_id::text,credential_version,status

@@ -75,8 +75,9 @@ describeIntegration('device to edge synchronization', () => {
     cloudAvailable = false;
     sentBatches.length = 0;
     await database.query(
-      `TRUNCATE edge_cloud_outbox,edge_processed_device_events,edge_device_watermarks,
-                edge_reconciliation_exceptions,edge_pos_device_audit,edge_pos_devices`,
+      `TRUNCATE edge_payment_attempt_cache,edge_cloud_outbox,edge_processed_device_events,
+                edge_device_watermarks,edge_reconciliation_exceptions,
+                edge_pos_device_audit,edge_pos_devices`,
     );
   });
 

@@ -491,11 +491,16 @@ export class EventSimulation {
   }
 
   private metrics(recoveryFaultEnd: number): SimulationMetrics {
-    const completedPayments = this.payments.filter((payment) => payment.status === 'SUCCEEDED').length;
+    const completedPayments = this.payments.filter(
+      (payment) => payment.status === 'SUCCEEDED',
+    ).length;
     const unknownAtEnd = this.payments.filter((payment) => payment.status !== 'SUCCEEDED').length;
     const backlogAtEnd = this.localQueue.length + this.edgeQueue.length;
     const lostCommitted = Math.max(0, this.committedOrderWrites - this.durableOrders.size);
-    const operations = Math.max(1, this.generatedOrders + this.cloudApplied.size + this.payments.length);
+    const operations = Math.max(
+      1,
+      this.generatedOrders + this.cloudApplied.size + this.payments.length,
+    );
     const inventoryConverged =
       this.inventoryEquals(this.physicalInventory, this.edgeInventory) &&
       this.inventoryEquals(this.physicalInventory, this.cloudInventory);
@@ -514,9 +519,7 @@ export class EventSimulation {
       maxSyncBacklog: this.maxSyncBacklog,
       syncBacklogAtEnd: backlogAtEnd,
       syncDrainSeconds:
-        this.syncDrainSecond === null
-          ? null
-          : Math.max(0, this.syncDrainSecond - recoveryFaultEnd),
+        this.syncDrainSecond === null ? null : Math.max(0, this.syncDrainSecond - recoveryFaultEnd),
       throughputPerMinute:
         this.durableOrders.size / Math.max(1 / 60, this.config.durationSeconds / 60),
       interactionLatencyMs: percentile(this.interactionLatencies),
@@ -560,7 +563,8 @@ export class EventSimulation {
       },
       {
         id: 'NO_DUPLICATE_BUSINESS_EFFECT',
-        description: 'Duplicate/reordered sync and provider signals never duplicate a business effect.',
+        description:
+          'Duplicate/reordered sync and provider signals never duplicate a business effect.',
         passed: metrics.duplicateBusinessEffects === 0,
         observed: `${metrics.duplicateBusinessEffects} duplicate effects from ${metrics.duplicateSyncDeliveries} duplicate sync deliveries and ${metrics.duplicateProviderSignals} duplicate provider signals`,
       },
@@ -578,7 +582,8 @@ export class EventSimulation {
       },
       {
         id: 'PAYMENT_EFFECT_COUNT',
-        description: 'Every committed modeled sale has exactly one completed payment effect by recovery end.',
+        description:
+          'Every committed modeled sale has exactly one completed payment effect by recovery end.',
         passed: metrics.completedPayments === metrics.committedOrders,
         observed: `${metrics.completedPayments} completed payments for ${metrics.committedOrders} committed orders`,
       },
@@ -615,7 +620,9 @@ export class EventSimulation {
 
   private edgeToCloudAvailable(second: number): boolean {
     if (!this.edgeAvailable(second)) return false;
-    const cloudDown = (this.config.faults.cloudOutages ?? []).some((window) => inWindow(second, window));
+    const cloudDown = (this.config.faults.cloudOutages ?? []).some((window) =>
+      inWindow(second, window),
+    );
     const edgeCloudDown = (this.config.faults.edgeCloudOutages ?? []).some((window) =>
       inWindow(second, window),
     );

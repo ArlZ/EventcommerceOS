@@ -74,9 +74,8 @@ describeIntegration('validated command centre order projection', () => {
     await database.query(
       'TRUNCATE sync_processed_events, sync_order_state, sync_device_state, sync_reconciliation_exceptions',
     );
-    authHeaders = (
-      await provisionSyncEdge(database, { edgeId, eventIds: [eventId, otherEventId] })
-    ).headers;
+    authHeaders = (await provisionSyncEdge(database, { edgeId, eventIds: [eventId, otherEventId] }))
+      .headers;
   });
 
   afterAll(async () => {

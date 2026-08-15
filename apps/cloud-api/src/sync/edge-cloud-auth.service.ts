@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { EdgeCloudBatch, InventoryEdgeBatch } from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';
@@ -171,7 +166,9 @@ export class EdgeCloudAuthService {
     const allowed = new Set(rows.map((row) => row.id));
     const denied = eventIds.find((id) => !allowed.has(id));
     if (denied) {
-      throw new UnauthorizedException('Edge batch contains an event outside the Event Edge organisation');
+      throw new UnauthorizedException(
+        'Edge batch contains an event outside the Event Edge organisation',
+      );
     }
   }
 }

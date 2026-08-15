@@ -67,6 +67,10 @@ interface CostRow extends QueryResultRow {
   declared_at: Date | string;
 }
 
+interface CloseActionRow extends QueryResultRow {
+  action: 'OPERATIONALLY_CLOSE' | 'REOPEN';
+}
+
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
@@ -129,6 +133,7 @@ export class EventCloseLedgerService {
   ): Promise<CommerceOrderAdjustmentView> {
     const event = await this.eventFor(context, eventId);
     return this.database.transaction(async (client) => {
+      await this.lockEventClose(client, eventId);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `event-close-order:${request.orderId}`,
       ]);
@@ -137,6 +142,7 @@ export class EventCloseLedgerService {
         this.assertSameAdjustment(existing, eventId, context, request);
         return adjustmentView(existing);
       }
+      await this.assertCorrectionWindowOpen(client, eventId);
       const sameId = await this.adjustmentById(client, request.adjustmentId);
       if (sameId) throw new ConflictException('adjustmentId is already in use');
 
@@ -149,7 +155,8 @@ export class EventCloseLedgerService {
       if (!order || order.event_id !== eventId) {
         throw new NotFoundException('Closed order not found for event');
       }
-      if (order.state !== 'CLOSED') throw new ConflictException('Only closed orders can be adjusted');
+      if (order.state !== 'CLOSED')
+        throw new ConflictException('Only closed orders can be adjusted');
       if (order.currency !== request.currency) {
         throw new ConflictException('Adjustment currency must match the order');
       }
@@ -213,6 +220,7 @@ export class EventCloseLedgerService {
   ): Promise<EventCashDeclarationView> {
     const event = await this.eventFor(context, eventId);
     return this.database.transaction(async (client) => {
+      await this.lockEventClose(client, eventId);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `event-close-cash:${eventId}:${request.salesLocationId}:${request.deviceId ?? ''}:${request.cashierId ?? ''}:${request.currency}`,
       ]);
@@ -221,6 +229,7 @@ export class EventCloseLedgerService {
         this.assertSameCash(existing, eventId, context, request);
         return cashView(existing);
       }
+      await this.assertCorrectionWindowOpen(client, eventId);
       const sameId = await this.cashById(client, request.declarationId);
       if (sameId) throw new ConflictException('declarationId is already in use');
 
@@ -229,7 +238,8 @@ export class EventCloseLedgerService {
          WHERE id=$1 AND event_id=$2 AND organisation_id=$3`,
         [request.salesLocationId, eventId, event.organisation_id],
       );
-      if (location.rowCount !== 1) throw new NotFoundException('Sales location not found for event');
+      if (location.rowCount !== 1)
+        throw new NotFoundException('Sales location not found for event');
 
       const inserted = await client.query<CashRow>(
         `INSERT INTO event_cash_declarations(
@@ -263,6 +273,7 @@ export class EventCloseLedgerService {
   ): Promise<InventoryUnitCostDeclarationView> {
     const event = await this.eventFor(context, eventId);
     return this.database.transaction(async (client) => {
+      await this.lockEventClose(client, eventId);
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
         `event-close-cost:${eventId}:${request.skuId}`,
       ]);
@@ -271,6 +282,7 @@ export class EventCloseLedgerService {
         this.assertSameCost(existing, eventId, context, request);
         return costView(existing);
       }
+      await this.assertCorrectionWindowOpen(client, eventId);
       const sameId = await this.costById(client, request.declarationId);
       if (sameId) throw new ConflictException('declarationId is already in use');
 
@@ -302,6 +314,25 @@ export class EventCloseLedgerService {
     });
   }
 
+  private async lockEventClose(client: PoolClient, eventId: string): Promise<void> {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`event-close:${eventId}`]);
+  }
+
+  private async assertCorrectionWindowOpen(client: PoolClient, eventId: string): Promise<void> {
+    const result = await client.query<CloseActionRow>(
+      `SELECT action FROM event_close_actions
+       WHERE event_id=$1
+       ORDER BY created_at DESC,id DESC
+       LIMIT 1`,
+      [eventId],
+    );
+    if (result.rows[0]?.action === 'OPERATIONALLY_CLOSE') {
+      throw new ConflictException(
+        'event is operationally closed; reopen before recording a new close correction',
+      );
+    }
+  }
+
   private async eventFor(context: AdminContext, eventId: string): Promise<EventRow> {
     const rows = await this.database.query<EventRow>(
       'SELECT id::text,organisation_id::text FROM events WHERE id=$1',
@@ -324,11 +355,11 @@ export class EventCloseLedgerService {
     return result.rows[0];
   }
 
-  private async adjustmentById(
-    client: PoolClient,
-    id: string,
-  ): Promise<AdjustmentRow | undefined> {
-    const result = await client.query<AdjustmentRow>(`${this.adjustmentSelect()} WHERE id=$1 FOR UPDATE`, [id]);
+  private async adjustmentById(client: PoolClient, id: string): Promise<AdjustmentRow | undefined> {
+    const result = await client.query<AdjustmentRow>(
+      `${this.adjustmentSelect()} WHERE id=$1 FOR UPDATE`,
+      [id],
+    );
     return result.rows[0];
   }
 
@@ -359,7 +390,10 @@ export class EventCloseLedgerService {
   }
 
   private async cashByIdempotency(client: PoolClient, key: string): Promise<CashRow | undefined> {
-    const result = await client.query<CashRow>(`${this.cashSelect()} WHERE idempotency_key=$1 FOR UPDATE`, [key]);
+    const result = await client.query<CashRow>(
+      `${this.cashSelect()} WHERE idempotency_key=$1 FOR UPDATE`,
+      [key],
+    );
     return result.rows[0];
   }
 
@@ -391,12 +425,17 @@ export class EventCloseLedgerService {
       row.actor_id !== context.actorId ||
       row.reason !== request.reason
     ) {
-      throw new ConflictException('Cash declaration idempotency key was reused for different content');
+      throw new ConflictException(
+        'Cash declaration idempotency key was reused for different content',
+      );
     }
   }
 
   private async costByIdempotency(client: PoolClient, key: string): Promise<CostRow | undefined> {
-    const result = await client.query<CostRow>(`${this.costSelect()} WHERE idempotency_key=$1 FOR UPDATE`, [key]);
+    const result = await client.query<CostRow>(
+      `${this.costSelect()} WHERE idempotency_key=$1 FOR UPDATE`,
+      [key],
+    );
     return result.rows[0];
   }
 
@@ -426,7 +465,9 @@ export class EventCloseLedgerService {
       row.actor_id !== context.actorId ||
       row.reason !== request.reason
     ) {
-      throw new ConflictException('Inventory cost idempotency key was reused for different content');
+      throw new ConflictException(
+        'Inventory cost idempotency key was reused for different content',
+      );
     }
   }
 }

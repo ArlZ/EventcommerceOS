@@ -46,8 +46,7 @@ async function ensureSalesLocation(
   await database.query(
     `INSERT INTO edge_sales_inventory_mapping(event_id,sales_location_id,inventory_location_id)
      VALUES ($1,$2,$3)
-     ON CONFLICT (event_id,sales_location_id) DO UPDATE SET
-       inventory_location_id=EXCLUDED.inventory_location_id`,
+     ON CONFLICT (event_id,sales_location_id) DO NOTHING`,
     [eventId, salesLocationId, inventoryLocationId],
   );
 }
