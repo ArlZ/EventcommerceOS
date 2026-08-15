@@ -24,8 +24,8 @@ Replace caller-trusted administrative identity headers with revocable, expiring 
 ## Roles
 
 - `PLATFORM_ADMIN`: platform-wide administration and organisation creation.
-- `ADMIN`: organisation administration, operational actions and event close/reopen.
-- `FINANCE`: organisation-scoped payment adjustments/history and financial close corrections.
+- `ADMIN`: organisation administration, operational actions and event close/reopen; may read payment financial history but cannot create refunds/reversals.
+- `FINANCE`: organisation-scoped refund/reversal mutation, payment history and financial close corrections.
 - `SUPERVISOR`: organisation-scoped supervised operational actions and manual terminal confirmation where separately permitted.
 - `VIEWER`: authenticated read-only operational access where explicitly allowed.
 
@@ -38,6 +38,8 @@ Roles are database memberships, never caller-supplied claims.
 - Revoked/expired/inactive identities fail closed.
 - Organisation context is selected only through server-side membership; a request may identify a target organisation/resource but cannot assert its own role.
 - Caller-supplied `x-actor-id` and `x-role` are stripped before controllers execute.
+- Resource-scoped human requests authenticate the session before looking up event/payment ownership.
+- Refund/reversal mutation requires `FINANCE` for organisation-scoped operators; general `ADMIN` authority is insufficient to move money.
 - Privileged payment actor identity must match the authenticated session.
 - Public HTTP does not accept a caller-supplied second refund approver.
 - Machine Edge credentials cannot satisfy human authorization.
@@ -57,6 +59,7 @@ The human-auth integration coverage now includes:
 - revoked operator identity denied;
 - Event Edge machine credential cannot satisfy a human route;
 - `FINANCE` can read payment health but cannot mutate configuration;
+- organisation `ADMIN` cannot create a refund or reversal and creates no adjustment rows;
 - privileged payment body naming another actor is rejected before business effect;
 - configuration, timestamp, command-centre and event-close integration fixtures use real operator sessions rather than an authentication bypass.
 
