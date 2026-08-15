@@ -18,6 +18,14 @@ docker build --target control-web -t event-commerce-control-web:local .
 
 CI runs these same target builds on relevant pull requests.
 
+Each image also declares a runtime health check using Node's built-in HTTP fetch support:
+
+- Cloud API: `GET /health` on port 3001;
+- Event Edge: `GET /health` on port 3002;
+- Control Web: `GET /api/health` on port 3000.
+
+Cloud and Event Edge health checks inherit the service readiness contract, so once database-backed readiness is present in the integrated release, a container is not considered healthy merely because its Node process is alive.
+
 ## Runtime identity
 
 For a controlled pilot, deploy Cloud API and Event Edge with the exact release commit:
@@ -64,6 +72,7 @@ The image runs the generated standalone `server.js` as the non-root `node` user.
 
 - the Node base image is pinned by SHA-256 digest;
 - runtime processes run as the non-root `node` user;
+- runtime images declare executable health checks without adding curl or another utility dependency;
 - local `.env*`, evidence artifacts, build outputs, Git metadata and dependency directories are excluded from the Docker build context;
 - container CI has read-only repository permission and uses an immutable checkout action revision;
 - no image registry credentials or deployment credentials are required by the build workflow.
