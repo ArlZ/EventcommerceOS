@@ -11,3 +11,4 @@ coverage/
 *.iml
 .DS_Store
 artifacts/backup-restore/
+artifacts/sca/
