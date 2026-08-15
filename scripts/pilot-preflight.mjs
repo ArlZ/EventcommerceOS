@@ -82,9 +82,7 @@ export function validateDeploymentConfig(env) {
   const errors = [];
 
   if (!DEPLOYMENT_MODES.has(mode)) {
-    errors.push(
-      'ABUSE_DEPLOYMENT_MODE must be single_instance_pilot or upstream_distributed',
-    );
+    errors.push('ABUSE_DEPLOYMENT_MODE must be single_instance_pilot or upstream_distributed');
   }
 
   if (trustProxyHops === null) {
@@ -214,11 +212,7 @@ async function probeHealth({ label, url, expectedService, releaseCommit, fetchIm
     });
 
     if (!response.ok) {
-      return check(
-        `health:${expectedService}`,
-        false,
-        `${label} returned HTTP ${response.status}`,
-      );
+      return check(`health:${expectedService}`, false, `${label} returned HTTP ${response.status}`);
     }
 
     let body;
@@ -236,11 +230,7 @@ async function probeHealth({ label, url, expectedService, releaseCommit, fetchIm
       );
     }
     if (body?.status !== 'ok') {
-      return check(
-        `health:${expectedService}`,
-        false,
-        `${label} reported non-ok health status`,
-      );
+      return check(`health:${expectedService}`, false, `${label} reported non-ok health status`);
     }
     if (body?.releaseCommit !== releaseCommit) {
       return check(
@@ -316,11 +306,7 @@ export async function runPreflight({
     ),
   );
 
-  const manifestErrors = validatePilotManifestReadiness(
-    manifest,
-    releaseCommit,
-    deployment.mode,
-  );
+  const manifestErrors = validatePilotManifestReadiness(manifest, releaseCommit, deployment.mode);
   checks.push(
     check(
       'pilot:evidence-manifest',
@@ -367,9 +353,7 @@ export async function runPreflight({
       'Preflight does not satisfy or mutate hardware, network, payment, abuse, recovery, inventory-close, branch-protection, or controlled-pilot evidence gates.',
   };
 
-  const reportDigestSha256 = createHash('sha256')
-    .update(JSON.stringify(reportCore))
-    .digest('hex');
+  const reportDigestSha256 = createHash('sha256').update(JSON.stringify(reportCore)).digest('hex');
 
   return { ...reportCore, reportDigestSha256 };
 }
