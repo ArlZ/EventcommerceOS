@@ -1,6 +1,6 @@
 # Security remediation — dependency/SCA evidence
 
-Status: implementation complete; permanent execution/evidence pending
+Status: implementation complete; permanent execution is producing PASS evidence; exact-release retention and named review remain required
 Base: `reliability/backup-restore-evidence` (PR #19)
 
 ## Objective
@@ -45,8 +45,8 @@ Make Task 010 SEC-008 executable against the exact release candidate instead of 
 - A claim that OSV contains every possible vulnerability.
 - Static application security testing, DAST or container/OS image scanning.
 - Closing SEC-006 without an executed restore drill.
-- Closing SEC-007 while GitHub Actions cannot allocate runners.
-- Claiming SEC-008 is closed before a real passing scan exists on the exact release candidate.
+- Treating a passing SCA scan as proof of deployment abuse resistance, hardware reliability or provider readiness.
+- Claiming SEC-008 is fully signed off without retained exact-release PASS evidence and named review.
 
 ## Acceptance criteria status
 
@@ -56,5 +56,6 @@ Make Task 010 SEC-008 executable against the exact release candidate instead of 
 - An invalid/expired acceptance causes the gate to fail: **implemented**.
 - High/critical/unknown findings without exact active acceptance cause the gate to fail: **implemented**.
 - Empty dependency inventory causes the gate to fail: **implemented**.
-- The release security review records SEC-008 as executable but not closed until the exact release candidate has a real passing scan and named reviewer sign-off: **implemented**.
-- Permanent CI actually executes the SCA job and retains exact-release PASS evidence: **pending external runner availability**.
+- The release security review records SEC-008 as executable and requires exact-release PASS evidence plus named reviewer sign-off: **implemented**.
+- Permanent CI receives runners, executes the SCA job and retains PASS evidence on the stacked merge candidate: **achieved**.
+- Exact-release SCA evidence is retained and reviewed by the named release/security reviewer for the candidate being promoted: **release-time requirement**.
