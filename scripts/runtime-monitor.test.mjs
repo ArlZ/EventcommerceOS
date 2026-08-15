@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  renderPrometheus,
-  runRuntimeMonitor,
-  runtimeMonitorConfig,
-} from './runtime-monitor.mjs';
+import { renderPrometheus, runRuntimeMonitor, runtimeMonitorConfig } from './runtime-monitor.mjs';
 
 const RELEASE = 'a'.repeat(40);
 
@@ -67,7 +63,10 @@ test('runtime monitor passes healthy exact-release services', async () => {
       ['control-web', true, null],
     ],
   );
-  assert.equal(report.results.every((result) => result.durationMs === 25), true);
+  assert.equal(
+    report.results.every((result) => result.durationMs === 25),
+    true,
+  );
 });
 
 test('runtime monitor blocks a backend release mismatch', async () => {
@@ -96,7 +95,10 @@ test('runtime monitor normalizes fetch failures without retaining error detail',
   });
 
   assert.equal(report.status, 'BLOCKED');
-  assert.equal(report.results.every((result) => result.reason === 'FETCH_FAILED'), true);
+  assert.equal(
+    report.results.every((result) => result.reason === 'FETCH_FAILED'),
+    true,
+  );
   assert.equal(JSON.stringify(report).includes('secret provider detail'), false);
 });
 
