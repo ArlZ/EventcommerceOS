@@ -190,9 +190,14 @@ describeIntegration('live event command centre', () => {
   });
 
   it('rejects cross-organisation access before returning event metrics', async () => {
+    const outsider = await provisionOperator(database, {
+      actorId: '33333333-3333-4333-8333-444444444444',
+      memberships: [{ organisationId: otherOrganisationId, role: 'ADMIN' }],
+    });
+
     await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders(otherOrganisationId))
+      .set(outsider.headers(otherOrganisationId))
       .expect(403);
   });
 
