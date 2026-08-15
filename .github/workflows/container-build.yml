@@ -1,0 +1,138 @@
+name: Runtime container build
+
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.base.json'
+      - 'apps/cloud-api/**'
+      - 'apps/event-edge/**'
+      - 'apps/control-web/**'
+      - 'packages/contracts/**'
+      - 'packages/domain/**'
+      - '.github/workflows/container-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
+      EDGE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
+    services:
+      postgres:
+        image: postgres:16-alpine@sha256:44c4ee9810eff91f7eab4d822642e01115b1a9eccce4bcbdde7604752d68eac6
+        env:
+          POSTGRES_DB: event_commerce_container_test
+          POSTGRES_USER: event_commerce
+          POSTGRES_PASSWORD: event_commerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U event_commerce -d event_commerce_container_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build Cloud API image
+        run: >-
+          docker build --target cloud-api
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --tag event-commerce-cloud-api:${GITHUB_SHA} .
+      - name: Build Event Edge image
+        run: >-
+          docker build --target event-edge
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --tag event-commerce-event-edge:${GITHUB_SHA} .
+      - name: Build Control Web image
+        run: >-
+          docker build --target control-web
+          --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --build-arg NEXT_PUBLIC_CLOUD_API_URL=https://cloud-pilot.invalid
+          --tag event-commerce-control-web:${GITHUB_SHA} .
+      - name: Verify OCI image provenance
+        run: |
+          for image in \
+            event-commerce-cloud-api:${GITHUB_SHA} \
+            event-commerce-event-edge:${GITHUB_SHA} \
+            event-commerce-control-web:${GITHUB_SHA}; do
+            test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$GITHUB_SHA"
+            test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$image")" = "https://github.com/ArlZ/EventcommerceOS"
+          done
+      - name: Run packaged migrations
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL="$DATABASE_URL" \
+            event-commerce-cloud-api:${GITHUB_SHA} \
+            node scripts/migrate.mjs
+          docker run --rm --network host \
+            -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
+            event-commerce-event-edge:${GITHUB_SHA} \
+            node scripts/migrate.mjs
+      - name: Boot packaged services
+        run: |
+          docker run -d --network host --name cloud-api \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e ABUSE_DEPLOYMENT_MODE=single_instance_pilot \
+            -e ABUSE_UPSTREAM_CONFIRMED=false \
+            -e TRUST_PROXY_HOPS=0 \
+            event-commerce-cloud-api:${GITHUB_SHA}
+          docker run -d --network host --name event-edge \
+            -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
+            -e EDGE_FORWARDER_DISABLED=true \
+            event-commerce-event-edge:${GITHUB_SHA}
+          docker run -d --network host --name control-web \
+            event-commerce-control-web:${GITHUB_SHA}
+      - name: Verify readiness, identity and non-root execution
+        run: |
+          node - <<'NODE'
+          const targets = [
+            ['http://127.0.0.1:3001/health', 'cloud-api', true],
+            ['http://127.0.0.1:3002/health', 'event-edge', true],
+            ['http://127.0.0.1:3000/api/health', 'control-web', false],
+          ];
+
+          for (const [url, expectedService, requiresRelease] of targets) {
+            let body;
+            for (let attempt = 0; attempt < 30; attempt += 1) {
+              try {
+                const response = await fetch(url);
+                if (response.ok) {
+                  body = await response.json();
+                  break;
+                }
+              } catch {}
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+
+            if (!body) throw new Error(`${expectedService} did not become ready`);
+            if (requiresRelease) {
+              if (body.service !== expectedService) {
+                throw new Error(`${expectedService} reported service ${JSON.stringify(body.service)}`);
+              }
+              if (body.releaseCommit !== process.env.GITHUB_SHA) {
+                throw new Error(`${expectedService} reported release ${JSON.stringify(body.releaseCommit)}`);
+              }
+            }
+          }
+          NODE
+          test "$(docker exec cloud-api id -u)" != "0"
+          test "$(docker exec event-edge id -u)" != "0"
+          test "$(docker exec control-web id -u)" != "0"
+      - name: Runtime logs on failure
+        if: failure()
+        run: |
+          docker logs cloud-api || true
+          docker logs event-edge || true
+          docker logs control-web || true
