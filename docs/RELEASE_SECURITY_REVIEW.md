@@ -17,7 +17,7 @@ This review distinguishes implemented domain safety from deployment/security con
 
 ### SEC-001 — P0 — Cloud payment caller authentication and authority separation
 
-**Status: remediated across `security/cloud-payment-machine-trust` and `security/human-auth-rbac`, pending stack merge and exact-release acceptance.**
+**Status: remediated and merged into `main`; exact-release operational acceptance remains required.**
 
 The Event Edge machine credential protects Cloud payment initiation, attempt reconciliation, payment-order reads and payment-rail availability. Cloud derives the Edge organisation from the server-side Edge registry and verifies event/payment tenant ownership before returning or mutating payment truth.
 
@@ -37,7 +37,7 @@ Machine credentials cannot satisfy the human authorization boundary, and human o
 
 ### SEC-002 — P0 — Event Edge to Cloud machine ingress
 
-**Status: remediated in `security/edge-cloud-trust`, pending stack merge and exact-release acceptance.**
+**Status: remediated and merged into `main`; exact-release operational acceptance remains required.**
 
 The remediation closes both Edge-originated machine routes:
 
@@ -67,7 +67,7 @@ Security tests cover missing/wrong/unknown/revoked credentials, body identity mi
 
 ### SEC-003 — P1 — Human administrative identity and RBAC
 
-**Status: remediated in `security/human-auth-rbac`, pending stack merge and exact-release acceptance.**
+**Status: remediated and merged into `main`; exact-release operational acceptance remains required.**
 
 Cloud now uses revocable, expiring opaque operator sessions. Session secrets are generated with 256 bits of randomness and only SHA-256 digests are stored. Actor identity, platform authority and organisation membership/role are resolved from Cloud database state on each request.
 
@@ -93,7 +93,7 @@ Adversarial coverage includes legacy-header privilege spoofing, role inflation, 
 
 ### SEC-004 — P1 — POS device registration/revocation lifecycle
 
-**Status: remediated in `security/pos-edge-trust`, pending stack merge and exact-release acceptance.**
+**Status: remediated and merged into `main`; exact-release operational acceptance remains required.**
 
 Implemented controls:
 
@@ -118,7 +118,7 @@ Implemented controls:
 
 ### SEC-005 — P1 — HTTP abuse and resource-exhaustion controls
 
-**Status: remediated at application/code level in `security/abuse-controls`, pending stack merge and deployment evidence.**
+**Status: remediated at application/code level and merged into `main`; real deployment/flood evidence remains required.**
 
 Implemented Cloud controls:
 
@@ -154,7 +154,7 @@ Payment semantics remain unchanged under throttling: a `429`/timeout is transpor
 
 ### SEC-006 — P1 — Backup/restore evidence
 
-**Status: executable in `reliability/backup-restore-evidence`, but not closed until a representative release-candidate restore drill passes and is signed off.**
+**Status: executable with a permanent synthetic regression smoke merged into `main`; not closed until a representative release-candidate restore drill passes and is signed off.**
 
 The repository now includes a destructive-safety-aware PostgreSQL drill that exports a consistent source snapshot, fingerprints every public table, creates/validates a custom-format dump, restores into a separately verified target database, compares table lists/counts/content fingerprints, checks restored sequence safety and records RPO/RTO evidence.
 
@@ -164,7 +164,7 @@ This is an evidence mechanism, not evidence itself. SEC-006 remains a release bl
 
 ### SEC-007 — P1 — Permanent CI/security gate execution
 
-**Status: prior runner-allocation blocker closed; permanent GitHub Actions jobs now receive runners and execute.**
+**Status: runner-allocation blocker closed; permanent TypeScript/Android/SCA CI has executed green on the fully merged application/security stack. Exact-release enforcement still requires protected-branch policy.**
 
 The permanent workflow exercises the repository TypeScript build/lint/typecheck/test/format/architecture checks, Android unit/lint checks and the SCA job on the pull request's generated merge commit. The earlier zero-step runner-allocation failure is no longer the release blocker.
 
@@ -172,7 +172,7 @@ Exact-release acceptance is still fail-closed: the release candidate must retain
 
 ### SEC-008 — P2 — Dependency vulnerability / SCA evidence
 
-**Status: executable and producing real PASS evidence; exact-release retention plus named reviewer sign-off remain mandatory.**
+**Status: executable and producing real PASS evidence on the merged stack; exact-release retention plus named reviewer sign-off remain mandatory.**
 
 The release gate now:
 
@@ -192,6 +192,22 @@ The release gate now:
 The most recent retained technical evidence at the time of this review reports 13 findings: 0 critical, 0 high, 9 moderate, 4 low, 0 unknown, 0 accepted and 0 blocking. This is not described as a vulnerability-free dependency graph: moderate/low findings remain visible, and every release candidate must retain its own exact generated-merge-commit PASS manifest.
 
 `docs/DEPENDENCY_SECURITY.md` defines the command, evidence format, acceptance policy and remediation workflow. SEC-008 is not fully signed off until the exact release candidate's PASS manifest has been reviewed by a named reviewer.
+
+### SEC-009 — P1 — Repository merge-gate enforcement
+
+**Status: open. `main` is currently unprotected and GitHub does not enforce required status checks or pull-request-only changes.**
+
+The repository's CI, Android, SCA and recovery-smoke workflows are now executable and have passed on the integrated stack. However, repository policy does not currently prevent a future direct push or merge that bypasses those checks. That makes the release gate procedural rather than technically enforced.
+
+Before a live-money pilot candidate is approved, protect `main` so at minimum:
+
+- changes reach `main` through pull requests rather than direct pushes;
+- the permanent CI checks are required before merge, including TypeScript/architecture, Android and SCA;
+- the recovery smoke is required when its protected paths change;
+- force pushes and branch deletion are disabled for normal maintainers;
+- any emergency bypass is restricted, attributable and reviewed after use.
+
+Branch protection is a repository-administration control and is not implemented by application code. A green workflow run is evidence that checks pass; it is not evidence that GitHub will require them on every future merge.
 
 ## Positive controls already present
 
@@ -262,15 +278,16 @@ Inventory remains append-only ledger based; physical counts create traceable adj
 
 **Current disposition: NO-GO for internet-exposed production/live-money pilot.**
 
-SEC-001 through SEC-005 are closed at code/review level in the stacked security branches, subject to exact-release CI acceptance and stack merge. SEC-006 has an executable evidence mechanism but no representative signed restore PASS yet. SEC-007's runner-allocation problem is closed and permanent CI is executable. SEC-008 is producing real zero-blocker SCA evidence, but exact-release retention and named sign-off remain release requirements. SEC-005 additionally requires deployment-mode/flood-exercise evidence on the real pilot topology; multi-instance production requires the documented upstream distributed boundary.
+SEC-001 through SEC-005 are merged into `main` and closed at application/code-review level. The fully integrated stack has also passed permanent TypeScript/build/lint/typecheck/tests/format/architecture, Android and fail-closed SCA gates, and the permanent synthetic backup/restore smoke has passed. Those results materially improve release confidence, but they do not convert deployment or operator evidence into code evidence. SEC-006 still lacks a representative signed restore PASS. SEC-005 still requires deployment-mode/flood evidence on the actual pilot topology. SEC-008 still requires exact-release evidence retention and named review. SEC-009 remains open because `main` is not protected, so future CI compliance is not repository-enforced.
 
 Remaining mandatory release blockers are:
 
-1. SEC-006 executed representative backup/restore PASS evidence, RPO/RTO/cadence proof and named sign-off;
-2. one consolidated green permanent TypeScript + format + architecture + Android + SCA CI result on the exact release candidate;
-3. SEC-008 exact-release SCA PASS evidence with no unaccepted HIGH/CRITICAL/UNKNOWN finding and named review sign-off;
-4. SEC-005 real deployment abuse/flood evidence before live exposure;
-5. real supported-device, event-network, Edge-hardware and provider fault/reconciliation evidence from `docs/PILOT_RUNBOOK.md`.
+1. enable and verify `main` branch protection / required checks so release gates cannot be routinely bypassed (SEC-009);
+2. execute a representative SEC-006 backup/restore drill on the exact release candidate, proving RPO/RTO/cadence and obtaining named operator/reviewer sign-off;
+3. retain one consolidated green permanent TypeScript + format + architecture + Android + SCA result on the exact release candidate and obtain the required release review;
+4. retain exact-release SEC-008 SCA PASS evidence with no unaccepted HIGH/CRITICAL/UNKNOWN finding and named review sign-off;
+5. execute SEC-005 deployment abuse/flood evidence on the real pilot topology before live exposure;
+6. complete the supported-device, event-network, Edge-hardware and provider fault/reconciliation evidence in `docs/PILOT_RUNBOOK.md`.
 
 External OIDC/SSO/MFA is still recommended before graduating beyond a tightly controlled pilot, but the repository no longer trusts browser-supplied role/actor headers for operational authority.
 
