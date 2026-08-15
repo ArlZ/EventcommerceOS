@@ -103,6 +103,21 @@ export class EdgeCloudAuthService {
     };
   }
 
+  async authorizeEventIds(identity: EdgeCloudIdentity, eventIds: readonly string[]): Promise<void> {
+    const unique = [...new Set(eventIds.map((value) => value.trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+    const rows = await this.database.query<EventOrgRow>(
+      `SELECT id::text FROM events
+       WHERE organisation_id=$1 AND id::text = ANY($2::text[])`,
+      [identity.organisationId, unique],
+    );
+    const allowed = new Set(rows.map((row) => row.id));
+    const denied = unique.find((id) => !allowed.has(id));
+    if (denied) {
+      throw new UnauthorizedException('Requested event is outside the Event Edge organisation');
+    }
+  }
+
   async authorizeSyncBatch(identity: EdgeCloudIdentity, batch: EdgeCloudBatch): Promise<void> {
     this.assertEdgeId(identity, batch.edgeId);
     await this.assertEventsBelongToOrganisation(
@@ -156,19 +171,6 @@ export class EdgeCloudAuthService {
     events: TenantBoundEvent[],
   ): Promise<void> {
     const eventIds = [...new Set(events.map(eventIdFromPayload))];
-    if (eventIds.length === 0) return;
-
-    const rows = await this.database.query<EventOrgRow>(
-      `SELECT id::text FROM events
-       WHERE organisation_id=$1 AND id::text = ANY($2::text[])`,
-      [identity.organisationId, eventIds],
-    );
-    const allowed = new Set(rows.map((row) => row.id));
-    const denied = eventIds.find((id) => !allowed.has(id));
-    if (denied) {
-      throw new UnauthorizedException(
-        'Edge batch contains an event outside the Event Edge organisation',
-      );
-    }
+    await this.authorizeEventIds(identity, eventIds);
   }
 }

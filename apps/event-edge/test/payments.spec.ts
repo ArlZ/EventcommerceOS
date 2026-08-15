@@ -13,6 +13,8 @@ describe('Edge payment boundary', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     delete process.env.CLOUD_API_URL;
+    delete process.env.EDGE_ID;
+    delete process.env.EDGE_CLOUD_SYNC_TOKEN;
   });
 
   it('normalizes a transient M-PESA initiation request', () => {
@@ -157,11 +159,16 @@ describe('Edge payment boundary', () => {
     });
   });
 
-  it('reports payment rails degraded when Cloud payment health is unreachable', async () => {
+  it('reports payment rails degraded when authenticated Cloud payment health is unreachable', async () => {
     process.env.CLOUD_API_URL = 'http://localhost:3001';
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('cloud offline')));
+    process.env.EDGE_ID = 'edge-payment-test';
+    process.env.EDGE_CLOUD_SYNC_TOKEN =
+      'edge-payment-cloud-test-token-0123456789-abcdefghijklmnopqrstuvwxyz';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('cloud offline'));
+    vi.stubGlobal('fetch', fetchMock);
     const rails = await new TerminalPaymentsService().railAvailability();
 
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(rails).toEqual([
       {
         providerId: 'mpesa',

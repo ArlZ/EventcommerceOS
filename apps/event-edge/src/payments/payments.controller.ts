@@ -3,7 +3,6 @@ import { DeviceEdgeAuthService } from '../security/device-edge-auth.service';
 import { EdgePaymentsService, parseEdgeInitiatePayment } from './payments.service';
 import {
   assertEdgeInitiatePaymentEnvelope,
-  parseEdgeExternalTerminalConfirmation,
   TerminalPaymentsService,
 } from './terminal-payments.service';
 
@@ -33,13 +32,6 @@ export class EdgePaymentsController {
       throw new Error('Pesapal Sabi accountReference must equal paymentAttemptId');
     }
     return this.payments.initiate(request, identity.deviceId);
-  }
-
-  @Post('manual-terminal-confirmations')
-  confirmExternalTerminal(@Body() body: unknown) {
-    return this.terminalPayments.confirmExternalTerminal(
-      parseEdgeExternalTerminalConfirmation(body),
-    );
   }
 
   @Post('attempts/:paymentAttemptId/reconcile')
