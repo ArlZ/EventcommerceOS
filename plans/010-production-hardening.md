@@ -1,6 +1,6 @@
 # Task 010 — Production Hardening & Event Simulation
 
-Status: **feature-complete at code/review level; release blocked by security + permanent CI**
+Status: **feature/security-control implementation complete at code/review level; release evidence and permanent CI still blocked**
 Base: Task 009 (`codex/task-009-event-close`)
 
 ## Objective
@@ -10,9 +10,10 @@ Create release evidence for live-event reliability without adding product featur
 ## Evidence layers
 
 1. **Deterministic model simulation** — repeatable fault/load regression in `packages/simulator`.
-2. **Repository acceptance tests** — existing TypeScript, integration and Android gates plus Task 010 invariant tests.
-3. **Threat-focused review** — payments, callbacks, auth/RBAC, sync, device trust and privileged inventory/close actions.
-4. **Real pilot evidence** — supported Android devices, event Wi-Fi/LAN, Edge hardware and sandbox/live provider rails using `docs/PILOT_RUNBOOK.md`.
+2. **Repository acceptance tests** — TypeScript, integration, Android and dependency-security gates.
+3. **Threat-focused review/remediation** — payments, callbacks, auth/RBAC, sync, device trust, abuse controls and privileged inventory/close actions.
+4. **Operational recovery evidence** — executable backup/isolated-restore drill against representative release-candidate data.
+5. **Real pilot evidence** — supported Android devices, event Wi-Fi/LAN, Edge hardware, abuse/flood exercise and sandbox/live provider rails using `docs/PILOT_RUNBOOK.md`.
 
 A pass at one layer does not substitute for the next layer.
 
@@ -69,7 +70,7 @@ The modeled suite fails if any of these occur:
 
 The latency assertions are **model regression checks only**. Real hardware must independently prove the SLOs.
 
-## Executed evidence
+## Executed model evidence
 
 A strict TypeScript 5.8.3 compile of the simulator source passed in the available execution environment using the repository's core strictness settings.
 
@@ -89,42 +90,55 @@ The deterministic required suite was executed with fixed seeds/timestamp and pas
 
 Full deterministic baseline: `docs/SIMULATION_BASELINE_2026-08-14.md`.
 
-## Security/release review
+## Security/release remediation stack
 
-Documented in `docs/RELEASE_SECURITY_REVIEW.md`.
+The threat review is documented in `docs/RELEASE_SECURITY_REVIEW.md`. The original code-level blockers have now been addressed in the stacked branches:
 
-Release-blocking findings include:
+- SEC-001 Cloud payment caller separation: Event Edge machine payment traffic authenticated; privileged human payment actions use separate human authorization.
+- SEC-002 Event Edge -> Cloud ingress: revocable, tenant-bound Edge machine identity.
+- SEC-003 human administration: expiring/revocable operator sessions with database-derived organisation RBAC; caller role/actor headers are not trusted.
+- SEC-004 POS -> Event Edge: revocable device identity and server-side event/location assignment, with Android secret storage in Keystore-backed encryption.
+- SEC-005 abuse/resource exhaustion: Cloud and Event Edge rate, burst, concurrency, request-size and timeout controls plus explicit distributed-upstream deployment contract.
+- SEC-006 recovery evidence: executable consistent-snapshot backup + isolated restore/fingerprint/sequence/RPO/RTO drill.
+- SEC-008 dependency evidence: executable exact-release npm + Android/Maven SCA gate using resolved inventories, OSV advisories and exact expiring risk acceptances.
 
-- Cloud payment mutation/read surfaces lack production authentication;
-- Cloud sync ingestion/device-health surfaces lack authenticated Edge identity;
-- admin role/organisation context currently trusts caller-supplied headers;
-- device registration/revocation is not production-grade end-to-end;
-- rate limiting/abuse controls are not wired globally;
-- backup/restore evidence has not been executed;
-- dependency/SCA evidence is incomplete;
-- permanent GitHub Actions still fails before step 1 and therefore provides no code validation signal.
+These implementations remain stacked/draft until permanent CI executes. SEC-006 and SEC-008 are **evidence mechanisms**, not passed evidence by themselves.
 
-Current security disposition: **NO-GO for internet-exposed production or a live-money pilot**.
+## Remaining mandatory release blockers
+
+Current security disposition remains **NO-GO for internet-exposed production or a live-money pilot**.
+
+The remaining blockers are now evidence/environment gates rather than missing anonymous trust boundaries:
+
+1. **SEC-005 deployment evidence** — run the documented flood/abuse exercise on the actual pilot topology and retain upstream distributed-protection evidence if applicable.
+2. **SEC-006 restore evidence** — execute the representative backup/isolated-restore drill on the exact release candidate, pass fingerprints/sequence/RPO/RTO checks and obtain named sign-off.
+3. **SEC-007 permanent CI** — TypeScript, Android and SCA jobs must actually receive runners and pass on the exact release stack. Current GitHub Actions jobs still fail before step 1 with no runner execution.
+4. **SEC-008 SCA evidence** — execute the SCA job on the exact release candidate, retain a PASS manifest with no unaccepted HIGH/CRITICAL/UNKNOWN finding, and obtain named sign-off.
+5. **Real hardware/network/provider pilot evidence** — complete the durability, payment-fault, network partition/recovery, inventory and close/reconciliation exercises in `docs/PILOT_RUNBOOK.md`.
+
+No PASS artifact should be fabricated or inferred from the existence of a script/workflow definition.
 
 ## Validation limitation
 
-The local execution environment has Node.js 22 and TypeScript 5.8.3, but cannot reach the npm registry to activate/download pnpm. Therefore the full workspace build/lint/Vitest/dependency-audit commands could not be substituted locally.
+The current execution environment cannot substitute for the permanent release environment: the GitHub Actions account/runner allocation problem causes repository jobs to complete with zero executed steps. This means the stack has no authoritative full-workspace build/lint/test/Android/SCA signal on the current exact head.
 
-The permanent GitHub TypeScript/Android workflow was retried again during Task 010 and both jobs still completed with zero executed steps. No stack is eligible for merge until those jobs actually run and pass.
+The backup/restore and pilot-topology gates also require real representative databases/hardware/network/provider conditions that are not present in this chat execution environment.
 
 ## Pilot graduation rule
 
-Task 010 must not mark the product "festival ready". After the security blockers and permanent CI are closed, the maximum recommendation from automated evidence is **controlled pilot candidate**.
+Task 010 must not mark the product "festival ready". After the mandatory evidence gates are closed, the maximum recommendation from automated/review evidence is **controlled pilot candidate**.
 
-Graduation to a larger event requires all of:
+A controlled pilot may graduate to a materially larger event only when all of the following are retained and reviewed:
 
-- green permanent TypeScript + Android gates on the exact release commit;
-- no open P0/P1 security findings;
+- green permanent TypeScript + Android + SCA gates on the exact release commit;
+- no unaccepted HIGH/CRITICAL/UNKNOWN dependency finding;
+- no open P0/P1 security finding;
 - supported-device local latency evidence meeting SLOs;
 - 100-order offline/restart durability test with zero loss;
 - provider sandbox payment fault matrix passed, including timeout/duplicate/late callback cases;
 - successful event-network partition/reconnect exercise;
+- abuse/flood exercise passed without starving local commerce or corrupting payment truth;
 - inventory opening/count/transfer reconciliation with zero unexplained ledger divergence;
-- completed backup restore exercise;
+- representative backup restore PASS evidence and reviewer sign-off;
 - one controlled live pilot closed and reconciled with documented incident/evidence pack;
 - explicit human go/no-go review before any materially larger deployment.
