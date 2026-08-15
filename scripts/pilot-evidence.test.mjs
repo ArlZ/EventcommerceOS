@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   REQUIRED_GATES,
   REQUIRED_OWNERS,
+  createEvidenceRef,
   createInitialManifest,
   validateEvidenceFiles,
   validateEvidenceRef,
@@ -156,6 +157,35 @@ test('dependency security cannot pass with blockers', () => {
   const result = validateManifest(manifest, RELEASE);
   assert.equal(result.ok, false);
   assert.ok(result.blockers.some((blocker) => blocker.includes('blockingFindings=0')));
+});
+
+test('hash helper creates a digest-bound reference relative to the manifest', () => {
+  const fixture = createEvidenceFixture();
+  try {
+    const file = join(fixture.root, 'evidence', 'hardwareNetwork.json');
+    assert.deepEqual(createEvidenceRef(fixture.manifestPath, file), {
+      path: 'evidence/hardwareNetwork.json',
+      sha256: digest('hardwareNetwork-evidence\n'),
+    });
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test('hash helper refuses evidence outside the manifest directory', () => {
+  const fixture = createEvidenceFixture();
+  const outsideRoot = mkdtempSync(join(tmpdir(), 'event-commerce-outside-'));
+  const outsideFile = join(outsideRoot, 'outside.txt');
+  writeFileSync(outsideFile, 'outside\n');
+  try {
+    assert.throws(
+      () => createEvidenceRef(fixture.manifestPath, outsideFile),
+      /must be retained under the manifest directory/,
+    );
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+    rmSync(outsideRoot, { recursive: true, force: true });
+  }
 });
 
 test('retained evidence files pass when every digest matches', () => {
