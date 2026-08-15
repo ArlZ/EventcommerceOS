@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ShutdownSignal } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
@@ -27,6 +28,7 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
     bodyParser: false,
   });
+  app.enableShutdownHooks([ShutdownSignal.SIGTERM, ShutdownSignal.SIGINT]);
   app.useBodyParser('json', {
     limit: boundedInteger('EDGE_HTTP_JSON_BODY_LIMIT_BYTES', 1_048_576, 65_536, 2_097_152),
   });
