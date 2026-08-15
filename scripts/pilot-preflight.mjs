@@ -8,7 +8,7 @@ import { REQUIRED_GATES, REQUIRED_OWNERS } from './pilot-evidence.mjs';
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'BLOCKED']);
+const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'FAIL']);
 const DEPLOYMENT_MODES = new Set(['single_instance_pilot', 'upstream_distributed']);
 const LOCAL_HEALTH_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -186,7 +186,7 @@ export function validatePilotManifestReadiness(manifest, releaseCommit, deployme
         continue;
       }
       if (!GATE_STATUSES.has(gate.status)) {
-        errors.push(`gates.${gateName}.status must be NOT_RUN, PASS, or BLOCKED`);
+        errors.push(`gates.${gateName}.status must be NOT_RUN, PASS, or FAIL`);
         continue;
       }
       validateClaimedPass(gateName, gate, errors);
