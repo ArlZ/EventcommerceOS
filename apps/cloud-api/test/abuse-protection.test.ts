@@ -148,14 +148,15 @@ describe('HTTP abuse protection', () => {
         return true;
       },
     } as unknown as OperatorIdentityGuard;
-    const guard = new GlobalSecurityGuard(abuse, operator);
+    const protection = new AbuseProtectionService();
+    const guard = new GlobalSecurityGuard(abuse, operator, protection);
     const context = requestContext({ method: 'GET', path: '/health', headers: {} }, {});
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(calls).toEqual(['abuse', 'operator']);
   });
 
-  it('does not reach authentication after an abuse rejection', async () => {
+  it('does not reach authentication after a rate rejection', async () => {
     const calls: string[] = [];
     const abuse = {
       canActivate() {
@@ -169,10 +170,46 @@ describe('HTTP abuse protection', () => {
         return true;
       },
     } as unknown as OperatorIdentityGuard;
-    const guard = new GlobalSecurityGuard(abuse, operator);
+    const guard = new GlobalSecurityGuard(abuse, operator, new AbuseProtectionService());
     const context = requestContext({ method: 'GET', path: '/health', headers: {} }, {});
 
     await expect(guard.canActivate(context)).rejects.toThrow('rate rejected');
     expect(calls).toEqual(['abuse']);
+  });
+
+  it('caps distributed fake-session authentication before database work', async () => {
+    const calls: string[] = [];
+    const abuse = {
+      canActivate() {
+        calls.push('abuse');
+        return true;
+      },
+    } as unknown as AbuseProtectionGuard;
+    const operator = {
+      async canActivate() {
+        calls.push('operator');
+        return true;
+      },
+    } as unknown as OperatorIdentityGuard;
+    const protection = new AbuseProtectionService();
+    const policy = protection.policy('OPERATOR_READ');
+    for (let index = 0; index < policy.maxInFlight; index += 1) {
+      expect(protection.tryEnter('OPERATOR_READ')).toBe(true);
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    const guard = new GlobalSecurityGuard(abuse, operator, protection);
+    const context = requestContext(
+      {
+        method: 'GET',
+        path: '/command-centre/events/event-a',
+        headers: { authorization: 'Bearer ecom_op_fake-session-value-123456789012345678901234' },
+      },
+      responseHeaders,
+    );
+
+    await expect(guard.canActivate(context)).rejects.toThrow(/authentication concurrency limit/);
+    expect(calls).toEqual(['abuse']);
+    expect(responseHeaders['X-Auth-Concurrency-Limit']).toBe(String(policy.maxInFlight));
   });
 });
