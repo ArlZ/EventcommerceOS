@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { databaseConnectionTimeoutMs } from '../src/database/database.service';
+import {
+  databaseConnectionString,
+  databaseConnectionTimeoutMs,
+} from '../src/database/database.service';
 
-describe('Cloud database connection timeout configuration', () => {
-  it('uses the bounded default', () => {
+describe('Cloud database configuration', () => {
+  it('uses the bounded connection timeout default', () => {
     expect(databaseConnectionTimeoutMs({})).toBe(5_000);
   });
 
-  it('accepts a bounded deployment override', () => {
+  it('accepts a bounded connection timeout override', () => {
     expect(databaseConnectionTimeoutMs({ DATABASE_CONNECTION_TIMEOUT_MS: '8000' })).toBe(8_000);
   });
 
@@ -18,4 +21,19 @@ describe('Cloud database connection timeout configuration', () => {
       ).toThrow(/DATABASE_CONNECTION_TIMEOUT_MS/);
     },
   );
+
+  it('requires an explicit database URL in production', () => {
+    expect(() => databaseConnectionString({ NODE_ENV: 'production' })).toThrow(
+      /DATABASE_URL is required in production/,
+    );
+  });
+
+  it('uses the explicit database URL in production', () => {
+    const url = 'postgresql://cloud.example/internal';
+    expect(databaseConnectionString({ NODE_ENV: 'production', DATABASE_URL: url })).toBe(url);
+  });
+
+  it('retains the local development fallback outside production', () => {
+    expect(databaseConnectionString({ NODE_ENV: 'test' })).toContain('event_commerce_cloud');
+  });
 });
