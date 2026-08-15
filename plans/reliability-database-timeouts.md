@@ -5,22 +5,24 @@ Base: `main` at `e96b44cfeec9a30e4dbf960ff84fe6e33a7168b5`
 
 ## Objective
 
-Bound Cloud API and Event Edge PostgreSQL connection establishment so a database/network outage fails quickly and predictably instead of inheriting long operating-system socket timeouts.
+Bound Cloud API and Event Edge PostgreSQL connection establishment so a database/network outage fails quickly and predictably instead of inheriting long operating-system socket timeouts, and ensure the deployment environment example names the Cloud database variable the application actually consumes.
 
 ## Scope
 
 1. Add validated database connection-timeout configuration to the existing Cloud and Edge pool construction.
 2. Use conservative defaults suitable for event operations while allowing bounded deployment overrides.
 3. Fail startup/config construction on malformed or out-of-range timeout values.
-4. Document the non-secret timeout environment variables.
-5. Add unit coverage for defaults, overrides and invalid values.
+4. Correct the environment example from unused `CLOUD_DATABASE_URL` to the actual Cloud `DATABASE_URL` variable.
+5. Document the non-secret timeout environment variables.
+6. Add unit coverage for defaults, overrides and invalid values.
 
 ## Acceptance criteria
 
 - Cloud PostgreSQL connections use `DATABASE_CONNECTION_TIMEOUT_MS`, default 5000 ms, allowed range 1000–30000 ms.
 - Event Edge PostgreSQL connections use `EDGE_DATABASE_CONNECTION_TIMEOUT_MS`, default 3000 ms, allowed range 500–15000 ms.
 - Invalid, negative, fractional or out-of-range values fail closed.
-- Existing database URLs and transaction semantics are unchanged.
+- `infra/.env.example` uses `DATABASE_URL` for Cloud and `EDGE_DATABASE_URL` for Event Edge.
+- Existing database connection semantics are otherwise unchanged.
 - Permanent TypeScript, Android, SCA, formatting and architecture gates remain green.
 
 ## Non-goals
