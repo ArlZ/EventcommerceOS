@@ -81,7 +81,10 @@ test('preflight passes only readiness checks and never claims field evidence', a
   assert.equal(report.releaseTree, TREE);
   assert.equal(report.fieldEvidenceSatisfied, false);
   assert.match(report.reportDigestSha256, /^[0-9a-f]{64}$/);
-  assert.equal(report.checks.every((entry) => entry.status === 'PASS'), true);
+  assert.equal(
+    report.checks.every((entry) => entry.status === 'PASS'),
+    true,
+  );
 });
 
 test('preflight blocks when a deployed service reports another release', async () => {
@@ -131,28 +134,32 @@ test('manifest readiness requires named owners and accepts existing FAIL gate st
   manifest.owners.inventoryOwner = '';
   manifest.gates.branchProtection.status = 'FAIL';
 
-  const errors = validatePilotManifestReadiness(
-    manifest,
-    RELEASE,
-    'single_instance_pilot',
-  );
+  const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
 
-  assert.equal(errors.some((entry) => entry.includes('owners.inventoryOwner')), true);
-  assert.equal(errors.some((entry) => entry.includes('branchProtection.status')), false);
+  assert.equal(
+    errors.some((entry) => entry.includes('owners.inventoryOwner')),
+    true,
+  );
+  assert.equal(
+    errors.some((entry) => entry.includes('branchProtection.status')),
+    false,
+  );
 });
 
 test('manifest readiness rejects a claimed PASS without evidence and review', () => {
   const manifest = readyManifest();
   manifest.gates.hardwareNetwork.status = 'PASS';
 
-  const errors = validatePilotManifestReadiness(
-    manifest,
-    RELEASE,
-    'single_instance_pilot',
-  );
+  const errors = validatePilotManifestReadiness(manifest, RELEASE, 'single_instance_pilot');
 
-  assert.equal(errors.some((entry) => entry.includes('hardwareNetwork is PASS without evidenceRefs')), true);
-  assert.equal(errors.some((entry) => entry.includes('hardwareNetwork is PASS without a named reviewer')), true);
+  assert.equal(
+    errors.some((entry) => entry.includes('hardwareNetwork is PASS without evidenceRefs')),
+    true,
+  );
+  assert.equal(
+    errors.some((entry) => entry.includes('hardwareNetwork is PASS without a named reviewer')),
+    true,
+  );
 });
 
 test('preflight report does not serialize unrelated secret environment values', async () => {
