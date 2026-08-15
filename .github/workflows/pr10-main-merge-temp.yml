@@ -16,7 +16,7 @@ jobs:
         with:
           ref: codex/task-008-command-centre
           fetch-depth: 0
-      - name: Merge current main
+      - name: Merge current main and resolve verified formatting-only conflict
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -26,10 +26,17 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "Merge conflicts:"
-            git diff --name-only --diff-filter=U
-            git status --short
-            exit "$status"
+            conflicts="$(git diff --name-only --diff-filter=U)"
+            expected="apps/cloud-api/test/pesapal-sabi.provider.test.ts"
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$conflicts"
+              git status --short
+              exit 1
+            fi
+            git checkout --theirs "$expected"
+            git add "$expected"
+            git commit -m "Merge current main into Task 008"
           fi
       - name: Self-remove and push
         run: |
