@@ -150,12 +150,14 @@ export class OperatorAuthService {
     eventId: string,
     allowedRoles: readonly OperatorOrganisationRole[],
   ): Promise<AdminContext> {
+    const identity = await this.authenticate(headers);
+    if (!uuid(eventId)) throw new ForbiddenException('Event is unavailable to this operator');
     const organisationId = await this.organisationFor(
       `SELECT organisation_id::text AS organisation_id FROM events WHERE id=$1`,
       [eventId],
       'Event is unavailable to this operator',
     );
-    return this.contextForOrganisation(headers, organisationId, allowedRoles);
+    return this.authorizeOrganisation(identity, organisationId, allowedRoles);
   }
 
   async contextForPayment(
@@ -163,6 +165,7 @@ export class OperatorAuthService {
     paymentId: string,
     allowedRoles: readonly OperatorOrganisationRole[],
   ): Promise<AdminContext> {
+    const identity = await this.authenticate(headers);
     const organisationId = await this.organisationFor(
       `SELECT event.organisation_id::text AS organisation_id
        FROM payments payment
@@ -171,7 +174,7 @@ export class OperatorAuthService {
       [paymentId],
       'Payment is unavailable to this operator',
     );
-    return this.contextForOrganisation(headers, organisationId, allowedRoles);
+    return this.authorizeOrganisation(identity, organisationId, allowedRoles);
   }
 
   async contextForPaymentAttempt(
@@ -179,6 +182,7 @@ export class OperatorAuthService {
     paymentAttemptId: string,
     allowedRoles: readonly OperatorOrganisationRole[],
   ): Promise<AdminContext> {
+    const identity = await this.authenticate(headers);
     const organisationId = await this.organisationFor(
       `SELECT event.organisation_id::text AS organisation_id
        FROM payment_attempts attempt
@@ -188,7 +192,7 @@ export class OperatorAuthService {
       [paymentAttemptId],
       'Payment attempt is unavailable to this operator',
     );
-    return this.contextForOrganisation(headers, organisationId, allowedRoles);
+    return this.authorizeOrganisation(identity, organisationId, allowedRoles);
   }
 
   assertActor(authenticatedActorId: string, suppliedActorId: string, label = 'actorId'): void {
