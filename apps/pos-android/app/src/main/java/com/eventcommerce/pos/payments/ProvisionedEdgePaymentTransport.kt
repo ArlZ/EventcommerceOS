@@ -9,11 +9,14 @@ class ProvisionedEdgePaymentTransport(
 ) : EdgePaymentTransport {
   override suspend fun initiate(
     attempt: LocalPaymentAttempt,
-    customerPhone: String,
+    customerPhone: String?,
   ): EdgePaymentState = delegate().initiate(attempt, customerPhone)
 
   override suspend fun reconcile(paymentAttemptId: String): EdgePaymentState =
     delegate().reconcile(paymentAttemptId)
+
+  override suspend fun railAvailability(): List<EdgePaymentRailAvailability> =
+    delegate().railAvailability()
 
   private suspend fun delegate(): HttpsEdgePaymentTransport {
     val syncEndpoint = requireNotNull(provisioning.endpoint()) { "Edge endpoint is not provisioned" }

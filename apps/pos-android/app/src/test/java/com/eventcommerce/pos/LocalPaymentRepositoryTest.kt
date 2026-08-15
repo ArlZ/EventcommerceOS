@@ -30,7 +30,7 @@ class LocalPaymentRepositoryTest {
   @Before
   fun setUp() {
     context = ApplicationProvider.getApplicationContext()
-    dbName = "task006-${UUID.randomUUID()}.db"
+    dbName = "task007-${UUID.randomUUID()}.db"
     db = openDatabase()
     repository = LocalPosRepository(db)
   }
@@ -59,6 +59,38 @@ class LocalPaymentRepositoryTest {
     assertEquals(OrderState.PAYMENT_PENDING, repository.currentOpenOrder()?.state)
     assertEquals(PaymentAttemptState.UNKNOWN, repository.paymentAttempt(attempt.id)?.state)
     assertEquals(1, repository.unresolvedPaymentAttempts().size)
+  }
+
+  @Test
+  fun `pending Sabi card attempt survives restart without card credentials`() = runBlocking {
+    val item = repository.ensureDevelopmentMenu().items.first()
+    val order = repository.addItem(item.itemId)
+    val attempt = repository.createPaymentAttempt(
+      orderId = order.id,
+      providerId = "pesapal_sabi",
+      clientAttemptId = "card-attempt-1",
+    )
+    repository.applyPaymentState(
+      attempt.id,
+      PaymentAttemptState.PENDING,
+      failureCode = "AWAITING_SABI_TERMINAL",
+    )
+
+    val paymentEvent = repository.allOutboxEvents()
+      .first { it.aggregateId == attempt.id && it.eventType == "PAYMENT_ATTEMPT_CREATED" }
+    val serialized = paymentEvent.payloadJson.lowercase()
+    listOf("cardnumber", "\"pan\"", "\"cvv\"", "\"cvc\"", "\"pin\"", "track2").forEach {
+      assertEquals(false, serialized.contains(it))
+    }
+
+    db.close()
+    db = openDatabase()
+    repository = LocalPosRepository(db)
+
+    val restored = repository.paymentAttempt(attempt.id)
+    assertEquals("pesapal_sabi", restored?.providerId)
+    assertEquals(PaymentAttemptState.PENDING, restored?.state)
+    assertEquals(OrderState.PAYMENT_PENDING, repository.currentOpenOrder()?.state)
   }
 
   @Test

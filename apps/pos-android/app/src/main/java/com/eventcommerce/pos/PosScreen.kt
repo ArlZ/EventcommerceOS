@@ -37,6 +37,7 @@ import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.domain.CachedMenu
 import com.eventcommerce.pos.domain.LocalOrder
 import com.eventcommerce.pos.domain.OrderState
+import com.eventcommerce.pos.payments.EdgePaymentRailAvailability
 import com.eventcommerce.pos.payments.PaymentCoordinator
 import kotlinx.coroutines.launch
 
@@ -45,6 +46,7 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
   var menu by remember { mutableStateOf<CachedMenu?>(null) }
   var order by remember { mutableStateOf<LocalOrder?>(null) }
   var paymentAttempt by remember { mutableStateOf<LocalPaymentAttempt?>(null) }
+  var paymentRails by remember { mutableStateOf<List<EdgePaymentRailAvailability>>(emptyList()) }
   var history by remember { mutableStateOf<List<LocalOrder>>(emptyList()) }
   var outboxCount by remember { mutableStateOf(0) }
   var selectedCategory by remember { mutableStateOf("All") }
@@ -61,6 +63,9 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
     history = repository.history(5)
     outboxCount = repository.outboxCount()
   }
+
+  fun rail(providerId: String): EdgePaymentRailAvailability? =
+    paymentRails.firstOrNull { it.providerId == providerId }
 
   fun mutate(action: suspend () -> Unit) {
     if (busy) return
@@ -80,6 +85,7 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
       repository.ensureDevelopmentMenu()
       refresh()
     }.onFailure { failure -> error = failure.message ?: "Unable to open local POS" }
+    paymentRails = payments.railAvailability()
   }
 
   MaterialTheme {
@@ -95,9 +101,28 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
         }
         error?.let { Text("Error: $it", color = MaterialTheme.colorScheme.error) }
 
+        Card(modifier = Modifier.fillMaxWidth()) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Text("Payment rails", style = MaterialTheme.typography.titleMedium)
+            Text("M-PESA: ${rail("mpesa")?.status ?: "CHECKING"}")
+            Text("Card • Pesapal Sabi: ${rail("pesapal_sabi")?.status ?: "CHECKING"}")
+            Text("POS/local ordering stays available even when an electronic rail is degraded.")
+            OutlinedButton(
+              onClick = { mutate { paymentRails = payments.railAvailability() } },
+              enabled = !busy,
+            ) {
+              Text("Refresh payment rails")
+            }
+          }
+        }
+
         val current = order
         val orderEditable = current == null || current.state == OrderState.OPEN
-        val categories = listOf("All") + (menu?.items?.map { it.category }?.distinct()?.sorted() ?: emptyList())
+        val categories = listOf("All") +
+          (menu?.items?.map { it.category }?.distinct()?.sorted() ?: emptyList())
         Row(
           modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -113,7 +138,10 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
 
         val visibleItems = menu?.items
           ?.filter { selectedCategory == "All" || it.category == selectedCategory }
-          ?.sortedWith(compareByDescending<com.eventcommerce.pos.domain.MenuCandidateItem> { it.favourite }.thenBy { it.sortOrder })
+          ?.sortedWith(
+            compareByDescending<com.eventcommerce.pos.domain.MenuCandidateItem> { it.favourite }
+              .thenBy { it.sortOrder },
+          )
           ?: emptyList()
 
         LazyVerticalGrid(
@@ -166,7 +194,10 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
                   }
                 }
               }
-              Text("Total: ${formatMinor(current.totalMinor, current.currency)}", style = MaterialTheme.typography.titleLarge)
+              Text(
+                "Total: ${formatMinor(current.totalMinor, current.currency)}",
+                style = MaterialTheme.typography.titleLarge,
+              )
 
               if (current.state == OrderState.OPEN) {
                 OutlinedTextField(
@@ -184,10 +215,17 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
                       customerPhone = ""
                     }
                   },
-                  enabled = !busy && customerPhone.isNotBlank(),
+                  enabled = !busy && customerPhone.isNotBlank() && rail("mpesa")?.available == true,
                   modifier = Modifier.fillMaxWidth().height(56.dp),
                 ) {
                   Text("Pay with M-PESA")
+                }
+                Button(
+                  onClick = { mutate { payments.startCard(current.id) } },
+                  enabled = !busy && rail("pesapal_sabi")?.available == true,
+                  modifier = Modifier.fillMaxWidth().height(56.dp),
+                ) {
+                  Text("Pay by card • Pesapal Sabi")
                 }
                 Button(
                   onClick = { mutate { repository.recordCashPayment(current.id) } },
@@ -206,8 +244,16 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
               } else {
                 val attempt = paymentAttempt
                 Text("Payment state: ${attempt?.state?.name ?: "PENDING"}")
+                if (attempt?.providerId == "pesapal_sabi") {
+                  Text("Sabi merchant reference: ${attempt.id}")
+                  Text(
+                    "Add this reference on the Sabi charge. Card details and PIN stay on the Pesapal terminal.",
+                  )
+                }
                 when (attempt?.state?.name) {
-                  "UNKNOWN" -> Text("Payment result is uncertain. Do not ask the customer to pay again until reconciled.")
+                  "UNKNOWN" -> Text(
+                    "Payment result is uncertain. Do not ask the customer to pay again until reconciled.",
+                  )
                   "PENDING", "INITIATED", "CREATED" -> Text("Waiting for payment confirmation.")
                 }
                 if (attempt != null) {
@@ -230,7 +276,9 @@ fun PosScreen(repository: LocalPosRepository, payments: PaymentCoordinator) {
           Text("No closed local orders yet.")
         } else {
           history.forEach { closed ->
-            Text("${closed.id.take(8)} • ${formatMinor(closed.totalMinor, closed.currency)} • CLOSED")
+            Text(
+              "${closed.id.take(8)} • ${formatMinor(closed.totalMinor, closed.currency)} • CLOSED",
+            )
           }
         }
         Text("Durable local outbox events retained: $outboxCount")

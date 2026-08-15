@@ -6,6 +6,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 
 class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransport {
@@ -15,9 +16,11 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
 
   override suspend fun initiate(
     attempt: LocalPaymentAttempt,
-    customerPhone: String,
+    customerPhone: String?,
   ): EdgePaymentState = withContext(Dispatchers.IO) {
-    require(customerPhone.isNotBlank()) { "customer phone must not be blank" }
+    if (attempt.providerId == "mpesa") {
+      require(!customerPhone.isNullOrBlank()) { "M-PESA customer phone must not be blank" }
+    }
     val payload = JSONObject()
       .put("eventId", attempt.eventId)
       .put("paymentId", attempt.paymentId)
@@ -27,9 +30,9 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
       .put("idempotencyKey", attempt.idempotencyKey)
       .put("amountMinor", attempt.amountMinor)
       .put("currency", attempt.currency)
-      .put("customerPhone", customerPhone.trim())
-      .put("accountReference", attempt.orderId)
+      .put("accountReference", attempt.id)
       .put("description", "Event purchase")
+    customerPhone?.trim()?.takeIf { it.isNotEmpty() }?.let { payload.put("customerPhone", it) }
     post("$baseUrl/payments/initiate", payload)
   }
 
@@ -39,6 +42,40 @@ class HttpsEdgePaymentTransport(private val baseUrl: String) : EdgePaymentTransp
         "$baseUrl/payments/attempts/${urlComponent(paymentAttemptId)}/reconcile",
         JSONObject(),
       )
+    }
+
+  override suspend fun railAvailability(): List<EdgePaymentRailAvailability> =
+    withContext(Dispatchers.IO) {
+      val connection = URL("$baseUrl/payments/providers/availability").openConnection() as HttpURLConnection
+      try {
+        connection.requestMethod = "GET"
+        connection.connectTimeout = 5_000
+        connection.readTimeout = 5_000
+        connection.setRequestProperty("Accept", "application/json")
+        val code = connection.responseCode
+        if (code !in 200..299) throw IllegalStateException("Edge payment rail health returned HTTP $code")
+        val response = JSONArray(
+          connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() },
+        )
+        buildList {
+          for (index in 0 until response.length()) {
+            val item = response.getJSONObject(index)
+            val status = item.getString("status")
+            require(status in setOf("AVAILABLE", "UNCONFIGURED", "DEGRADED")) {
+              "Edge returned invalid payment rail status"
+            }
+            add(
+              EdgePaymentRailAvailability(
+                providerId = item.getString("providerId"),
+                status = status,
+                detailCode = if (item.isNull("detailCode")) null else item.getString("detailCode"),
+              ),
+            )
+          }
+        }
+      } finally {
+        connection.disconnect()
+      }
     }
 
   private fun post(url: String, body: JSONObject): EdgePaymentState {

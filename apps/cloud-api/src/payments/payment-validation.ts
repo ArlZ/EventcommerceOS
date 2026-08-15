@@ -1,14 +1,107 @@
 import type {
+  ConfirmExternalTerminalPaymentRequest,
   InitiatePaymentRequest,
   RefundPaymentRequest,
   ReversePaymentRequest,
 } from '@event-commerce/contracts';
+
+const PROHIBITED_CARD_KEYS = new Set([
+  'pan',
+  'primaryaccountnumber',
+  'cardnumber',
+  'cvv',
+  'cvc',
+  'securitycode',
+  'cardsecuritycode',
+  'pin',
+  'pinblock',
+  'track',
+  'track1',
+  'track2',
+  'trackdata',
+  'magstripe',
+  'emv',
+  'cryptogram',
+  'expiry',
+  'expirationdate',
+  'cardexpiry',
+]);
+
+const INITIATE_FIELDS = new Set([
+  'eventId',
+  'paymentId',
+  'paymentAttemptId',
+  'orderId',
+  'providerId',
+  'idempotencyKey',
+  'amountMinor',
+  'currency',
+  'customerPhone',
+  'accountReference',
+  'description',
+]);
+
+const MANUAL_CONFIRMATION_FIELDS = new Set([
+  'confirmationId',
+  'paymentAttemptId',
+  'externalProviderId',
+  'externalReference',
+  'amountMinor',
+  'currency',
+  'outcome',
+  'actorId',
+  'reason',
+  'idempotencyKey',
+]);
+
+const REFUND_FIELDS = new Set([
+  'refundId',
+  'paymentId',
+  'amountMinor',
+  'currency',
+  'reason',
+  'requestingActorId',
+  'approvingActorId',
+  'idempotencyKey',
+]);
+
+const REVERSAL_FIELDS = new Set([
+  'reversalId',
+  'paymentId',
+  'amountMinor',
+  'currency',
+  'reason',
+  'requestingActorId',
+  'idempotencyKey',
+]);
+
+export function assertNoProhibitedCardFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    value.forEach(assertNoProhibitedCardFields);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (PROHIBITED_CARD_KEYS.has(normalized)) {
+      throw new Error(`Prohibited raw card field is not accepted: ${key}`);
+    }
+    assertNoProhibitedCardFields(child);
+  }
+}
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('Payment request must be an object');
   }
   return value as Record<string, unknown>;
+}
+
+function assertOnlyFields(record: Record<string, unknown>, allowed: ReadonlySet<string>): void {
+  const unexpected = Object.keys(record).filter((key) => !allowed.has(key));
+  if (unexpected.length > 0) {
+    throw new Error(`Unexpected payment request field: ${unexpected.sort()[0]}`);
+  }
 }
 
 function requiredString(record: Record<string, unknown>, key: string): string {
@@ -43,27 +136,65 @@ function currency(record: Record<string, unknown>): string {
 }
 
 export function parseInitiatePaymentRequest(value: unknown): InitiatePaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, INITIATE_FIELDS);
+  const providerId = requiredString(record, 'providerId').toLowerCase();
+  const paymentAttemptId = requiredString(record, 'paymentAttemptId');
+  const accountReference = requiredString(record, 'accountReference');
+  const customerPhone = optionalString(record, 'customerPhone');
+  if (customerPhone !== undefined && providerId !== 'mpesa') {
+    throw new Error('customerPhone is only accepted for the M-PESA provider');
+  }
+  if (providerId === 'pesapal_sabi' && accountReference !== paymentAttemptId) {
+    throw new Error('Pesapal Sabi accountReference must equal paymentAttemptId');
+  }
+
   const request: InitiatePaymentRequest = {
     eventId: requiredString(record, 'eventId'),
     paymentId: requiredString(record, 'paymentId'),
-    paymentAttemptId: requiredString(record, 'paymentAttemptId'),
+    paymentAttemptId,
     orderId: requiredString(record, 'orderId'),
-    providerId: requiredString(record, 'providerId').toLowerCase(),
+    providerId,
     idempotencyKey: requiredString(record, 'idempotencyKey'),
     amountMinor: positiveAmount(record),
     currency: currency(record),
-    accountReference: requiredString(record, 'accountReference'),
+    accountReference,
   };
-  const customerPhone = optionalString(record, 'customerPhone');
   const description = optionalString(record, 'description');
   if (customerPhone !== undefined) request.customerPhone = customerPhone;
   if (description !== undefined) request.description = description;
   return request;
 }
 
-export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest {
+export function parseExternalTerminalConfirmation(
+  value: unknown,
+): ConfirmExternalTerminalPaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, MANUAL_CONFIRMATION_FIELDS);
+  const outcome = requiredString(record, 'outcome').toUpperCase();
+  if (outcome !== 'APPROVED' && outcome !== 'DECLINED') {
+    throw new Error('outcome must be APPROVED or DECLINED');
+  }
+  return {
+    confirmationId: requiredString(record, 'confirmationId'),
+    paymentAttemptId: requiredString(record, 'paymentAttemptId'),
+    externalProviderId: requiredString(record, 'externalProviderId').toLowerCase(),
+    externalReference: requiredString(record, 'externalReference'),
+    amountMinor: positiveAmount(record),
+    currency: currency(record),
+    outcome,
+    actorId: requiredString(record, 'actorId'),
+    reason: requiredString(record, 'reason'),
+    idempotencyKey: requiredString(record, 'idempotencyKey'),
+  };
+}
+
+export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest {
+  assertNoProhibitedCardFields(value);
+  const record = object(value);
+  assertOnlyFields(record, REFUND_FIELDS);
   const request: RefundPaymentRequest = {
     refundId: requiredString(record, 'refundId'),
     paymentId: requiredString(record, 'paymentId'),
@@ -79,7 +210,9 @@ export function parseRefundPaymentRequest(value: unknown): RefundPaymentRequest 
 }
 
 export function parseReversePaymentRequest(value: unknown): ReversePaymentRequest {
+  assertNoProhibitedCardFields(value);
   const record = object(value);
+  assertOnlyFields(record, REVERSAL_FIELDS);
   return {
     reversalId: requiredString(record, 'reversalId'),
     paymentId: requiredString(record, 'paymentId'),
