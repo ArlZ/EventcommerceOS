@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'FAIL']);
@@ -58,7 +60,7 @@ export function createInitialManifest(releaseCommit, now = new Date().toISOStrin
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     releaseCommit,
     createdAt: now,
     pilot: {
@@ -92,11 +94,35 @@ function isNonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function safeRelativeEvidencePath(value) {
+  if (!isNonEmpty(value) || isAbsolute(value)) return false;
+  const segments = value.replaceAll('\\', '/').split('/');
+  return segments.every((segment) => segment !== '' && segment !== '.' && segment !== '..');
+}
+
+export function validateEvidenceRef(ref) {
+  const blockers = [];
+  if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
+    return ['evidence reference must be an object with path and sha256.'];
+  }
+  if (!safeRelativeEvidencePath(ref.path)) {
+    blockers.push('evidence path must be a safe relative path without . or .. segments.');
+  }
+  if (!SHA256_PATTERN.test(ref.sha256 ?? '')) {
+    blockers.push('evidence sha256 must be a lowercase 64-character SHA-256 digest.');
+  }
+  return blockers;
+}
+
 function validatePassEvidence(gateName, gate, blockers) {
   if (!Array.isArray(gate.evidenceRefs) || gate.evidenceRefs.length === 0) {
     blockers.push(`${gateName}: PASS requires at least one evidenceRefs entry.`);
-  } else if (gate.evidenceRefs.some((ref) => !isNonEmpty(ref))) {
-    blockers.push(`${gateName}: evidenceRefs must contain only non-empty strings.`);
+  } else {
+    gate.evidenceRefs.forEach((ref, index) => {
+      for (const blocker of validateEvidenceRef(ref)) {
+        blockers.push(`${gateName}: evidenceRefs[${index}] ${blocker}`);
+      }
+    });
   }
 
   if (!isNonEmpty(gate.reviewer)) {
@@ -115,8 +141,8 @@ export function validateManifest(manifest, expectedReleaseCommit) {
     return { ok: false, blockers: ['Evidence manifest must be a JSON object.'] };
   }
 
-  if (manifest.schemaVersion !== 1) {
-    blockers.push('schemaVersion must equal 1.');
+  if (manifest.schemaVersion !== 2) {
+    blockers.push('schemaVersion must equal 2.');
   }
 
   if (!SHA_PATTERN.test(manifest.releaseCommit ?? '')) {
@@ -193,6 +219,64 @@ export function validateManifest(manifest, expectedReleaseCommit) {
   return { ok: blockers.length === 0, blockers };
 }
 
+function sha256File(path) {
+  return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function pathEscapesRoot(root, candidate) {
+  const rel = relative(root, candidate);
+  return rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || isAbsolute(rel);
+}
+
+export function validateEvidenceFiles(manifest, manifestPath) {
+  const blockers = [];
+  const manifestAbsolute = resolve(manifestPath);
+  const evidenceRoot = realpathSync(dirname(manifestAbsolute));
+
+  for (const gateName of REQUIRED_GATES) {
+    const gate = manifest.gates?.[gateName];
+    if (gate?.status !== 'PASS' || !Array.isArray(gate.evidenceRefs)) continue;
+
+    gate.evidenceRefs.forEach((ref, index) => {
+      if (validateEvidenceRef(ref).length > 0) return;
+      const candidate = resolve(evidenceRoot, ref.path);
+      let actualPath;
+      try {
+        actualPath = realpathSync(candidate);
+      } catch {
+        blockers.push(`${gateName}: evidenceRefs[${index}] file does not exist: ${ref.path}`);
+        return;
+      }
+
+      if (pathEscapesRoot(evidenceRoot, actualPath)) {
+        blockers.push(`${gateName}: evidenceRefs[${index}] escapes the manifest evidence root.`);
+        return;
+      }
+
+      let metadata;
+      try {
+        metadata = lstatSync(actualPath);
+      } catch {
+        blockers.push(`${gateName}: evidenceRefs[${index}] cannot be inspected: ${ref.path}`);
+        return;
+      }
+      if (!metadata.isFile()) {
+        blockers.push(`${gateName}: evidenceRefs[${index}] is not a regular file: ${ref.path}`);
+        return;
+      }
+
+      const actualDigest = sha256File(actualPath);
+      if (actualDigest !== ref.sha256) {
+        blockers.push(
+          `${gateName}: evidenceRefs[${index}] SHA-256 mismatch for ${ref.path}; expected ${ref.sha256}, got ${actualDigest}.`,
+        );
+      }
+    });
+  }
+
+  return blockers;
+}
+
 function printValidation(result) {
   if (result.ok) {
     console.log('Pilot evidence validation: PASS');
@@ -220,8 +304,14 @@ function initCommand(outputPath) {
 
 function validateCommand(inputPath) {
   if (!inputPath) throw new Error('validate requires a manifest path.');
-  const manifest = JSON.parse(readFileSync(resolve(inputPath), 'utf8'));
-  const result = validateManifest(manifest, configuredReleaseCommit());
+  const manifestPath = resolve(inputPath);
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const structural = validateManifest(manifest, configuredReleaseCommit());
+  const evidenceBlockers = validateEvidenceFiles(manifest, manifestPath);
+  const result = {
+    ok: structural.ok && evidenceBlockers.length === 0,
+    blockers: [...structural.blockers, ...evidenceBlockers],
+  };
   printValidation(result);
   if (!result.ok) process.exitCode = 1;
 }
