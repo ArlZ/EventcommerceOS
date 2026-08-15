@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Headers,
+  Inject,
   Param,
   Post,
   StreamableFile,
@@ -35,8 +36,8 @@ function revision(value: string): number {
 @Controller('event-close/events/:eventId')
 export class EventCloseController {
   constructor(
-    private readonly close: EventCloseService,
-    private readonly ledger: EventCloseLedgerService,
+    @Inject(EventCloseService) private readonly close: EventCloseService,
+    @Inject(EventCloseLedgerService) private readonly ledger: EventCloseLedgerService,
   ) {}
 
   @Get('report')
