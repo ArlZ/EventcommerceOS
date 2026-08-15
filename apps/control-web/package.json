@@ -1,6 +1,23 @@
 {
-  "name":"@event-commerce/control-web","version":"0.1.0","private":true,
-  "scripts":{"build":"next build","dev":"next dev -p 3000","start":"next start -p 3000","lint":"eslint src test --max-warnings=0","typecheck":"tsc --noEmit -p tsconfig.json","test":"vitest run"},
-  "dependencies":{"@event-commerce/contracts":"workspace:*","next":"15.5.21","react":"19.1.7","react-dom":"19.1.7"},
-  "devDependencies":{"@types/react":"19.1.6","@types/react-dom":"19.1.5"}
+  "name": "@event-commerce/control-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev -p 3000",
+    "start": "next start -p 3000",
+    "lint": "eslint src test --max-warnings=0",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@event-commerce/contracts": "workspace:*",
+    "next": "15.5.22",
+    "react": "19.1.7",
+    "react-dom": "19.1.7"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.6",
+    "@types/react-dom": "19.1.5"
+  }
 }
