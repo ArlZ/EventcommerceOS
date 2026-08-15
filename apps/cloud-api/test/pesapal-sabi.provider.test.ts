@@ -141,7 +141,7 @@ describe('Pesapal Sabi provider', () => {
     const result = await provider.parseAndVerifyWebhook(notification(), context());
 
     expect(result.status).toBe('UNKNOWN');
-    expect(result.failureCode).toBe('PESAP_SABI_VERIFICATION_MISMATCH');
+    expect(result.failureCode).toBe('PESAPAL_SABI_VERIFICATION_MISMATCH');
   });
 
   it('rejects prohibited raw card fields', async () => {
