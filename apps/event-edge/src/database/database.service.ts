@@ -2,6 +2,17 @@ import { Injectable, type OnModuleDestroy } from '@nestjs/common';
 import pg, { type PoolClient, type QueryResultRow } from 'pg';
 
 const { Pool } = pg;
+const LOCAL_EDGE_DATABASE_URL =
+  'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_edge';
+
+export function edgeDatabaseConnectionString(environment: NodeJS.ProcessEnv = process.env): string {
+  const configured = environment.EDGE_DATABASE_URL?.trim();
+  if (configured) return configured;
+  if (environment.NODE_ENV === 'production') {
+    throw new Error('EDGE_DATABASE_URL is required in production');
+  }
+  return environment.DATABASE_URL?.trim() || LOCAL_EDGE_DATABASE_URL;
+}
 
 export function edgeDatabaseConnectionTimeoutMs(
   environment: NodeJS.ProcessEnv = process.env,
@@ -21,10 +32,7 @@ export function edgeDatabaseConnectionTimeoutMs(
 @Injectable()
 export class EdgeDatabaseService implements OnModuleDestroy {
   private readonly pool = new Pool({
-    connectionString:
-      process.env.EDGE_DATABASE_URL ??
-      process.env.DATABASE_URL ??
-      'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_edge',
+    connectionString: edgeDatabaseConnectionString(),
     connectionTimeoutMillis: edgeDatabaseConnectionTimeoutMs(),
   });
 
