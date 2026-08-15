@@ -25,38 +25,35 @@ jobs:
           pnpm --filter @event-commerce/cloud-api up @nestjs/common@10.4.22 @nestjs/core@10.4.22 @nestjs/platform-express@10.4.22 @nestjs/testing@10.4.22
           pnpm --filter @event-commerce/event-edge up @nestjs/common@10.4.22 @nestjs/core@10.4.22 @nestjs/platform-express@10.4.22 @nestjs/testing@10.4.22
           pnpm --filter @event-commerce/control-web up next@15.5.22
+      - name: Apply exact transitive security floors
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.pnpm = {
+            ...(pkg.pnpm ?? {}),
+            overrides: {
+              ...(pkg.pnpm?.overrides ?? {}),
+              'glob@10.4.5': '10.5.0',
+              'picomatch@4.0.1': '4.0.5',
+              'postcss@8.4.31': '8.5.18',
+              'sharp@0.34.5': '0.35.0',
+              'tmp@0.0.33': '0.2.6'
+            }
+          };
+          fs.writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+          NODE
+          pnpm install --no-frozen-lockfile
       - name: Capture refreshed manifests and lockfile
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-refresh
+          name: dependency-refresh-final
           path: |
             package.json
             apps/cloud-api/package.json
             apps/event-edge/package.json
             apps/control-web/package.json
             pnpm-lock.yaml
-          if-no-files-found: error
-          retention-days: 1
-
-  android-insight:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-      - name: Trace vulnerable Bouncy Castle dependency
-        run: |
-          gradle -p apps/pos-android app:dependencyInsight --dependency bcprov-jdk18on --configuration debugUnitTestRuntimeClasspath > bcprov-insight.txt
-          cat bcprov-insight.txt
-      - name: Upload dependency insight
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-dependency-insight
-          path: bcprov-insight.txt
           if-no-files-found: error
           retention-days: 1
