@@ -185,6 +185,56 @@ describeIntegration('operator authentication and server-derived RBAC', () => {
       .expect(403);
   });
 
+  it('does not let an organisation ADMIN create a refund or reversal', async () => {
+    const actorId = randomUUID();
+    const admin = await provisionOperator(database, {
+      actorId,
+      memberships: [{ organisationId, role: 'ADMIN' }],
+    });
+    const paymentId = `payment-admin-denied-${randomUUID()}`;
+    await database.query(
+      `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
+       VALUES ($1,$2,$3,10000,'KES')`,
+      [paymentId, eventId, `order-${randomUUID()}`],
+    );
+
+    await request(app.getHttpServer())
+      .post('/payments/refunds')
+      .set(admin.headers(organisationId))
+      .send({
+        refundId: `refund-${randomUUID()}`,
+        paymentId,
+        amountMinor: 1000,
+        currency: 'KES',
+        reason: 'Should require finance authority',
+        requestingActorId: actorId,
+        idempotencyKey: `refund-idem-${randomUUID()}`,
+      })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post('/payments/reversals')
+      .set(admin.headers(organisationId))
+      .send({
+        reversalId: `reversal-${randomUUID()}`,
+        paymentId,
+        amountMinor: 1000,
+        currency: 'KES',
+        reason: 'Should require finance authority',
+        requestingActorId: actorId,
+        idempotencyKey: `reversal-idem-${randomUUID()}`,
+      })
+      .expect(403);
+
+    const rows = await database.query<{ refunds: string; reversals: string }>(
+      `SELECT
+         (SELECT count(*)::text FROM payment_refunds WHERE payment_id=$1) AS refunds,
+         (SELECT count(*)::text FROM payment_reversals WHERE payment_id=$1) AS reversals`,
+      [paymentId],
+    );
+    expect(rows[0]).toEqual({ refunds: '0', reversals: '0' });
+  });
+
   it('rejects a privileged payment body that names a different actor before business effect', async () => {
     const actorId = randomUUID();
     const supervisor = await provisionOperator(database, {
