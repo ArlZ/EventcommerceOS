@@ -100,7 +100,7 @@ Android checks are intentionally separate from the JavaScript workspace:
 make android-check
 ```
 
-GitHub Actions runs equivalent TypeScript and Android jobs on pull requests.
+GitHub Actions runs the TypeScript/architecture, Android and fail-closed dependency-SCA gates on pull requests. A permanent synthetic backup/restore smoke also exercises the recovery mechanism and retains non-sensitive evidence artifacts.
 
 ## Architecture guardrails
 
@@ -108,7 +108,11 @@ GitHub Actions runs equivalent TypeScript and Android jobs on pull requests.
 
 ## Validation status
 
-Task 001 has been exercised in GitHub Actions. The validation gate includes dependency installation, TypeScript builds, linting, typechecking, unit and smoke tests, formatting checks, architecture dependency guardrails, Android unit tests and Android lint. Every subsequent change must pass the same CI gate before merge.
+Tasks 001–010 and the subsequent security/reliability remediation stack are integrated on `main`. The validated surface now includes Cloud and Event Edge migrations, TypeScript builds, linting, typechecking, unit/integration tests, formatting, architecture dependency guardrails, Android unit tests/lint, fail-closed dependency SCA, deterministic event-fault simulation and a synthetic PostgreSQL backup/isolated-restore regression smoke.
+
+The current dependency scan is materially reduced from the earlier baseline and retains one visible non-blocking MODERATE Kotlin build-tooling advisory; it is tracked in issue #32 rather than suppressed or hidden.
+
+This repository is **not yet cleared for an internet-exposed production or live-money pilot**. Remaining release gates require real-world evidence that cannot be substituted by CI: protected-branch enforcement, a representative backup/restore drill with named sign-off, the actual deployment abuse/flood exercise, supported-device/network/Edge-hardware testing, provider fault/reconciliation testing and a controlled pilot close. See `plans/010-production-hardening.md`, `docs/RELEASE_SECURITY_REVIEW.md` and `docs/PILOT_RUNBOOK.md`.
 
 `make dev` remains a developer runtime command rather than a CI integration test; local PostgreSQL startup and real-device Android behaviour should still be validated in the appropriate development and pilot environments.
 
