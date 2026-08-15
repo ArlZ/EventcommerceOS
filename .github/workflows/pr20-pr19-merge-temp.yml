@@ -1,0 +1,38 @@
+name: PR20 final PR19 merge temporary
+
+on:
+  push:
+    branches: [security/dependency-sca-evidence]
+
+permissions:
+  contents: write
+
+jobs:
+  merge-base:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/dependency-sca-evidence
+          fetch-depth: 0
+      - name: Merge final PR19 base
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin reliability/backup-restore-evidence
+          set +e
+          git merge --no-ff --no-edit origin/reliability/backup-restore-evidence
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "Merge conflicts:"
+            git diff --name-only --diff-filter=U
+            git status --short
+            exit "$status"
+          fi
+      - name: Self-remove and push
+        run: |
+          git rm .github/workflows/pr20-pr19-merge-temp.yml
+          git commit -m "Remove temporary PR20 final PR19 merge workflow"
+          git push origin HEAD:security/dependency-sca-evidence
