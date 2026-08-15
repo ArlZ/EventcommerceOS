@@ -37,8 +37,8 @@ const CORRECTION_ROLES = ['ADMIN', 'FINANCE', 'SUPERVISOR'] as const;
 @Controller('event-close/events/:eventId')
 export class EventCloseController {
   constructor(
-    private readonly close: EventCloseService,
-    private readonly ledger: EventCloseLedgerService,
+    @Inject(EventCloseService) private readonly close: EventCloseService,
+    @Inject(EventCloseLedgerService) private readonly ledger: EventCloseLedgerService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
 
@@ -72,7 +72,11 @@ export class EventCloseController {
       normalizedEventId,
       CORRECTION_ROLES,
     );
-    return this.ledger.recordOrderAdjustment(context, normalizedEventId, parseOrderAdjustment(body));
+    return this.ledger.recordOrderAdjustment(
+      context,
+      normalizedEventId,
+      parseOrderAdjustment(body),
+    );
   }
 
   @Post('cash-declarations')

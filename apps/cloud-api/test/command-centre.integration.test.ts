@@ -111,11 +111,7 @@ describeIntegration('live event command centre', () => {
        ) VALUES (
          'order-1','device-1',4,'CLOSED',10000,'KES',$1,$2,$3::jsonb,now()-interval '2 minutes'
        )`,
-      [
-        eventId,
-        salesLocationId,
-        JSON.stringify([{ skuId, quantity: 2, unitPriceMinor: 5000 }]),
-      ],
+      [eventId, salesLocationId, JSON.stringify([{ skuId, quantity: 2, unitPriceMinor: 5000 }])],
     );
     await database.query(
       `INSERT INTO sync_device_state(
@@ -190,9 +186,14 @@ describeIntegration('live event command centre', () => {
   });
 
   it('rejects cross-organisation access before returning event metrics', async () => {
+    const outsider = await provisionOperator(database, {
+      actorId: '33333333-3333-4333-8333-444444444444',
+      memberships: [{ organisationId: otherOrganisationId, role: 'ADMIN' }],
+    });
+
     await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
-      .set(adminHeaders(otherOrganisationId))
+      .set(outsider.headers(otherOrganisationId))
       .expect(403);
   });
 

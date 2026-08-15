@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { DatabaseService } from '../src/database/database.service';
+import type { DatabaseService } from '../src/database/database.service';
 
 export const DEFAULT_SYNC_ORGANISATION_ID = '11111111-1111-4111-8111-111111111111';
 export const DEFAULT_SYNC_EVENT_ID = '22222222-2222-4222-8222-222222222222';
