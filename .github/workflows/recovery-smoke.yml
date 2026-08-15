@@ -79,6 +79,6 @@ jobs:
         if: always()
         with:
           name: backup-restore-smoke-evidence
-          path: artifacts/backup-restore-smoke/**
+          path: apps/cloud-api/artifacts/backup-restore-smoke/**
           if-no-files-found: warn
           retention-days: 14
