@@ -51,6 +51,14 @@ test('release commit mismatch fails closed', () => {
   assert.ok(result.blockers.some((blocker) => blocker.includes('does not match expected release')));
 });
 
+test('unknown deployment mode fails closed', () => {
+  const manifest = completeManifest();
+  manifest.pilot.deploymentMode = 'production';
+  const result = validateManifest(manifest, RELEASE);
+  assert.equal(result.ok, false);
+  assert.ok(result.blockers.some((blocker) => blocker.includes('single_instance_pilot or upstream_distributed')));
+});
+
 test('pass without evidence and named review fails', () => {
   const manifest = completeManifest();
   manifest.gates.hardwareNetwork.evidenceRefs = [];
