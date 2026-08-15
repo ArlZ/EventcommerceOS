@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
-import type { EventCloseLedgerService } from './event-close-ledger.service';
-import type { EventCloseService } from './event-close.service';
+import { EventCloseLedgerService } from './event-close-ledger.service';
+import { EventCloseService } from './event-close.service';
 import {
   parseCashDeclaration,
   parseCloseAction,
@@ -37,8 +37,8 @@ const CORRECTION_ROLES = ['ADMIN', 'FINANCE', 'SUPERVISOR'] as const;
 @Controller('event-close/events/:eventId')
 export class EventCloseController {
   constructor(
-    private readonly close: EventCloseService,
-    private readonly ledger: EventCloseLedgerService,
+    @Inject(EventCloseService) private readonly close: EventCloseService,
+    @Inject(EventCloseLedgerService) private readonly ledger: EventCloseLedgerService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
 

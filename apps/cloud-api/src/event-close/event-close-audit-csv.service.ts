@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { EventCloseActionView, EventCloseReport } from '@event-commerce/contracts';
-import type { EventCloseService } from './event-close.service';
+import { EventCloseService } from './event-close.service';
 
 @Injectable()
 export class EventCloseAuditCsvService {
-  constructor(private readonly close: EventCloseService) {}
+  constructor(@Inject(EventCloseService) private readonly close: EventCloseService) {}
 
   render(report: EventCloseReport, actions: EventCloseActionView[]): string {
     const base = this.close.csv(report).trimEnd();

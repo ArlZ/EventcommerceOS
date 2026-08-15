@@ -10,6 +10,7 @@ import { DEFAULT_SYNC_EVENT_ID, provisionSyncEdge } from './sync-auth-testkit';
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const OTHER_ORG_ID = '33333333-3333-4333-8333-333333333333';
 const OTHER_EVENT_ID = '44444444-4444-4444-8444-444444444444';
+const HUMAN_ACTOR_ID = '55555555-5555-4555-8555-555555555555';
 
 function paymentRequest(eventId = DEFAULT_SYNC_EVENT_ID) {
   return {
@@ -148,17 +149,59 @@ describeIntegration('Cloud payment machine authentication', () => {
   });
 
   it.each([
-    ['POST', '/payments/manual-terminal-confirmations'],
-    ['POST', '/payments/refunds'],
-    ['POST', '/payments/reversals'],
-    ['GET', '/payments/payment-locked/history'],
-    ['GET', '/payments/payment-locked/manual-terminal-confirmations'],
-    ['GET', `/payments/events/${DEFAULT_SYNC_EVENT_ID}/health`],
-  ])('fails privileged human payment route closed: %s %s', async (method, path) => {
-    const call =
-      method === 'GET'
-        ? request(app.getHttpServer()).get(path)
-        : request(app.getHttpServer()).post(path).send({});
-    await applyHeaders(call, primaryHeaders).expect(403);
-  });
+    {
+      method: 'POST',
+      path: '/payments/manual-terminal-confirmations',
+      body: {
+        confirmationId: 'machine-denied-confirmation',
+        paymentAttemptId: 'payment-locked-attempt',
+        externalProviderId: 'external_terminal',
+        externalReference: 'machine-denied-terminal-reference',
+        amountMinor: 1000,
+        currency: 'KES',
+        outcome: 'APPROVED',
+        actorId: HUMAN_ACTOR_ID,
+        reason: 'machine credential must not authorize a human terminal confirmation',
+        idempotencyKey: 'machine-denied-confirmation-idem',
+      },
+    },
+    {
+      method: 'POST',
+      path: '/payments/refunds',
+      body: {
+        refundId: 'machine-denied-refund',
+        paymentId: 'payment-locked',
+        amountMinor: 1000,
+        currency: 'KES',
+        reason: 'machine credential must not authorize a human refund',
+        requestingActorId: HUMAN_ACTOR_ID,
+        idempotencyKey: 'machine-denied-refund-idem',
+      },
+    },
+    {
+      method: 'POST',
+      path: '/payments/reversals',
+      body: {
+        reversalId: 'machine-denied-reversal',
+        paymentId: 'payment-locked',
+        amountMinor: 1000,
+        currency: 'KES',
+        reason: 'machine credential must not authorize a human reversal',
+        requestingActorId: HUMAN_ACTOR_ID,
+        idempotencyKey: 'machine-denied-reversal-idem',
+      },
+    },
+    { method: 'GET', path: '/payments/payment-locked/history' },
+    { method: 'GET', path: '/payments/payment-locked/manual-terminal-confirmations' },
+    { method: 'GET', path: `/payments/events/${DEFAULT_SYNC_EVENT_ID}/health` },
+  ])(
+    'fails privileged human payment route closed: $method $path',
+    async ({ method, path, body }) => {
+      const call =
+        method === 'GET'
+          ? request(app.getHttpServer()).get(path)
+          : request(app.getHttpServer()).post(path).send(body);
+      await applyHeaders(call, primaryHeaders).expect(401);
+    },
+  );
 });

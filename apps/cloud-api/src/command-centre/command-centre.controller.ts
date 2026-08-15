@@ -14,14 +14,15 @@ import { from, type Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
-import type { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
-import type { CommandCentreService } from './command-centre.service';
+import { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
+import { CommandCentreService } from './command-centre.service';
 import { parseInventoryAlertAction } from './command-centre-validation';
 
 @Controller('command-centre')
 export class CommandCentreController {
   constructor(
-    private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
