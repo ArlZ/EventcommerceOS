@@ -21,6 +21,8 @@ Before deployment record:
 - payment rails enabled;
 - expected peak transactions per minute;
 - opening stock and replenishment model;
+- Cloud abuse deployment mode (`single_instance_pilot` or `upstream_distributed`);
+- effective Cloud/Event Edge sustained-rate, burst and concurrency ceilings;
 - named event operations lead;
 - named technical incident lead;
 - named finance/reconciliation owner;
@@ -75,9 +77,10 @@ For every supported Android POS device:
 5. Configure organisation/event/sales locations/inventory locations/menu/prices.
 6. Configure inventory opening quantities and responsibility routing.
 7. Configure payment provider sandbox/pilot credentials through managed runtime secrets only.
-8. Provision POS devices and activate the event/menu.
-9. Run pre-open functional test from every sales location.
-10. Run fault tests before opening real service.
+8. Confirm abuse deployment mode, trusted-proxy setting and effective HTTP/rate/burst/concurrency limits.
+9. Provision POS devices and activate the event/menu.
+10. Run pre-open functional test from every sales location.
+11. Run fault and abuse-control tests before opening real service.
 
 Do not introduce unreviewed code/config changes after the pre-open evidence pack is signed off.
 
@@ -119,6 +122,21 @@ Then run the Gate B durability exercise on representative devices:
 4. restore connectivity;
 5. prove zero acknowledged committed orders lost;
 6. prove duplicate replay creates zero duplicate sales/inventory effects.
+
+### Abuse-protection release gate
+
+Run the full exercise in `docs/ABUSE_PROTECTION.md` before live money. At minimum prove:
+
+- sustained invalid/public Cloud traffic reaches `429` without exhausting normal event operations;
+- the immediate burst ceiling engages before a full minute allowance can arrive at once;
+- the per-policy in-flight ceiling rejects excess concurrent work rather than allowing unbounded handler concurrency;
+- a runaway test POS is throttled at Event Edge while a second registered POS remains usable;
+- provider callback bursts do not create duplicate business effects and delayed truth still reconciles correctly;
+- Cloud flooding or throttling does not prevent local POS -> Event Edge order/cash operation;
+- fake operator-session traffic is throttled before it can create unbounded operator-authentication database work;
+- the effective deployment mode, trusted-proxy setting and upstream distributed controls (when applicable) are retained as evidence.
+
+This gate fails if abuse protection changes payment truth, causes duplicate commerce effects, or protects Cloud by making local event ordering unavailable.
 
 ## 6. Payment test matrix
 
@@ -169,6 +187,9 @@ The event operations lead watches:
 - sync backlog and age;
 - payment pending/UNKNOWN count and value;
 - provider availability/latency/error signals;
+- Cloud and Event Edge HTTP `429` counts by policy/path;
+- sampled `HTTP_ABUSE_RATE_REJECT` and `EDGE_HTTP_ABUSE_RATE_REJECT` warnings;
+- sustained rate, burst and concurrency saturation against configured ceilings;
 - sales velocity by bar/device;
 - critical low-stock alerts;
 - open transfers and replenishment status;
@@ -221,6 +242,17 @@ Expected behavior: local order building/capture continues.
 - keep existing `PENDING`/`UNKNOWN` attempts unresolved until authoritative truth is obtained;
 - use only approved fallback rails/workflows;
 - never use a generic unaudited manual-success override.
+
+### Abuse-control saturation or attack
+
+- identify which Cloud/Event Edge policy is returning `429`;
+- do not disable limits globally as a first response;
+- verify whether the source is legitimate recovery traffic, a misbehaving registered caller or untrusted traffic;
+- preserve sampled reject logs and upstream WAF/gateway evidence;
+- for a single misbehaving POS, revoke/quarantine it if needed while keeping other devices operational;
+- if Cloud is under attack, verify local Event Edge ordering continues and reduce non-essential Cloud/operator refresh traffic;
+- if legitimate provider callbacks are being delayed, retain payment uncertainty and use authoritative reconciliation instead of forcing failure/success;
+- only tune limits through the documented bounded settings and record the operator/reason/time.
 
 ### Notification provider outage
 
@@ -294,6 +326,9 @@ Retain:
 - 100-order offline durability result;
 - payment sandbox/test matrix;
 - provider callback/timeout evidence;
+- abuse deployment mode and effective rate/burst/concurrency settings;
+- abuse/flood exercise result, HTTP `429` counts and sampled reject evidence;
+- upstream distributed-protection configuration/evidence when applicable;
 - inventory opening/count/transfer evidence;
 - incident timeline and actions;
 - command-centre snapshots;
@@ -313,6 +348,7 @@ A controlled pilot can graduate to a materially larger event only when:
 - the offline 100-order/restart test loses zero committed orders;
 - sync replay/duplicate tests create zero duplicate business effects;
 - provider timeout/late/duplicate callback matrix passes;
+- the abuse-control exercise passes without starving local event operations or corrupting payment truth;
 - no unexplained payment reconciliation discrepancy remains;
 - inventory converges with no unexplained ledger discrepancy;
 - backup restore has been proven;
