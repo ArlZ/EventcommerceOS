@@ -16,7 +16,7 @@ jobs:
         with:
           ref: security/dependency-sca-evidence
           fetch-depth: 0
-      - name: Merge final PR19 base
+      - name: Merge final PR19 base with verified resolutions
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -26,10 +26,19 @@ jobs:
           status=$?
           set -e
           if [ "$status" -ne 0 ]; then
-            echo "Merge conflicts:"
-            git diff --name-only --diff-filter=U
-            git status --short
-            exit "$status"
+            conflicts="$(git diff --name-only --diff-filter=U | sort)"
+            expected="$(printf '%s\n' \
+              plans/010-production-hardening.md \
+              plans/reliability-backup-restore-evidence.md | sort)"
+            if [ "$conflicts" != "$expected" ]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$conflicts"
+              exit 1
+            fi
+            git checkout --ours plans/010-production-hardening.md
+            git checkout --theirs plans/reliability-backup-restore-evidence.md
+            git add plans/010-production-hardening.md plans/reliability-backup-restore-evidence.md
+            git commit --no-edit
           fi
       - name: Self-remove and push
         run: |
