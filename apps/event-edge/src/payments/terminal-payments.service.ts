@@ -160,7 +160,8 @@ export class TerminalPaymentsService {
         headers: { accept: 'application/json' },
         signal: AbortSignal.timeout(this.timeoutMs()),
       });
-      if (!response.ok) throw new Error(`cloud payment rail health returned HTTP ${response.status}`);
+      if (!response.ok)
+        throw new Error(`cloud payment rail health returned HTTP ${response.status}`);
       const body = await response.json();
       if (!Array.isArray(body)) throw new Error('cloud payment rail health must be an array');
       return body.map((item) => this.parseRail(item));
@@ -181,7 +182,8 @@ export class TerminalPaymentsService {
       throw new Error('cloud returned invalid terminal outcome');
     }
     const createdAt = text(input, 'createdAt');
-    if (!Number.isFinite(Date.parse(createdAt))) throw new Error('cloud returned invalid createdAt');
+    if (!Number.isFinite(Date.parse(createdAt)))
+      throw new Error('cloud returned invalid createdAt');
     return {
       confirmationId: text(input, 'confirmationId'),
       paymentAttemptId: text(input, 'paymentAttemptId'),

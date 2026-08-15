@@ -98,8 +98,13 @@ export class ManualTerminalService {
         return toView(existing.rows[0]);
       }
 
-      if (Number(attempt.amount_minor) !== request.amountMinor || attempt.currency !== request.currency) {
-        throw new Error('Manual terminal confirmation amount/currency must match the payment attempt');
+      if (
+        Number(attempt.amount_minor) !== request.amountMinor ||
+        attempt.currency !== request.currency
+      ) {
+        throw new Error(
+          'Manual terminal confirmation amount/currency must match the payment attempt',
+        );
       }
       if (attempt.status === 'UNKNOWN') {
         throw new Error('Unknown payment truth must be reconciled before manual terminal fallback');
@@ -199,7 +204,11 @@ export class ManualTerminalService {
     return rows.map(toView);
   }
 
-  private async requirePermission(client: PoolClient, eventId: string, actorId: string): Promise<void> {
+  private async requirePermission(
+    client: PoolClient,
+    eventId: string,
+    actorId: string,
+  ): Promise<void> {
     const allowed = await client.query(
       `SELECT 1 FROM payment_actor_permissions
        WHERE event_id=$1 AND actor_id=$2 AND permission='PAYMENT_MANUAL_CONFIRM'`,
