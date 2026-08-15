@@ -1,10 +1,12 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
+import type { OperatorIdentityGuard } from '../src/auth/operator-identity.guard';
 import {
   AbuseProtectionGuard,
   classifyAbuseRequest,
 } from '../src/security/abuse-protection.guard';
 import { AbuseProtectionService } from '../src/security/abuse-protection.service';
+import { GlobalSecurityGuard } from '../src/security/global-security.guard';
 
 function requestContext(
   request: Record<string, unknown>,
@@ -115,5 +117,47 @@ describe('HTTP abuse protection', () => {
     expect(Number(responseHeaders['Retry-After'])).toBeGreaterThanOrEqual(1);
     expect(responseHeaders['X-RateLimit-Policy']).toBe('PUBLIC');
     expect(responseHeaders['X-RateLimit-Remaining']).toBe('0');
+  });
+
+  it('always runs abuse protection before operator authentication', async () => {
+    const calls: string[] = [];
+    const abuse = {
+      canActivate() {
+        calls.push('abuse');
+        return true;
+      },
+    } as unknown as AbuseProtectionGuard;
+    const operator = {
+      async canActivate() {
+        calls.push('operator');
+        return true;
+      },
+    } as unknown as OperatorIdentityGuard;
+    const guard = new GlobalSecurityGuard(abuse, operator);
+    const context = requestContext({ method: 'GET', path: '/health', headers: {} }, {});
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(calls).toEqual(['abuse', 'operator']);
+  });
+
+  it('does not reach authentication after an abuse rejection', async () => {
+    const calls: string[] = [];
+    const abuse = {
+      canActivate() {
+        calls.push('abuse');
+        throw new Error('rate rejected');
+      },
+    } as unknown as AbuseProtectionGuard;
+    const operator = {
+      async canActivate() {
+        calls.push('operator');
+        return true;
+      },
+    } as unknown as OperatorIdentityGuard;
+    const guard = new GlobalSecurityGuard(abuse, operator);
+    const context = requestContext({ method: 'GET', path: '/health', headers: {} }, {});
+
+    await expect(guard.canActivate(context)).rejects.toThrow('rate rejected');
+    expect(calls).toEqual(['abuse']);
   });
 });
