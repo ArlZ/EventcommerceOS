@@ -36,6 +36,8 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @event-commerce/contracts build
+      - run: pnpm --filter @event-commerce/domain build
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Run focused inventory boundary test
         run: pnpm --filter @event-commerce/event-edge exec vitest run test/inventory-sync-boundary.integration.test.ts --no-file-parallelism
