@@ -1,0 +1,42 @@
+name: Restore payment transaction loaders temporary
+
+on:
+  push:
+    branches: [codex/task-007-card-terminal]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/task-007-card-terminal
+      - name: Restore transaction-scoped payment loaders
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'apps/cloud-api/src/payments/payments.service.ts';
+          let source = fs.readFileSync(path, 'utf8');
+          const anchor = `  private async loadAttemptByProviderReferenceClient(\n`;
+          if (source.includes('private async loadAttemptByIdClient(')) {
+            console.log('Transaction loaders already present.');
+          } else {
+            if (!source.includes(anchor)) throw new Error('Payment loader anchor not found');
+            const helpers = `  private async loadAttemptByIdClient(\n    client: PoolClient,\n    id: string,\n    forUpdate: boolean,\n  ): Promise<AttemptRow | undefined> {\n    const result = await client.query<AttemptRow>(\n      \`${'${this.attemptSelect()}'} WHERE pa.id=$1${'${forUpdate ? \' FOR UPDATE\' : \'\'}'}\`,\n      [id],\n    );\n    return result.rows[0];\n  }\n\n  private async loadAttemptByIdempotencyClient(\n    client: PoolClient,\n    key: string,\n    forUpdate: boolean,\n  ): Promise<AttemptRow | undefined> {\n    const result = await client.query<AttemptRow>(\n      \`${'${this.attemptSelect()}'} WHERE pa.idempotency_key=$1${'${forUpdate ? \' FOR UPDATE\' : \'\'}'}\`,\n      [key],\n    );\n    return result.rows[0];\n  }\n\n`;
+            source = source.replace(anchor, helpers + anchor);
+            fs.writeFileSync(path, source);
+          }
+          NODE
+      - name: Commit repair and self-remove
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/cloud-api/src/payments/payments.service.ts
+          git rm .github/workflows/restore-payment-loaders-temp.yml
+          git diff --cached --check
+          git commit -m "Restore payment transaction loaders"
+          git push origin HEAD:codex/task-007-card-terminal
