@@ -1,7 +1,7 @@
 # Security remediation — human operator authentication and RBAC
 
-Status: implementation complete; repository CI revalidation in progress
-Base: `security/cloud-payment-machine-trust` (PR #16)
+Status: implementation complete; final green Cloud-payment machine-trust base merged; permanent CI revalidation in progress
+Base: final `security/cloud-payment-machine-trust` at `93d3f56a1048ce149b98032dabb04b00ca0d3682`
 
 ## Objective
 
@@ -71,10 +71,9 @@ This bridge is intentionally a controlled-pilot compatibility layer for existing
 
 ## Repository CI checkpoint
 
-- The first real runner pass reached a successful TypeScript build but failed on eight cross-stack import-hygiene errors: Nest runtime DI tokens had been made type-only and two test helpers used value imports only as types.
-- DI-safe imports/tokens, stale auth/payment/FK integration fixtures, and deterministic shared-PostgreSQL test execution have now been backported from the green abuse-controls stack without bringing abuse-control implementation into this PR.
-- The complete CI formatting surface was normalized in the same repair so the branch is tested against the repository's actual Prettier gate.
-- A fresh permanent TypeScript + Android CI pass on this repaired tree is required before merge readiness.
+The final green PR #16 Cloud-payment machine-trust head has been merged into this branch. Three shared Command Centre/Event Close files conflicted during the ancestry relink. Both controllers retained this PR's server-derived operator-session authorization, while `CommandCentreService` retained this PR's text-safe sales-location/event joins, including the device/location join that remained UUID-cast on #16. All runtime `@Inject(...)` corrections and the previously proven Event Close behavior remain intact. The branch is now zero commits behind #16 and its diff is limited to the human-auth/RBAC feature boundary plus associated fixtures/docs.
+
+A fresh permanent TypeScript + Android CI pass on this exact re-linked head is required before merge readiness.
 
 ## Non-goals / remaining blockers
 
