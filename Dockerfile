@@ -1,3 +1,4 @@
+ARG RUNTIME_TARGET=control-web
 ARG NODE_IMAGE=node:22.23.2-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 FROM ${NODE_IMAGE} AS pnpm-base
@@ -82,3 +83,9 @@ EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]
+
+# Render builds a Dockerfile without selecting a named target. Render injects
+# non-secret service environment variables as Docker build arguments, so the
+# pilot Blueprint sets RUNTIME_TARGET to one of the hardened stages above.
+# Existing CI continues to build the named stages directly with --target.
+FROM ${RUNTIME_TARGET} AS render-runtime
