@@ -7,8 +7,9 @@ RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
 WORKDIR /workspace
 
 FROM pnpm-base AS build
-ARG NEXT_PUBLIC_CLOUD_API_URL=http://localhost:3001
+ARG NEXT_PUBLIC_CLOUD_API_URL
 ENV NEXT_PUBLIC_CLOUD_API_URL=$NEXT_PUBLIC_CLOUD_API_URL
+RUN node -e "const value=process.env.NEXT_PUBLIC_CLOUD_API_URL?.trim(); if(!value) throw new Error('NEXT_PUBLIC_CLOUD_API_URL is required for production image builds'); const parsed=new URL(value); if(parsed.protocol!=='https:' || parsed.origin!==value) throw new Error('NEXT_PUBLIC_CLOUD_API_URL must be a canonical HTTPS origin without credentials, path, query or fragment');"
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json eslint.config.mjs ./
 COPY apps ./apps
 COPY packages ./packages
