@@ -1,5 +1,9 @@
 import { ConfigurationClient } from './configuration-client';
 
+const setupSequence =
+  'organisation → event → sales locations → inventory locations → catalogue → menu.';
+const setupFollowUp = 'Device assignment and final pre-open checks follow in pilot operations.';
+
 export default function ConfigurationPage() {
   return (
     <main className="ec-page">
@@ -17,8 +21,7 @@ export default function ConfigurationPage() {
         </span>
       </header>
       <div className="ec-callout">
-        <strong>Pilot workflow:</strong> organisation → event → sales locations → inventory locations →
-        catalogue → menu. Device assignment and final pre-open checks follow in pilot operations.
+        <strong>Pilot workflow:</strong> {setupSequence} {setupFollowUp}
       </div>
       <ConfigurationClient />
     </main>
