@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+ARG NODE_IMAGE=node:22.23.2-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32
 
 FROM ${NODE_IMAGE} AS pnpm-base
 ENV PNPM_HOME=/pnpm
@@ -19,7 +19,20 @@ RUN pnpm --filter @event-commerce/event-edge... build \
   && pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge
 RUN pnpm --filter @event-commerce/control-web build
 
-FROM ${NODE_IMAGE} AS cloud-api
+FROM ${NODE_IMAGE} AS runtime-base
+RUN rm -rf \
+  /usr/local/lib/node_modules/npm \
+  /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm \
+  /usr/local/bin/npx \
+  /usr/local/bin/corepack \
+  /usr/local/bin/pnpm \
+  /usr/local/bin/pnpx \
+  /usr/local/bin/yarn \
+  /usr/local/bin/yarnpkg \
+  /opt/yarn-v1.22.22
+
+FROM runtime-base AS cloud-api
 ARG RELEASE_COMMIT
 LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
   org.opencontainers.image.revision="$RELEASE_COMMIT" \
@@ -35,7 +48,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3001/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]
 
-FROM ${NODE_IMAGE} AS event-edge
+FROM runtime-base AS event-edge
 ARG RELEASE_COMMIT
 LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
   org.opencontainers.image.revision="$RELEASE_COMMIT" \
@@ -51,7 +64,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3002/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "dist/main.js"]
 
-FROM ${NODE_IMAGE} AS control-web
+FROM runtime-base AS control-web
 ARG RELEASE_COMMIT
 LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" \
   org.opencontainers.image.revision="$RELEASE_COMMIT" \
