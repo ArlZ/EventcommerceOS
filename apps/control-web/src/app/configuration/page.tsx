@@ -2,22 +2,24 @@ import { ConfigurationClient } from './configuration-client';
 
 export default function ConfigurationPage() {
   return (
-    <main
-      style={{
-        maxWidth: 1180,
-        margin: '0 auto',
-        padding: 32,
-        fontFamily: 'system-ui, sans-serif',
-      }}
-    >
-      <p style={{ margin: 0, fontSize: 12, letterSpacing: 1.2, textTransform: 'uppercase' }}>
-        Event Commerce OS · Control
-      </p>
-      <h1 style={{ marginBottom: 8 }}>Event setup</h1>
-      <p style={{ maxWidth: 760, marginTop: 0 }}>
-        Configure an organisation, event, operating locations, catalogue and menu before sales open.
-        Orders and payments are intentionally not part of this slice.
-      </p>
+    <main className="ec-page">
+      <header className="ec-page-header">
+        <div>
+          <p className="ec-page-kicker">Before trading</p>
+          <h1 className="ec-page-title">Prepare the event</h1>
+          <p className="ec-page-description">
+            Create the event and operating structure in sequence: locations, catalogue and menu.
+            Complete this before registers are handed to the trading team.
+          </p>
+        </div>
+        <span className="ec-status-pill" data-tone="warning">
+          Setup mode
+        </span>
+      </header>
+      <div className="ec-callout">
+        <strong>Pilot workflow:</strong> organisation → event → sales locations → inventory locations →
+        catalogue → menu. Device assignment and final pre-open checks follow in pilot operations.
+      </div>
       <ConfigurationClient />
     </main>
   );
