@@ -106,8 +106,9 @@ export function SyncHealthClient() {
 
       {devices.length === 0 && !error ? (
         <div className="ec-callout">
-          <strong>No register telemetry has reached Cloud yet.</strong> This does not prove a local POS
-          is unavailable; confirm Event Edge and venue connectivity before intervening at the bar.
+          <strong>No register telemetry has reached Cloud yet.</strong> This does not prove a local
+          POS is unavailable; confirm Event Edge and venue connectivity before intervening at the
+          bar.
         </div>
       ) : null}
 
@@ -126,7 +127,9 @@ export function SyncHealthClient() {
                 </span>
               </div>
 
-              <div className={status.tone === 'warning' ? 'ec-banner ec-banner--warning' : 'ec-banner'}>
+              <div
+                className={status.tone === 'warning' ? 'ec-banner ec-banner--warning' : 'ec-banner'}
+              >
                 {status.detail}
               </div>
 

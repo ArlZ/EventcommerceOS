@@ -90,7 +90,8 @@ export function InventoryOperationsClient() {
     [operations],
   );
   const criticalAlerts = activeAlerts.filter((alert) => alert.severity === 'CRITICAL');
-  const activeTransfers = operations?.transfers.filter((transfer) => transfer.state !== 'RECEIVED') ?? [];
+  const activeTransfers =
+    operations?.transfers.filter((transfer) => transfer.state !== 'RECEIVED') ?? [];
 
   return (
     <section className="ec-operations-stack" style={{ marginTop: 18 }}>
@@ -110,8 +111,8 @@ export function InventoryOperationsClient() {
 
       {!operations && !error ? (
         <div className="ec-callout">
-          <strong>Start with the event.</strong> Active stock risks and transfers will appear before the
-          location-by-location ledger projection.
+          <strong>Start with the event.</strong> Active stock risks and transfers will appear before
+          the location-by-location ledger projection.
         </div>
       ) : null}
 
@@ -120,7 +121,10 @@ export function InventoryOperationsClient() {
           <section className="ec-kpi-grid" aria-label="Inventory operations summary">
             <InventoryMetric label="Active alerts" value={activeAlerts.length.toString()} />
             <InventoryMetric label="Critical alerts" value={criticalAlerts.length.toString()} />
-            <InventoryMetric label="Transfers in progress" value={activeTransfers.length.toString()} />
+            <InventoryMetric
+              label="Transfers in progress"
+              value={activeTransfers.length.toString()}
+            />
             <InventoryMetric label="Stock positions" value={operations.stock.length.toString()} />
           </section>
 
@@ -135,7 +139,13 @@ export function InventoryOperationsClient() {
               </div>
               <span
                 className="ec-status-pill"
-                data-tone={criticalAlerts.length > 0 ? 'danger' : activeAlerts.length > 0 ? 'warning' : 'success'}
+                data-tone={
+                  criticalAlerts.length > 0
+                    ? 'danger'
+                    : activeAlerts.length > 0
+                      ? 'warning'
+                      : 'success'
+                }
               >
                 {criticalAlerts.length > 0
                   ? `${criticalAlerts.length} critical`
@@ -152,7 +162,8 @@ export function InventoryOperationsClient() {
             <div className="ec-action-list">
               {activeAlerts.map((alert) => {
                 const suggestedTransfer =
-                  alert.suggestedTransferQuantityBase && alert.suggestedTransferQuantityBase !== '0';
+                  alert.suggestedTransferQuantityBase &&
+                  alert.suggestedTransferQuantityBase !== '0';
                 return (
                   <article className="ec-alert-card" data-severity={alert.severity} key={alert.id}>
                     <div className="ec-alert-card-head">
