@@ -1,6 +1,6 @@
 # Security — Control Web response header hardening
 
-Status: **in progress**
+Status: **implemented; awaiting exact-head CI**
 Base: `main` at `50c555fd6f69a8d8347225dd8249d677da8812a0`
 
 ## Objective
@@ -31,6 +31,12 @@ Add safe, explicit browser response-security defaults to Control Web without imp
 - `Cross-Origin-Opener-Policy: same-origin` is set.
 - existing standalone output/tracing configuration remains unchanged.
 - unit/config tests, production build, full CI and runtime-container checks remain green.
+
+## Implementation notes
+
+- Security headers are centralized and exported from `apps/control-web/next.config.ts` so tests assert the exact deployed configuration rather than duplicating constants.
+- The partial CSP intentionally contains only non-execution directives (`base-uri`, `frame-ancestors`, `object-src`).
+- No HSTS or script/style source policy is claimed before the deployment TLS boundary and CSP nonce strategy are reviewed.
 
 ## Non-goals
 
