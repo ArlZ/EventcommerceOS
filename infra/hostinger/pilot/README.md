@@ -2,14 +2,14 @@
 
 This directory is the Hostinger deployment adapter for Event Commerce OS Pilot 1.
 
-It keeps the same application boundary as the existing cloud pilot paths:
+It preserves the existing application boundary:
 
 - Cloud API runs in the cloud.
 - Event Control runs in the cloud.
 - PostgreSQL 16 runs privately on the Hostinger VPS.
 - Event Edge remains venue-local and is not deployed to Hostinger.
 - Android POS continues to use Event Edge over the venue LAN.
-- M-PESA stays on Safaricom sandbox until the payment-fault matrix is explicitly started.
+- M-PESA remains on Safaricom sandbox until provider-fault testing is explicitly started.
 
 The Render and AWS deployment paths remain available. Hostinger is an additional pilot hosting option, not an architecture change.
 
@@ -28,9 +28,9 @@ Public HTTPS is handled by Hostinger's Traefik Docker project. Only Cloud API an
 
 ## Files
 
-- `docker-compose.yml` — the Hostinger pilot stack.
+- `docker-compose.yml` — Hostinger pilot stack.
 - `pilot.env.example` — required variables without real secrets.
-- `smoke.sh` — verifies both HTTPS health endpoints and the exact release SHA.
+- `smoke.sh` — verifies both HTTPS health endpoints and exact release SHA.
 - `.github/workflows/hostinger-pilot-deploy.yml` — manual exact-release deployment workflow.
 
 ## One-time Hostinger setup
@@ -84,15 +84,24 @@ The Compose file fixes `MPESA_BASE_URL` to Safaricom sandbox.
 
 The Hostinger workflow is intentionally **manual only**. It does not deploy on every push.
 
+Hostinger's deployment action resolves the Compose file from the workflow's own `github.sha`. For that reason the workflow is deliberately fail-closed:
+
+- it must be launched with the workflow branch set to `main`;
+- `release_commit` must be a full lowercase 40-character SHA;
+- the entered `release_commit` must exactly equal the `main` SHA executing the workflow;
+- checkout is pinned to that same `github.sha` and verified before deployment;
+- the same `github.sha` is passed into the Docker builds as `RELEASE_COMMIT`.
+
 To deploy:
 
 1. Merge the reviewed deployment candidate to `main`.
-2. Copy the full 40-character `main` commit SHA.
+2. Copy the full 40-character current `main` commit SHA.
 3. In GitHub, open **Actions → Deploy Hostinger Pilot → Run workflow**.
-4. Paste the exact SHA into `release_commit`.
-5. Run the workflow.
+4. Make sure the selected workflow branch is `main`.
+5. Paste that exact SHA into `release_commit`.
+6. Run the workflow.
 
-The workflow validates the SHA format, checks out that exact commit, verifies the checkout SHA, and only then calls Hostinger's deployment action. The same SHA is supplied as the Docker build argument, so both application health endpoints report the exact image release.
+If `main` moves between copying the SHA and starting the workflow, the deployment fails rather than silently deploying a different revision.
 
 ## Startup ordering
 
@@ -153,4 +162,4 @@ Repository preparation cannot create or modify the Hostinger account itself. The
 - Hostinger API key and VM ID added to GitHub;
 - a strong PostgreSQL password added as a GitHub secret.
 
-Once those exist, deployment is a manual GitHub Actions run against one exact reviewed commit.
+Once those exist, deployment is a manual GitHub Actions run against one exact reviewed `main` commit.
