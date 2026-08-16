@@ -1,6 +1,6 @@
 # Security — generated evidence artifact hygiene
 
-Status: **in progress**
+Status: **implemented; awaiting exact-head CI**
 Base: `main` at `98ee602874cc2aff3c4098fa25425572afb110ec`
 
 ## Objective
@@ -21,6 +21,13 @@ Prevent generated pilot and container-security evidence from being accidentally 
 - existing generated-evidence ignore rules remain intact.
 - no evidence file is added to Git.
 - permanent CI remains green.
+
+## Implementation notes
+
+- The default `artifacts/pilot-evidence/` path remains ignored for compatibility with the manifest initializer.
+- The runbook/example `artifacts/pilot/` path is now ignored explicitly.
+- Generated container SCA JSON under `artifacts/container-sca/` is ignored locally while CI retains its own workflow artifact.
+- Pilot evidence documentation now states that operational evidence belongs in the approved evidence store rather than source control.
 
 ## Non-goals
 
