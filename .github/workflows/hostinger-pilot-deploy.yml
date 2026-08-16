@@ -27,10 +27,11 @@ jobs:
           }
 
       - name: Check out exact release
-        uses: actions/checkout@v5
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.release_commit }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Verify checked-out release
         shell: bash
@@ -41,7 +42,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
 
       - name: Deploy exact release to Hostinger VPS
-        uses: hostinger/deploy-on-vps@v2
+        uses: hostinger/deploy-on-vps@b0868cec74bfa63af6bfa7bdb0dfee2f9bef13ea # v2
         with:
           api-key: ${{ secrets.HOSTINGER_API_KEY }}
           virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
