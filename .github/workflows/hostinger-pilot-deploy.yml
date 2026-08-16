@@ -1,0 +1,61 @@
+name: Deploy Hostinger Pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_commit:
+        description: Full 40-character reviewed main commit to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate release input
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "release_commit must be a full lowercase 40-character Git SHA" >&2
+            exit 2
+          }
+
+      - name: Check out exact release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_commit }}
+          fetch-depth: 1
+
+      - name: Verify checked-out release
+        shell: bash
+        env:
+          RELEASE_COMMIT: ${{ inputs.release_commit }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+
+      - name: Deploy exact release to Hostinger VPS
+        uses: hostinger/deploy-on-vps@v2
+        with:
+          api-key: ${{ secrets.HOSTINGER_API_KEY }}
+          virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
+          project-name: eventcommerceos-pilot
+          docker-compose-path: infra/hostinger/pilot/docker-compose.yml
+          environment-variables: |
+            RELEASE_COMMIT=${{ inputs.release_commit }}
+            CLOUD_HOST=${{ vars.HOSTINGER_CLOUD_HOST }}
+            CONTROL_HOST=${{ vars.HOSTINGER_CONTROL_HOST }}
+            CLOUD_ORIGIN=https://${{ vars.HOSTINGER_CLOUD_HOST }}
+            CONTROL_ORIGIN=https://${{ vars.HOSTINGER_CONTROL_HOST }}
+            POSTGRES_PASSWORD=${{ secrets.HOSTINGER_POSTGRES_PASSWORD }}
+            MPESA_CONSUMER_KEY=${{ secrets.MPESA_CONSUMER_KEY }}
+            MPESA_CONSUMER_SECRET=${{ secrets.MPESA_CONSUMER_SECRET }}
+            MPESA_BUSINESS_SHORT_CODE=${{ secrets.MPESA_BUSINESS_SHORT_CODE }}
+            MPESA_PASSKEY=${{ secrets.MPESA_PASSKEY }}
+            MPESA_CALLBACK_URL=${{ secrets.MPESA_CALLBACK_URL }}

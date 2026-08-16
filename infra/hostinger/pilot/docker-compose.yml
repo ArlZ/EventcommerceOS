@@ -1,0 +1,114 @@
+name: eventcommerceos-pilot
+
+x-cloud-build: &cloud-build
+  context: ../../..
+  dockerfile: Dockerfile
+  target: cloud-api
+  args:
+    NEXT_PUBLIC_CLOUD_API_URL: ${CLOUD_ORIGIN:?Set CLOUD_ORIGIN}
+    RELEASE_COMMIT: ${RELEASE_COMMIT:?Set RELEASE_COMMIT}
+
+services:
+  postgres:
+    image: postgres:16.14-alpine3.22
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: event_commerce_cloud
+      POSTGRES_USER: event_commerce
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - cloud-postgres-data:/var/lib/postgresql/data
+    networks:
+      - cloud-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U event_commerce -d event_commerce_cloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  cloud-migrate:
+    image: eventcommerceos-cloud-api:${RELEASE_COMMIT:?Set RELEASE_COMMIT}
+    build: *cloud-build
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://event_commerce:${POSTGRES_PASSWORD}@postgres:5432/event_commerce_cloud
+      DATABASE_CONNECTION_TIMEOUT_MS: "5000"
+    command: ["node", "scripts/migrate.mjs"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - cloud-internal
+
+  cloud-api:
+    image: eventcommerceos-cloud-api:${RELEASE_COMMIT:?Set RELEASE_COMMIT}
+    build: *cloud-build
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      CONTROL_WEB_ORIGIN: ${CONTROL_ORIGIN:?Set CONTROL_ORIGIN}
+      DATABASE_URL: postgresql://event_commerce:${POSTGRES_PASSWORD}@postgres:5432/event_commerce_cloud
+      DATABASE_CONNECTION_TIMEOUT_MS: "5000"
+      ABUSE_DEPLOYMENT_MODE: single_instance_pilot
+      ABUSE_UPSTREAM_CONFIRMED: "false"
+      TRUST_PROXY_HOPS: "1"
+      MPESA_BASE_URL: https://sandbox.safaricom.co.ke
+      MPESA_TRANSACTION_TYPE: CustomerPayBillOnline
+      MPESA_TIMEOUT_MS: "10000"
+      MPESA_CONSUMER_KEY: ${MPESA_CONSUMER_KEY:-}
+      MPESA_CONSUMER_SECRET: ${MPESA_CONSUMER_SECRET:-}
+      MPESA_BUSINESS_SHORT_CODE: ${MPESA_BUSINESS_SHORT_CODE:-}
+      MPESA_PASSKEY: ${MPESA_PASSKEY:-}
+      MPESA_CALLBACK_URL: ${MPESA_CALLBACK_URL:-}
+    depends_on:
+      cloud-migrate:
+        condition: service_completed_successfully
+    networks:
+      - cloud-internal
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.eventcommerceos-api.rule=Host(`${CLOUD_HOST:?Set CLOUD_HOST}`)
+      - traefik.http.routers.eventcommerceos-api.entrypoints=websecure
+      - traefik.http.routers.eventcommerceos-api.tls.certresolver=letsencrypt
+      - traefik.http.services.eventcommerceos-api.loadbalancer.server.port=3001
+
+  control-web:
+    image: eventcommerceos-control-web:${RELEASE_COMMIT:?Set RELEASE_COMMIT}
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      target: control-web
+      args:
+        NEXT_PUBLIC_CLOUD_API_URL: ${CLOUD_ORIGIN:?Set CLOUD_ORIGIN}
+        RELEASE_COMMIT: ${RELEASE_COMMIT:?Set RELEASE_COMMIT}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      cloud-api:
+        condition: service_healthy
+    networks:
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-proxy
+      - traefik.http.routers.eventcommerceos-control.rule=Host(`${CONTROL_HOST:?Set CONTROL_HOST}`)
+      - traefik.http.routers.eventcommerceos-control.entrypoints=websecure
+      - traefik.http.routers.eventcommerceos-control.tls.certresolver=letsencrypt
+      - traefik.http.services.eventcommerceos-control.loadbalancer.server.port=3000
+
+volumes:
+  cloud-postgres-data:
+
+networks:
+  cloud-internal:
+    internal: true
+  traefik-proxy:
+    external: true
