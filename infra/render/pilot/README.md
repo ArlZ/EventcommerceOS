@@ -21,6 +21,8 @@ Event Edge is **not** deployed to Render. It remains on the venue LAN with its o
 ## Files
 
 - `render.yaml` — Render Blueprint for the two web services and PostgreSQL.
+- `start.sh` — exact-release runtime wrapper used as the Render image `CMD`.
+- `migrate.sh` — exact-release Cloud migration wrapper used by the pre-deploy step.
 - `pilot.env.example` — non-secret helper values for deployment/smoke work.
 - `smoke.sh` — verifies HTTPS health and exact release identity after deployment.
 
@@ -30,7 +32,9 @@ The controlled pilot deploys one exact, reviewed `main` commit.
 
 The Blueprint uses `autoDeployTrigger: "off"`. Do not enable automatic deployments for Pilot 1. After the resources exist, deploy a specific commit from the Render dashboard and keep the same full 40-character SHA in `RELEASE_COMMIT` for both web services.
 
-Render exposes the actual deployed Git SHA as `RENDER_GIT_COMMIT`. Both runtime commands, plus the Cloud API migration command, compare it with `RELEASE_COMMIT` and fail before serving traffic if they differ.
+Render exposes the actual deployed Git SHA as `RENDER_GIT_COMMIT`. The Render-only image startup wrapper and the Cloud migration wrapper compare it with `RELEASE_COMMIT` and fail before serving traffic or migrating if they differ.
+
+The Blueprint deliberately does not override Docker startup with a compound `dockerCommand`. Render uses the `CMD` baked into the Render-only final image stage. This avoids shell-quoting differences in custom Docker commands while preserving the hardened named runtime stages used by normal CI.
 
 ## Initial Render setup
 
@@ -57,7 +61,7 @@ Render assigns each web service an HTTPS `onrender.com` address. A custom domain
 
 The Cloud API receives `DATABASE_URL` directly from the Render Postgres resource using its internal connection string. The database is pinned to PostgreSQL 16 to match the repository's tested local and CI database major version.
 
-The Cloud API runs `node scripts/migrate.mjs` as its Render pre-deploy command. The migration process therefore runs from the same exact release image before the new application version is allowed to serve traffic.
+The Cloud API runs `/usr/local/bin/render-migrate` as its Render pre-deploy command. That wrapper validates the exact deployed release and then executes the packaged `scripts/migrate.mjs` from the same release image before the new application version is allowed to serve traffic.
 
 The database has no public inbound IP allow-list. Do not open public database access for convenience during the pilot. Use Render-supported internal access and controlled backup/restore procedures instead.
 
