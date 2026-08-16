@@ -63,39 +63,28 @@ export function OperatorSessionControl() {
   }
 
   return (
-    <aside
-      style={{
-        display: 'flex',
-        gap: 8,
-        alignItems: 'center',
-        padding: '10px 14px',
-        background: '#fff8dc',
-        borderBottom: '1px solid #e5d79a',
-        fontFamily: 'sans-serif',
-      }}
-    >
-      <strong style={{ whiteSpace: 'nowrap' }}>Operator session</strong>
+    <aside className="ec-session" aria-label="Operator access">
+      <strong>Operator access</strong>
       <input
         type="password"
         autoComplete="off"
         spellCheck={false}
         aria-label="Operator access token"
-        placeholder="Paste ecom_op_… access token"
+        placeholder="Paste operator access token"
         value={token}
         onChange={(event) => {
           setToken(event.target.value);
           setSaved(false);
         }}
-        style={{ flex: 1, minWidth: 220, padding: 7 }}
       />
       <button type="button" onClick={save} disabled={!validToken(token.trim())}>
-        Use session
+        Start session
       </button>
       <button type="button" onClick={clear} disabled={!token && !saved}>
-        Clear
+        End session
       </button>
-      <span style={{ fontSize: 12 }}>
-        {saved ? 'Session active for this browser tab' : 'No active session'}
+      <span className="ec-session-state" data-active={saved}>
+        {saved ? 'Session active in this tab' : 'Session required for protected actions'}
       </span>
     </aside>
   );
