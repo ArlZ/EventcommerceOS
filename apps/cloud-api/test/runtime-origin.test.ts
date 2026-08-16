@@ -29,9 +29,9 @@ describe('Control Web origin configuration', () => {
     'https://control.example.test#fragment',
     'not-a-url',
   ])('rejects unsafe or ambiguous production origin %s', (origin) => {
-    expect(() =>
-      controlWebOrigin({ NODE_ENV: 'production', CONTROL_WEB_ORIGIN: origin }),
-    ).toThrow(/CONTROL_WEB_ORIGIN/);
+    expect(() => controlWebOrigin({ NODE_ENV: 'production', CONTROL_WEB_ORIGIN: origin })).toThrow(
+      /CONTROL_WEB_ORIGIN/,
+    );
   });
 
   it('allows an explicit HTTP origin outside production for local development', () => {
