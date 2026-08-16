@@ -41,6 +41,25 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
+      - name: Verify applied migration drift fails closed
+        run: |
+          printf '\n-- CI migration drift probe\n' >> apps/cloud-api/migrations/0001_event_configuration.sql
+          if pnpm --filter @event-commerce/cloud-api db:migrate; then
+            echo '::error::Cloud migration runner accepted changed bytes for an applied migration'
+            exit 1
+          fi
+          git checkout -- apps/cloud-api/migrations/0001_event_configuration.sql
+
+          printf '\n-- CI migration drift probe\n' >> apps/event-edge/migrations/0001_sync.sql
+          if pnpm --filter @event-commerce/event-edge db:migrate; then
+            echo '::error::Event Edge migration runner accepted changed bytes for an applied migration'
+            exit 1
+          fi
+          git checkout -- apps/event-edge/migrations/0001_sync.sql
+
+          pnpm --filter @event-commerce/cloud-api db:migrate
+          pnpm --filter @event-commerce/event-edge db:migrate
+          git diff --exit-code
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
