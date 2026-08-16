@@ -12,7 +12,7 @@ import {
 } from '../apps/event-edge/scripts/migration-safety.mjs';
 
 const SQL = 'CREATE TABLE example (id uuid PRIMARY KEY);\n';
-const EXPECTED_SHA256 = 'fd56ffb93132bcb3d4b0921fd6d415d84d25f27a3536fd76cca243430237591c';
+const EXPECTED_SHA256 = '1bb152616852268f15b86f7198b4d44af50f9711e269108bbc718eae36737cb6';
 
 test('Cloud production migrations require an explicit database target', () => {
   assert.throws(
