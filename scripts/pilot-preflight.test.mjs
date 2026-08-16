@@ -36,6 +36,7 @@ function baseEnv() {
     TRUST_PROXY_HOPS: '0',
     CLOUD_HEALTH_URL: 'https://cloud.example.test/health',
     EDGE_HEALTH_URL: 'https://edge.example.test/health',
+    CONTROL_HEALTH_URL: 'https://control.example.test/api/health',
   };
 }
 
@@ -49,7 +50,11 @@ function gitIdentity() {
 
 function healthyFetch(overrides = {}) {
   return async (url) => {
-    const service = url.includes('cloud') ? 'cloud-api' : 'event-edge';
+    const service = url.includes('cloud')
+      ? 'cloud-api'
+      : url.includes('edge')
+        ? 'event-edge'
+        : 'control-web';
     const body = {
       service,
       status: 'ok',
@@ -88,7 +93,7 @@ test('preflight passes only readiness checks and never claims field evidence', a
   );
 });
 
-test('preflight blocks when a deployed service reports another release', async () => {
+test('preflight blocks when a deployed backend reports another release', async () => {
   const report = await runPreflight({
     env: baseEnv(),
     manifest: readyManifest(),
@@ -100,6 +105,20 @@ test('preflight blocks when a deployed service reports another release', async (
   const edge = report.checks.find((entry) => entry.id === 'health:event-edge');
   assert.equal(edge.status, 'BLOCKED');
   assert.match(edge.details, /releaseCommit does not match/);
+});
+
+test('preflight blocks when Control Web reports another release', async () => {
+  const report = await runPreflight({
+    env: baseEnv(),
+    manifest: readyManifest(),
+    gitIdentity: gitIdentity(),
+    fetchImpl: healthyFetch({ 'control-web': { releaseCommit: 'd'.repeat(40) } }),
+  });
+
+  assert.equal(report.status, 'BLOCKED');
+  const control = report.checks.find((entry) => entry.id === 'health:control-web');
+  assert.equal(control.status, 'BLOCKED');
+  assert.match(control.details, /releaseCommit does not match/);
 });
 
 test('preflight rejects non-local plaintext health URLs', async () => {
