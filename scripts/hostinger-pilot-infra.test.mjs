@@ -10,7 +10,9 @@ function expectCompose(value) {
 }
 
 test('Hostinger pilot keeps Cloud and database boundaries explicit', () => {
-  expectCompose('postgres:16.14-alpine3.22');
+  expectCompose(
+    'postgres:16.14-alpine3.22@sha256:786dab398303b8ce7cb76b407bb21ef2e4dfbbbd4c6abcf3d29b3130467ffdbc',
+  );
   expectCompose('cloud-internal:');
   expectCompose('internal: true');
   expectCompose('traefik-proxy:');
