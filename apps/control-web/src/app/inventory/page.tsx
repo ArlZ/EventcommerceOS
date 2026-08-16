@@ -1,5 +1,8 @@
 import { InventoryOperationsClient } from './inventory-operations-client';
 
+const inventoryLagNote = 'This view can lag Event Edge during a network partition.';
+const inventoryContinuityNote = 'Never stop local selling because this dashboard is delayed.';
+
 export default function InventoryPage() {
   return (
     <main className="ec-page">
@@ -15,8 +18,7 @@ export default function InventoryPage() {
         <span className="ec-status-pill">Cloud view</span>
       </header>
       <div className="ec-callout">
-        <strong>Connectivity rule:</strong> this view can lag Event Edge during a network partition.
-        Never stop local selling because this dashboard is delayed.
+        <strong>Connectivity rule:</strong> {inventoryLagNote} {inventoryContinuityNote}
       </div>
       <InventoryOperationsClient />
     </main>
