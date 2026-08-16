@@ -31,32 +31,10 @@ const eventLifecycle = [
   {
     href: '/event-close',
     title: 'Close & reconcile',
-    description: 'Work through payment, stock and event-close evidence before finalising the event.',
+    description: 'Review payment, stock and close evidence before finalising the event.',
     action: 'Open event close',
   },
 ];
-
-const operationalRule =
-  'Event Control may lag during connectivity loss. The Android POS remains local-first and must continue to preserve committed sales independently of this dashboard.';
-
-function TaskCards({ items }: { items: typeof liveOperations }) {
-  return (
-    <div className="ec-card-grid">
-      {items.map((item) => (
-        <Link key={item.href} className="ec-nav-card" href={item.href}>
-          <div>
-            <strong>{item.title}</strong>
-            <p>{item.description}</p>
-          </div>
-          <div className="ec-nav-card-footer">
-            <span>{item.action}</span>
-            <span aria-hidden="true">→</span>
-          </div>
-        </Link>
-      ))}
-    </div>
-  );
-}
 
 export default function HomePage() {
   return (
@@ -66,8 +44,8 @@ export default function HomePage() {
           <p className="ec-page-kicker">Pilot control surface</p>
           <h1 className="ec-page-title">Run the event without losing control.</h1>
           <p className="ec-page-description">
-            Keep selling, see operational exceptions early, protect payment truth and reconcile the
-            event cleanly. Start with the job you need to do now.
+            Keep selling, surface exceptions early and protect payment truth. Start with the job you
+            need now.
           </p>
         </div>
         <span className="ec-status-pill" data-tone="warning">
@@ -93,9 +71,30 @@ export default function HomePage() {
 
       <section className="ec-section">
         <div className="ec-callout">
-          <strong>Operational rule:</strong> {operationalRule}
+          <strong>Operational rule:</strong> Event Control may lag during connectivity loss.
+          <br />
+          Android POS stays local-first and preserves committed sales independently.
         </div>
       </section>
     </main>
+  );
+}
+
+function TaskCards({ items }: { items: typeof liveOperations }) {
+  return (
+    <div className="ec-card-grid">
+      {items.map((item) => (
+        <Link key={item.href} className="ec-nav-card" href={item.href}>
+          <div>
+            <strong>{item.title}</strong>
+            <p>{item.description}</p>
+          </div>
+          <div className="ec-nav-card-footer">
+            <span>{item.action}</span>
+            <span aria-hidden="true">→</span>
+          </div>
+        </Link>
+      ))}
+    </div>
   );
 }
