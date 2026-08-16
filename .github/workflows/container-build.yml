@@ -98,12 +98,12 @@ jobs:
         run: |
           node - <<'NODE'
           const targets = [
-            ['http://127.0.0.1:3001/health', 'cloud-api', true],
-            ['http://127.0.0.1:3002/health', 'event-edge', true],
-            ['http://127.0.0.1:3000/api/health', 'control-web', false],
+            ['http://127.0.0.1:3001/health', 'cloud-api'],
+            ['http://127.0.0.1:3002/health', 'event-edge'],
+            ['http://127.0.0.1:3000/api/health', 'control-web'],
           ];
 
-          for (const [url, expectedService, requiresRelease] of targets) {
+          for (const [url, expectedService] of targets) {
             let body;
             for (let attempt = 0; attempt < 30; attempt += 1) {
               try {
@@ -117,13 +117,14 @@ jobs:
             }
 
             if (!body) throw new Error(`${expectedService} did not become ready`);
-            if (requiresRelease) {
-              if (body.service !== expectedService) {
-                throw new Error(`${expectedService} reported service ${JSON.stringify(body.service)}`);
-              }
-              if (body.releaseCommit !== process.env.GITHUB_SHA) {
-                throw new Error(`${expectedService} reported release ${JSON.stringify(body.releaseCommit)}`);
-              }
+            if (body.service !== expectedService) {
+              throw new Error(`${expectedService} reported service ${JSON.stringify(body.service)}`);
+            }
+            if (body.status !== 'ok') {
+              throw new Error(`${expectedService} reported status ${JSON.stringify(body.status)}`);
+            }
+            if (body.releaseCommit !== process.env.GITHUB_SHA) {
+              throw new Error(`${expectedService} reported release ${JSON.stringify(body.releaseCommit)}`);
             }
           }
           NODE
