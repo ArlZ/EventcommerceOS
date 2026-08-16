@@ -15,21 +15,32 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Validate release input
+      - name: Validate exact main release
         shell: bash
         env:
           RELEASE_COMMIT: ${{ inputs.release_commit }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
             echo "release_commit must be a full lowercase 40-character Git SHA" >&2
             exit 2
           }
+          test "$WORKFLOW_REF" = "refs/heads/main" || {
+            echo "Hostinger pilot deployment must be run from the main branch" >&2
+            exit 3
+          }
+          test "$RELEASE_COMMIT" = "$WORKFLOW_SHA" || {
+            echo "release_commit must exactly match the main commit executing this workflow" >&2
+            echo "workflow sha: $WORKFLOW_SHA" >&2
+            exit 4
+          }
 
       - name: Check out exact release
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.release_commit }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
 
@@ -49,7 +60,7 @@ jobs:
           project-name: eventcommerceos-pilot
           docker-compose-path: infra/hostinger/pilot/docker-compose.yml
           environment-variables: |
-            RELEASE_COMMIT=${{ inputs.release_commit }}
+            RELEASE_COMMIT=${{ github.sha }}
             CLOUD_HOST=${{ vars.HOSTINGER_CLOUD_HOST }}
             CONTROL_HOST=${{ vars.HOSTINGER_CONTROL_HOST }}
             CLOUD_ORIGIN=https://${{ vars.HOSTINGER_CLOUD_HOST }}
