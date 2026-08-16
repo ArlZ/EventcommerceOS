@@ -83,6 +83,8 @@ pnpm pilot:evidence:hash -- \
 
 The command prints a JSON record containing the relative path and SHA-256 digest. Copy that record into the gate's `evidenceRefs` array.
 
+`artifacts/pilot/` and the default `artifacts/pilot-evidence/` directory are intentionally ignored by Git. Pilot evidence may contain venue, reviewer, operational or security-sensitive metadata and must not be committed to the source repository. Retain the reviewed evidence bundle in the approved evidence store and preserve its digest-bound structure for validation.
+
 If evidence originates in CI, secure storage, an incident system or another external system, retain an export or a small review record under the manifest directory first. The manifest deliberately validates retained bytes rather than trusting a mutable URL or label.
 
 Do not place secrets, provider credentials, customer payment data or raw database dumps inside the manifest. Evidence files themselves must follow the project's secure evidence-handling rules.
