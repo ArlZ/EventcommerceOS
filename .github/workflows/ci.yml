@@ -39,11 +39,6 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
-      - name: Show exact Prettier diff
-        run: |
-          pnpm exec prettier --write scripts/hostinger-pilot-infra.test.mjs
-          git diff -- scripts/hostinger-pilot-infra.test.mjs
-          exit 1
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Verify applied migration drift fails closed
