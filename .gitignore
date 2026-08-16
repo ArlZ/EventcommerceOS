@@ -12,4 +12,6 @@ coverage/
 .DS_Store
 artifacts/backup-restore/
 artifacts/sca/
+artifacts/pilot/
 artifacts/pilot-evidence/
+artifacts/container-sca/
