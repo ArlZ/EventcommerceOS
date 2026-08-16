@@ -4,6 +4,8 @@ import test from 'node:test';
 
 const blueprint = readFileSync('infra/render/pilot/render.yaml', 'utf8');
 const dockerfile = readFileSync('Dockerfile', 'utf8');
+const renderStart = readFileSync('infra/render/pilot/start.sh', 'utf8');
+const renderMigrate = readFileSync('infra/render/pilot/migrate.sh', 'utf8');
 
 function count(needle) {
   return blueprint.split(needle).length - 1;
@@ -49,10 +51,14 @@ test('Render pilot preserves bounded abuse semantics and sandbox-only M-PESA bas
 });
 
 test('Render pilot deploys exact releases and runs migrations before Cloud traffic', () => {
-  const releaseGuard = 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT"';
-  assert.equal(count(releaseGuard), 3);
-  expectBlueprint('preDeployCommand: >-');
-  expectBlueprint('node scripts/migrate.mjs');
+  const releaseGuard = /\[ "\$\{RELEASE_COMMIT:-\}" != "\$\{RENDER_GIT_COMMIT:-\}" \]/;
+  assert.match(renderStart, releaseGuard);
+  assert.match(renderMigrate, releaseGuard);
+  assert.match(renderStart, /exec node \/app\/dist\/main\.js/);
+  assert.match(renderStart, /exec node \/app\/apps\/control-web\/server\.js/);
+  assert.match(renderMigrate, /exec node \/app\/scripts\/migrate\.mjs/);
+  expectBlueprint('preDeployCommand: /usr/local/bin/render-migrate');
+  assert.doesNotMatch(blueprint, /dockerCommand:/);
   assert.equal(count('key: RELEASE_COMMIT'), 2);
   assert.equal(count('key: NEXT_PUBLIC_CLOUD_API_URL'), 2);
   expectBlueprint('key: CONTROL_WEB_ORIGIN');
@@ -72,4 +78,7 @@ test('Dockerfile exposes only existing hardened runtime stages to Render selecti
   assert.match(dockerfile, /^FROM runtime-base AS event-edge$/m);
   assert.match(dockerfile, /^FROM runtime-base AS control-web$/m);
   assert.match(dockerfile, /^FROM \$\{RUNTIME_TARGET\} AS render-runtime$/m);
+  assert.match(dockerfile, /infra\/render\/pilot\/start\.sh \/usr\/local\/bin\/render-start/);
+  assert.match(dockerfile, /infra\/render\/pilot\/migrate\.sh \/usr\/local\/bin\/render-migrate/);
+  assert.match(dockerfile, /^CMD \["\/usr\/local\/bin\/render-start"\]$/m);
 });
