@@ -3,6 +3,7 @@ import { ShutdownSignal } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { controlWebOrigin } from './system/runtime-origin';
 
 function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
   const raw = process.env[name]?.trim();
@@ -47,6 +48,7 @@ function abuseDeploymentMode(trustProxyHops: number): void {
 async function bootstrap(): Promise<void> {
   const trustProxyHops = boundedInteger('TRUST_PROXY_HOPS', 0, 0, 5);
   abuseDeploymentMode(trustProxyHops);
+  const corsOrigin = controlWebOrigin();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
@@ -66,7 +68,7 @@ async function bootstrap(): Promise<void> {
   app.useBodyParser('urlencoded', { limit: urlencodedBodyLimit, extended: false });
 
   app.enableCors({
-    origin: process.env.CONTROL_WEB_ORIGIN ?? 'http://localhost:3000',
+    origin: corsOrigin,
     allowedHeaders: ['authorization', 'content-type', 'x-organisation-id'],
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'OPTIONS'],
   });
