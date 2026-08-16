@@ -1,10 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import pg from 'pg';
+import { cloudScriptDatabaseConnectionString } from './migration-safety.mjs';
 
 const { Client } = pg;
-const connectionString =
-  process.env.DATABASE_URL ??
-  'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_cloud';
+const connectionString = cloudScriptDatabaseConnectionString();
 
 const action = process.argv[2];
 const actions = new Set([
