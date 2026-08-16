@@ -343,6 +343,15 @@ export async function runPreflight({
       fetchImpl,
     }),
   );
+  checks.push(
+    await probeHealth({
+      label: 'CONTROL_HEALTH_URL',
+      url: env.CONTROL_HEALTH_URL,
+      expectedService: 'control-web',
+      releaseCommit,
+      fetchImpl,
+    }),
+  );
 
   const reportCore = {
     schemaVersion: 1,
@@ -368,7 +377,7 @@ export async function runPreflight({
 
 function printUsage() {
   console.error(
-    'Usage: PILOT_EVIDENCE_MANIFEST=<manifest.json> CLOUD_HEALTH_URL=<url> EDGE_HEALTH_URL=<url> pnpm pilot:preflight',
+    'Usage: PILOT_EVIDENCE_MANIFEST=<manifest.json> CLOUD_HEALTH_URL=<url> EDGE_HEALTH_URL=<url> CONTROL_HEALTH_URL=<url> pnpm pilot:preflight',
   );
 }
 
