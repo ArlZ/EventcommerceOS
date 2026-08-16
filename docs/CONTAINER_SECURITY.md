@@ -1,12 +1,12 @@
-# Production container security scan
+# Production container security
 
 ## Purpose
 
 The repository already performs fail-closed software-composition analysis for the resolved pnpm and Android/Maven dependency graphs. Production runtime images add another dependency surface: operating-system packages and libraries present in the final Cloud API, Event Edge and Control Web containers.
 
-The runtime-container workflow therefore scans the exact locally built production images with Trivy before the candidate can pass the image gate.
+The runtime-container workflow therefore scans the exact locally built production images with Trivy before the candidate can pass the image gate. It also exercises those same images under restrictive runtime settings so a release cannot rely on unnecessary filesystem mutability, Linux capabilities or privilege escalation.
 
-This is software-composition evidence for the image contents. It does not prove runtime configuration, network isolation, hardware safety, payment-provider behavior or controlled-pilot readiness.
+This is synthetic software/container evidence. It does not prove real deployment configuration, network isolation, hardware safety, payment-provider behavior or controlled-pilot readiness.
 
 ## Runtime base remediation
 
@@ -50,6 +50,33 @@ Unfixed vulnerabilities are **not** automatically ignored. There is no wildcard 
 
 If a real blocking finding is discovered, first determine whether it can be removed by updating the digest-pinned Node base image, changing the runtime package set or upgrading/removing the affected dependency. A risk acceptance must not be invented pre-emptively merely to make CI green.
 
+## Restricted runtime contract
+
+The production images are expected to run with restrictive container settings wherever the deployment platform supports equivalent controls:
+
+- run as the non-root user baked into the image;
+- use a read-only root filesystem;
+- drop all Linux capabilities;
+- disable privilege escalation / enable `no-new-privileges`;
+- inject secrets through the deployment secret mechanism rather than image layers or source control;
+- provide the exact release identity and required production endpoint/database configuration.
+
+The runtime-container workflow boots all three production images with the Docker equivalents:
+
+```bash
+docker run \
+  --read-only \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  ...
+```
+
+It then checks the live container configuration with `docker inspect` and fails unless the read-only root filesystem, complete capability drop and `no-new-privileges` controls are actually active. Service readiness and exact release identity must still pass under those restrictions.
+
+Use the equivalent native settings when deploying through another orchestrator. Do not weaken these controls silently; any platform exception should be documented and reviewed as part of release security sign-off.
+
+CPU/memory limits are intentionally not hard-coded here. Those values should be based on representative load and hardware evidence rather than invented before field validation.
+
 ## Evidence retention
 
 Each scan writes JSON under `artifacts/container-sca/` for Cloud API, Event Edge and Control Web. CI uploads the reports as a single `container-sca-<Git SHA>` artifact with `if: always()`.
@@ -60,7 +87,7 @@ A skipped scan, scanner crash, setup failure, database/network failure or blocki
 
 ## Relationship to runtime validation
 
-A candidate must still pass the existing runtime-container checks: digest-pinned production build, OCI source/revision identity, packaged migrations, boot of all three images, health/readiness, exact `RELEASE_COMMIT` across all three surfaces and non-root execution.
+A candidate must still pass the runtime-container checks: digest-pinned production build, OCI source/revision identity, packaged migrations, boot of all three images, health/readiness, exact `RELEASE_COMMIT` across all three surfaces, non-root execution and the restricted runtime contract above.
 
 Image scanning does not replace any of these checks. Conversely, a bootable container is not considered vulnerability-clean merely because the runtime smoke passed.
 

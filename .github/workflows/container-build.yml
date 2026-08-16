@@ -145,19 +145,22 @@ jobs:
           path: artifacts/container-sca/*.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Run packaged migrations
+      - name: Run packaged migrations with restricted runtime privileges
         run: |
           docker run --rm --network host \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e DATABASE_URL="$DATABASE_URL" \
             event-commerce-cloud-api:${GITHUB_SHA} \
             node scripts/migrate.mjs
           docker run --rm --network host \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
             event-commerce-event-edge:${GITHUB_SHA} \
             node scripts/migrate.mjs
-      - name: Boot packaged services
+      - name: Boot packaged services with restricted runtime privileges
         run: |
           docker run -d --network host --name cloud-api \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e DATABASE_URL="$DATABASE_URL" \
             -e CONTROL_WEB_ORIGIN=https://control-pilot.invalid \
             -e ABUSE_DEPLOYMENT_MODE=single_instance_pilot \
@@ -165,12 +168,14 @@ jobs:
             -e TRUST_PROXY_HOPS=0 \
             event-commerce-cloud-api:${GITHUB_SHA}
           docker run -d --network host --name event-edge \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
             -e EDGE_FORWARDER_DISABLED=true \
             event-commerce-event-edge:${GITHUB_SHA}
           docker run -d --network host --name control-web \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             event-commerce-control-web:${GITHUB_SHA}
-      - name: Verify readiness, identity and non-root execution
+      - name: Verify readiness, identity and runtime isolation
         run: |
           node - <<'NODE'
           const targets = [
@@ -204,9 +209,12 @@ jobs:
             }
           }
           NODE
-          test "$(docker exec cloud-api id -u)" != "0"
-          test "$(docker exec event-edge id -u)" != "0"
-          test "$(docker exec control-web id -u)" != "0"
+          for container in cloud-api event-edge control-web; do
+            test "$(docker exec "$container" id -u)" != "0"
+            test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$container")" = "true"
+            test "$(docker inspect --format '{{json .HostConfig.CapDrop}}' "$container")" = '["ALL"]'
+            test "$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$container")" = '["no-new-privileges:true"]'
+          done
       - name: Runtime logs on failure
         if: failure()
         run: |
