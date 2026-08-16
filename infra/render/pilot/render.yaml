@@ -1,0 +1,88 @@
+services:
+  - type: web
+    name: eventcommerceos-arlz-pilot-api
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: "off"
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    dockerCommand: >-
+      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node dist/main.js'
+    preDeployCommand: >-
+      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node scripts/migrate.mjs'
+    envVars:
+      - key: RUNTIME_TARGET
+        value: cloud-api
+      - key: RELEASE_COMMIT
+        sync: false
+      - key: NEXT_PUBLIC_CLOUD_API_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: CONTROL_WEB_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: eventcommerceos-arlz-pilot-db
+          property: connectionString
+      - key: DATABASE_CONNECTION_TIMEOUT_MS
+        value: "5000"
+      - key: ABUSE_DEPLOYMENT_MODE
+        value: single_instance_pilot
+      - key: ABUSE_UPSTREAM_CONFIRMED
+        value: "false"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: MPESA_BASE_URL
+        value: https://sandbox.safaricom.co.ke
+      - key: MPESA_TRANSACTION_TYPE
+        value: CustomerPayBillOnline
+      - key: MPESA_TIMEOUT_MS
+        value: "10000"
+
+  - type: web
+    name: eventcommerceos-arlz-pilot-control
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    autoDeployTrigger: "off"
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 30
+    dockerCommand: >-
+      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node server.js'
+    envVars:
+      - key: RUNTIME_TARGET
+        value: control-web
+      - key: RELEASE_COMMIT
+        sync: false
+      - key: NEXT_PUBLIC_CLOUD_API_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+
+databases:
+  - name: eventcommerceos-arlz-pilot-db
+    plan: basic-1gb
+    region: frankfurt
+    postgresMajorVersion: "16"
+    databaseName: event_commerce_cloud
+    user: event_commerce
+    diskSizeGB: 15
+    storageAutoscalingEnabled: false
+    connectionPool: none
+    ipAllowList: []
