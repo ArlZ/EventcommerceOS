@@ -36,6 +36,9 @@ const eventLifecycle = [
   },
 ];
 
+const operationalRule =
+  'Event Control may lag during connectivity loss. The Android POS remains local-first and must continue to preserve committed sales independently of this dashboard.';
+
 function TaskCards({ items }: { items: typeof liveOperations }) {
   return (
     <div className="ec-card-grid">
@@ -90,9 +93,7 @@ export default function HomePage() {
 
       <section className="ec-section">
         <div className="ec-callout">
-          <strong>Operational rule:</strong> Event Control may lag during connectivity loss. The
-          Android POS remains local-first and must continue to preserve committed sales independently
-          of this dashboard.
+          <strong>Operational rule:</strong> {operationalRule}
         </div>
       </section>
     </main>
