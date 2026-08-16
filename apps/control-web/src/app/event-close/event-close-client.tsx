@@ -216,12 +216,16 @@ export function EventCloseClient() {
           <p className="ec-page-kicker">After trading</p>
           <h1 className="ec-page-title">Close & reconcile the event</h1>
           <p className="ec-page-description">
-            Review uncertainty before recording an operational close. Closing snapshots current truth;
-            it never erases unresolved payments, stock movement or later source corrections.
+            Review uncertainty before recording an operational close. Closing snapshots current
+            truth; it never erases unresolved payments, stock movement or later source corrections.
           </p>
         </div>
         <span className="ec-status-pill" data-tone={attentionRequired ? 'warning' : 'success'}>
-          {report ? (attentionRequired ? 'Review required' : 'No projected exceptions') : 'Not loaded'}
+          {report
+            ? attentionRequired
+              ? 'Review required'
+              : 'No projected exceptions'
+            : 'Not loaded'}
         </span>
       </header>
 
@@ -248,9 +252,9 @@ export function EventCloseClient() {
 
         {!report ? (
           <div className="ec-callout">
-            <strong>Load the event before closing.</strong> The review starts with unresolved payment,
-            inventory and operational signals, then moves into detailed reconciliation and immutable
-            close evidence.
+            <strong>Load the event before closing.</strong> The review starts with unresolved
+            payment, inventory and operational signals, then moves into detailed reconciliation and
+            immutable close evidence.
           </div>
         ) : null}
 
@@ -276,9 +280,9 @@ export function EventCloseClient() {
 
               {report.close.sourceChangedSinceLastClose ? (
                 <div className="ec-banner ec-banner--danger" style={{ marginTop: 14 }}>
-                  <strong>Source truth changed after the last close.</strong> The stored revision has
-                  not been rewritten. Review live reconciliation and use an audited reopen before
-                  recording a new close revision.
+                  <strong>Source truth changed after the last close.</strong> The stored revision
+                  has not been rewritten. Review live reconciliation and use an audited reopen
+                  before recording a new close revision.
                 </div>
               ) : null}
 
@@ -313,7 +317,10 @@ export function EventCloseClient() {
                   </div>
                 </AttentionCard>
 
-                <AttentionCard title="Open / unreceived transfers" count={report.openTransfers.length}>
+                <AttentionCard
+                  title="Open / unreceived transfers"
+                  count={report.openTransfers.length}
+                >
                   {report.openTransfers.length === 0 ? (
                     <p className="ec-empty">None projected.</p>
                   ) : null}
@@ -358,8 +365,8 @@ export function EventCloseClient() {
             >
               {attentionRequired ? (
                 <div className="ec-banner ec-banner--warning" style={{ marginBottom: 12 }}>
-                  Review items remain. Recording an operational close will snapshot them as they are;
-                  it will not mark them resolved.
+                  Review items remain. Recording an operational close will snapshot them as they
+                  are; it will not mark them resolved.
                 </div>
               ) : null}
               <div className="ec-close-actions">

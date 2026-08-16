@@ -359,9 +359,9 @@ export function CommandCentreClient() {
 
         {snapshot && stale ? (
           <div className="ec-banner ec-banner--danger">
-            <strong>Do not treat this screen as current truth.</strong> Live streaming is unavailable
-            or this snapshot is old. Local POS selling can continue; investigate connectivity before
-            acting on dashboard timing alone.
+            <strong>Do not treat this screen as current truth.</strong> Live streaming is
+            unavailable or this snapshot is old. Local POS selling can continue; investigate
+            connectivity before acting on dashboard timing alone.
           </div>
         ) : null}
 
@@ -382,7 +382,13 @@ export function CommandCentreClient() {
               <div style={{ marginBottom: 12 }}>
                 <span
                   className="ec-status-pill"
-                  data-tone={criticalAlertCount > 0 ? 'danger' : snapshot.alerts.length > 0 ? 'warning' : 'success'}
+                  data-tone={
+                    criticalAlertCount > 0
+                      ? 'danger'
+                      : snapshot.alerts.length > 0
+                        ? 'warning'
+                        : 'success'
+                  }
                 >
                   {criticalAlertCount > 0
                     ? `${criticalAlertCount} critical`
