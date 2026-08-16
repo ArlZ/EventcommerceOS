@@ -76,6 +76,21 @@ Render is a controlled-pilot hosting path, not a change to the local-first archi
 - Normal CI, Android, dependency SCA, hardened runtime-container validation and secret scan are green on the merged exact `main` SHA.
 - No secrets are committed.
 
+## Field correction — Render Docker command parsing
+
+The first real Event Control deployment reached the Render runtime but exited with status 127. The logs showed Render passing the compound Blueprint `dockerCommand` through in a way that caused the quoted command body to be treated as a command name rather than executing `node server.js`.
+
+Correction:
+
+- remove compound `dockerCommand` overrides from both Render web services;
+- add Render-only executable startup and migration wrappers to the final Docker image stage;
+- let Render use the final image `CMD` directly for service startup;
+- keep the exact `RELEASE_COMMIT == RENDER_GIT_COMMIT` fail-closed guard inside both wrappers;
+- keep Cloud migrations as a pre-deploy step using one executable path rather than a compound shell command;
+- preserve the existing named Cloud API, Event Edge and Control Web runtime stages for permanent CI.
+
+This is a deployment-adapter correction only. It does not change application commerce semantics or weaken the exact-release gate.
+
 ## External gates after repository completion
 
 - Render workspace/account access.
