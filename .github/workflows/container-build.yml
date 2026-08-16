@@ -38,7 +38,7 @@ permissions:
 jobs:
   build-runtime-images:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     env:
       DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
       EDGE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_container_test
@@ -85,6 +85,50 @@ jobs:
             test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$GITHUB_SHA"
             test "$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$image")" = "https://github.com/ArlZ/EventcommerceOS"
           done
+      - name: Prepare container SCA evidence directory
+        run: mkdir -p artifacts/container-sca
+      - name: Install Trivy
+        id: setup-trivy
+        continue-on-error: true
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: v0.74.0
+          cache: 'false'
+      - name: Scan Cloud API image
+        id: scan-cloud
+        if: steps.setup-trivy.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          trivy image --scanners vuln --pkg-types os,library
+          --severity UNKNOWN,HIGH,CRITICAL --exit-code 1
+          --format json --output artifacts/container-sca/cloud-api.json
+          event-commerce-cloud-api:${GITHUB_SHA}
+      - name: Scan Event Edge image
+        id: scan-edge
+        if: steps.setup-trivy.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          trivy image --scanners vuln --pkg-types os,library
+          --severity UNKNOWN,HIGH,CRITICAL --exit-code 1
+          --format json --output artifacts/container-sca/event-edge.json
+          event-commerce-event-edge:${GITHUB_SHA}
+      - name: Scan Control Web image
+        id: scan-control
+        if: steps.setup-trivy.outcome == 'success'
+        continue-on-error: true
+        run: >-
+          trivy image --scanners vuln --pkg-types os,library
+          --severity UNKNOWN,HIGH,CRITICAL --exit-code 1
+          --format json --output artifacts/container-sca/control-web.json
+          event-commerce-control-web:${GITHUB_SHA}
+      - name: Upload container SCA evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: container-sca-${{ github.sha }}
+          path: artifacts/container-sca/*.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Run packaged migrations
         run: |
           docker run --rm --network host \
@@ -152,3 +196,25 @@ jobs:
           docker logs cloud-api || true
           docker logs event-edge || true
           docker logs control-web || true
+      - name: Enforce container SCA result
+        if: always()
+        env:
+          TRIVY_SETUP: ${{ steps.setup-trivy.outcome }}
+          CLOUD_SCAN: ${{ steps.scan-cloud.outcome }}
+          EDGE_SCAN: ${{ steps.scan-edge.outcome }}
+          CONTROL_SCAN: ${{ steps.scan-control.outcome }}
+        run: |
+          failed=0
+          for result in \
+            "Trivy setup:$TRIVY_SETUP" \
+            "Cloud API scan:$CLOUD_SCAN" \
+            "Event Edge scan:$EDGE_SCAN" \
+            "Control Web scan:$CONTROL_SCAN"; do
+            label="${result%%:*}"
+            outcome="${result#*:}"
+            if [ "$outcome" != "success" ]; then
+              echo "::error::$label did not succeed (outcome=$outcome)"
+              failed=1
+            fi
+          done
+          exit "$failed"
