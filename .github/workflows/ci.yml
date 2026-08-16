@@ -60,6 +60,39 @@ jobs:
           pnpm --filter @event-commerce/cloud-api db:migrate
           pnpm --filter @event-commerce/event-edge db:migrate
           git diff --exit-code
+      - name: Verify migration history completeness fails closed
+        run: |
+          mv apps/cloud-api/migrations/0001_event_configuration.sql /tmp/cloud-0001.sql
+          if pnpm --filter @event-commerce/cloud-api db:migrate; then
+            echo '::error::Cloud migration runner accepted a missing applied migration file'
+            exit 1
+          fi
+          mv /tmp/cloud-0001.sql apps/cloud-api/migrations/0001_event_configuration.sql
+
+          printf '%s\n' '-- CI out-of-order backfill probe' 'SELECT 1;' > apps/cloud-api/migrations/0000_ci_backfill.sql
+          if pnpm --filter @event-commerce/cloud-api db:migrate; then
+            echo '::error::Cloud migration runner accepted an out-of-order backfilled migration'
+            exit 1
+          fi
+          rm apps/cloud-api/migrations/0000_ci_backfill.sql
+
+          mv apps/event-edge/migrations/0001_sync.sql /tmp/edge-0001.sql
+          if pnpm --filter @event-commerce/event-edge db:migrate; then
+            echo '::error::Event Edge migration runner accepted a missing applied migration file'
+            exit 1
+          fi
+          mv /tmp/edge-0001.sql apps/event-edge/migrations/0001_sync.sql
+
+          printf '%s\n' '-- CI out-of-order backfill probe' 'SELECT 1;' > apps/event-edge/migrations/0000_ci_backfill.sql
+          if pnpm --filter @event-commerce/event-edge db:migrate; then
+            echo '::error::Event Edge migration runner accepted an out-of-order backfilled migration'
+            exit 1
+          fi
+          rm apps/event-edge/migrations/0000_ci_backfill.sql
+
+          pnpm --filter @event-commerce/cloud-api db:migrate
+          pnpm --filter @event-commerce/event-edge db:migrate
+          git diff --exit-code
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
