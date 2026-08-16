@@ -75,20 +75,36 @@ function velocityList(values: CommandCentreCurrencyVelocity[]): string {
         .join(' • ');
 }
 
-function Panel({ title, children }: { title: string; children: ReactNode }) {
+function Panel({
+  title,
+  description,
+  priority = false,
+  children,
+}: {
+  title: string;
+  description?: string;
+  priority?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <section
-      style={{
-        background: '#fff',
-        border: '1px solid #dedede',
-        borderRadius: 14,
-        padding: 16,
-        minWidth: 0,
-      }}
-    >
-      <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>{title}</h2>
+    <section className={`ec-panel${priority ? ' ec-panel--priority' : ''}`}>
+      <div className="ec-panel-heading">
+        <div>
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
+        </div>
+      </div>
       {children}
     </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="ec-kpi">
+      <span className="ec-kpi-label">{label}</span>
+      <strong className="ec-kpi-value">{value}</strong>
+    </div>
   );
 }
 
@@ -102,17 +118,9 @@ function StatusPill({ mode, stale }: { mode: CommandCentreRealtimeMode; stale: b
         : mode === 'CONNECTING'
           ? 'CONNECTING'
           : 'NOT CONNECTED';
+  const tone = stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning';
   return (
-    <strong
-      style={{
-        display: 'inline-block',
-        padding: '6px 10px',
-        borderRadius: 999,
-        border: '1px solid currentColor',
-        color: stale ? '#a32626' : mode === 'LIVE' ? '#176b3a' : '#7b5c12',
-        fontSize: 12,
-      }}
-    >
+    <strong className="ec-status-pill" data-tone={tone}>
       {label}
     </strong>
   );
@@ -130,25 +138,23 @@ function AlertCard({
   onAssign: () => void;
 }) {
   return (
-    <article
-      style={{
-        border: '1px solid #ddd',
-        borderRadius: 12,
-        padding: 12,
-        background: alert.severity === 'CRITICAL' ? '#fff5f5' : '#fff',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+    <article className="ec-alert-card" data-severity={alert.severity}>
+      <div className="ec-alert-card-head">
         <strong>{alert.title}</strong>
-        <small>{alert.severity}</small>
+        <span
+          className="ec-status-pill"
+          data-tone={alert.severity === 'CRITICAL' ? 'danger' : 'warning'}
+        >
+          {alert.severity}
+        </span>
       </div>
-      <p style={{ margin: '6px 0' }}>{alert.detail}</p>
-      <small>
+      <p>{alert.detail}</p>
+      <div className="ec-alert-meta">
         {alert.source} • {alert.state}
         {alert.assignedActorId ? ` • assigned ${alert.assignedActorId}` : ''}
-      </small>
+      </div>
       {alert.inventoryAlertId && alert.actionable ? (
-        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="ec-alert-actions">
           {alert.state === 'OPEN' ? (
             <button type="button" disabled={busy} onClick={onAcknowledge}>
               Acknowledge
@@ -302,263 +308,293 @@ export function CommandCentreClient() {
   }
 
   const stale = mode === 'LIVE' ? false : snapshotIsStale(snapshot, now);
+  const criticalAlertCount =
+    snapshot?.alerts.filter((alert) => alert.severity === 'CRITICAL').length ?? 0;
 
   return (
-    <main
-      style={{
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        maxWidth: 1320,
-        margin: '0 auto',
-        padding: 24,
-        background: '#f7f7f5',
-        minHeight: '100vh',
-      }}
-    >
-      <header style={{ marginBottom: 20 }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <div>
-            <h1 style={{ marginBottom: 6 }}>Event Command Centre</h1>
-            <p style={{ margin: 0 }}>
-              Exceptions first. Sales, stock, payments and device health in one view.
-            </p>
-          </div>
-          <StatusPill mode={mode} stale={stale} />
+    <main className="ec-page ec-page--wide">
+      <header className="ec-page-header">
+        <div>
+          <p className="ec-page-kicker">Live operations</p>
+          <h1 className="ec-page-title">Event command centre</h1>
+          <p className="ec-page-description">
+            Start with exceptions and data freshness. Then use sales, stock, payments and device
+            detail to decide where the operating team should act next.
+          </p>
         </div>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: 8,
-            marginTop: 16,
-          }}
-        >
+        <StatusPill mode={mode} stale={stale} />
+      </header>
+
+      <div className="ec-operations-stack">
+        <div className="ec-context-loader">
           <input
             value={organisationId}
             onChange={(event) => setOrganisationId(event.target.value)}
             placeholder="Organisation ID"
             aria-label="Organisation ID"
-            style={{ padding: 10 }}
           />
           <input
             value={eventId}
             onChange={(event) => setEventId(event.target.value)}
             placeholder="Event ID"
             aria-label="Event ID"
-            style={{ padding: 10 }}
           />
-          <button type="button" onClick={() => void load()} style={{ padding: 10 }}>
-            Load event
+          <button type="button" onClick={() => void load()}>
+            Load live event
           </button>
         </div>
-        {error ? <p style={{ color: '#a32626' }}>{error}</p> : null}
+
+        {error ? <div className="ec-banner ec-banner--warning">{error}</div> : null}
+
         {snapshot ? (
-          <p style={{ marginBottom: 0 }}>
-            <strong>{snapshot.event.name}</strong> • {snapshot.event.lifecycle} • generated{' '}
-            {new Date(snapshot.freshness.generatedAt).toLocaleTimeString()}
-            {stale ? ' • snapshot is stale' : ''}
-          </p>
-        ) : null}
-      </header>
-
-      {!snapshot ? <p>Load an event to begin operational monitoring.</p> : null}
-      {snapshot ? (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-              gap: 12,
-            }}
-          >
-            <Panel title="Gross sales">
-              <strong style={{ fontSize: 22 }}>{moneyList(snapshot.sales.grossSales)}</strong>
-            </Panel>
-            <Panel title="Transactions">
-              <strong style={{ fontSize: 22 }}>{snapshot.sales.transactionCount}</strong>
-            </Panel>
-            <Panel title="Average order value">
-              <strong style={{ fontSize: 22 }}>
-                {averageList(snapshot.sales.averageOrderValue)}
-              </strong>
-            </Panel>
-            <Panel title="Current sales velocity">
-              <strong style={{ fontSize: 22 }}>
-                {velocityList(snapshot.sales.currentSalesVelocity)}
-              </strong>
-            </Panel>
-          </section>
-
-          <Panel title={`Action centre • ${snapshot.alerts.length} exception(s)`}>
-            {snapshot.alerts.length === 0 ? <p>No active operational exceptions.</p> : null}
-            <div style={{ display: 'grid', gap: 10 }}>
-              {snapshot.alerts.map((alert) => (
-                <AlertCard
-                  key={alert.id}
-                  alert={alert}
-                  busy={busyAlertId === alert.inventoryAlertId}
-                  onAcknowledge={() => {
-                    if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
-                  }}
-                  onAssign={() => {
-                    if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ASSIGN');
-                  }}
-                />
-              ))}
+          <div className="ec-context-bar">
+            <div>
+              <strong>{snapshot.event.name}</strong> • {snapshot.event.lifecycle}
             </div>
-          </Panel>
+            <div>
+              Snapshot generated {new Date(snapshot.freshness.generatedAt).toLocaleTimeString()}
+            </div>
+          </div>
+        ) : null}
 
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 16,
-            }}
-          >
-            <Panel title="Which locations are slowing?">
-              {snapshot.salesLocations.length === 0 ? <p>No closed sales yet.</p> : null}
-              {snapshot.salesLocations.map((location) => (
-                <div
-                  key={location.salesLocationId}
-                  style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}
+        {snapshot && stale ? (
+          <div className="ec-banner ec-banner--danger">
+            <strong>Do not treat this screen as current truth.</strong> Live streaming is
+            unavailable or this snapshot is old. Local POS selling can continue; investigate
+            connectivity before acting on dashboard timing alone.
+          </div>
+        ) : null}
+
+        {!snapshot ? (
+          <div className="ec-callout">
+            <strong>Choose an event to start.</strong> The live view will prioritise exceptions,
+            payment uncertainty, stock risk and delayed registers before performance detail.
+          </div>
+        ) : null}
+
+        {snapshot ? (
+          <>
+            <Panel
+              title={`Action centre • ${snapshot.alerts.length} exception(s)`}
+              description="Resolve or assign operational exceptions before reading the rest of the dashboard."
+              priority
+            >
+              <div style={{ marginBottom: 12 }}>
+                <span
+                  className="ec-status-pill"
+                  data-tone={
+                    criticalAlertCount > 0
+                      ? 'danger'
+                      : snapshot.alerts.length > 0
+                        ? 'warning'
+                        : 'success'
+                  }
                 >
-                  <strong>{location.name}</strong>
-                  <div>
-                    {location.transactionCount} transactions • {moneyList(location.grossSales)}
-                  </div>
-                  <small>
-                    {velocityList(location.currentSalesVelocity)} • last sale{' '}
-                    {location.lastSaleAt
-                      ? new Date(location.lastSaleAt).toLocaleTimeString()
-                      : 'never'}
-                  </small>
+                  {criticalAlertCount > 0
+                    ? `${criticalAlertCount} critical`
+                    : snapshot.alerts.length > 0
+                      ? 'Attention required'
+                      : 'No active exceptions'}
+                </span>
+              </div>
+              {snapshot.alerts.length === 0 ? (
+                <div className="ec-banner ec-banner--success">
+                  No active operational exceptions are currently projected.
                 </div>
-              ))}
+              ) : null}
+              <div className="ec-action-list">
+                {snapshot.alerts.map((alert) => (
+                  <AlertCard
+                    key={alert.id}
+                    alert={alert}
+                    busy={busyAlertId === alert.inventoryAlertId}
+                    onAcknowledge={() => {
+                      if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
+                    }}
+                    onAssign={() => {
+                      if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ASSIGN');
+                    }}
+                  />
+                ))}
+              </div>
             </Panel>
 
-            <Panel title="Stockout risk">
-              {snapshot.inventory.risks.length === 0 ? <p>No active inventory risks.</p> : null}
-              {snapshot.inventory.risks.slice(0, 12).map((risk) => (
-                <div
-                  key={risk.alertId}
-                  style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}
-                >
-                  <strong>
-                    {risk.severity} • {risk.skuName}
-                  </strong>
-                  <div>
-                    {risk.inventoryLocationName ?? 'Event-wide'} • available{' '}
-                    {risk.availableQuantityBase}
-                  </div>
-                  <small>
-                    {risk.minutesOfCover ?? 'Unknown'} min cover
-                    {risk.suggestedTransferQuantityBase
-                      ? ` • suggest ${risk.suggestedTransferQuantityBase} from ${risk.suggestedSourceLocationName ?? risk.suggestedSourceLocationId ?? 'best source'}`
-                      : ''}
-                  </small>
-                </div>
-              ))}
-            </Panel>
+            <section className="ec-kpi-grid" aria-label="Event sales snapshot">
+              <Metric label="Gross sales" value={moneyList(snapshot.sales.grossSales)} />
+              <Metric label="Transactions" value={snapshot.sales.transactionCount} />
+              <Metric
+                label="Average order value"
+                value={averageList(snapshot.sales.averageOrderValue)}
+              />
+              <Metric
+                label="Current sales velocity"
+                value={velocityList(snapshot.sales.currentSalesVelocity)}
+              />
+            </section>
 
-            <Panel title="Payment health">
-              <p>
-                Pending{' '}
-                <strong>{(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%</strong> •
-                Unknown{' '}
-                <strong>{(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%</strong> •
-                Failed <strong>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</strong>
-              </p>
-              {snapshot.payments.rails.map((rail) => (
-                <div key={rail.providerId}>
-                  {rail.providerId}: <strong>{rail.status}</strong>
-                  {rail.detailCode ? ` • ${rail.detailCode}` : ''}
-                </div>
-              ))}
-              <h3 style={{ fontSize: 14 }}>Settled method split</h3>
-              {snapshot.payments.settledMethods.map((method) => (
-                <div key={`${method.providerId}:${method.currency}`}>
-                  {method.providerId}: {method.transactionCount} •{' '}
-                  {formatMinor(method.currency, method.valueMinor)}
-                </div>
-              ))}
-            </Panel>
-
-            <Panel title="Device sales & sync health">
-              {snapshot.devices.length === 0 ? <p>No event devices observed yet.</p> : null}
-              {snapshot.devices.map((device) => {
-                const salesAvailable = device.transactionCount !== undefined;
-                return (
-                  <div
-                    key={device.deviceId}
-                    style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}
-                  >
-                    <strong>
-                      {device.deviceId} • {device.status}
-                    </strong>
-                    <div>
-                      {device.salesLocationName ?? 'Unknown location'} • backlog{' '}
-                      {device.edgeBacklogCount}
-                    </div>
-                    {salesAvailable ? (
+            <section className="ec-control-grid">
+              <Panel
+                title="Location performance"
+                description="Find bars or sales points that may need staffing or operational attention."
+              >
+                {snapshot.salesLocations.length === 0 ? (
+                  <p className="ec-empty">No closed sales yet.</p>
+                ) : null}
+                <div className="ec-list">
+                  {snapshot.salesLocations.map((location) => (
+                    <div className="ec-list-row" key={location.salesLocationId}>
+                      <strong>{location.name}</strong>
                       <div>
-                        {device.transactionCount} transactions •{' '}
-                        {moneyList(device.grossSales ?? [])} •{' '}
-                        {velocityList(device.currentSalesVelocity ?? [])}
+                        {location.transactionCount} transactions • {moneyList(location.grossSales)}
                       </div>
-                    ) : (
-                      <div>Device sales detail temporarily unavailable.</div>
-                    )}
-                    <small>
-                      {device.syncAgeSeconds === null
-                        ? 'No heartbeat'
-                        : `${device.syncAgeSeconds}s since heartbeat`}
-                    </small>
-                  </div>
-                );
-              })}
-            </Panel>
-          </section>
+                      <small>
+                        {velocityList(location.currentSalesVelocity)} • last sale{' '}
+                        {location.lastSaleAt
+                          ? new Date(location.lastSaleAt).toLocaleTimeString()
+                          : 'never'}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
 
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 16,
-            }}
-          >
-            <Panel title="Top products">
-              {snapshot.topProducts.map((product) => (
-                <div
-                  key={product.skuId}
-                  style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
-                >
-                  <strong>{product.name}</strong> • {product.quantitySold} sold •{' '}
-                  {moneyList(product.grossSales)}
+              <Panel
+                title="Stockout risk"
+                description="Prioritise products with low cover and safe replenishment options."
+              >
+                {snapshot.inventory.risks.length === 0 ? (
+                  <p className="ec-empty">No active inventory risks.</p>
+                ) : null}
+                <div className="ec-list">
+                  {snapshot.inventory.risks.slice(0, 12).map((risk) => (
+                    <div className="ec-list-row" key={risk.alertId}>
+                      <strong>
+                        {risk.severity} • {risk.skuName}
+                      </strong>
+                      <div>
+                        {risk.inventoryLocationName ?? 'Event-wide'} • available{' '}
+                        {risk.availableQuantityBase}
+                      </div>
+                      <small>
+                        {risk.minutesOfCover ?? 'Unknown'} min cover
+                        {risk.suggestedTransferQuantityBase
+                          ? ` • suggest ${risk.suggestedTransferQuantityBase} from ${risk.suggestedSourceLocationName ?? risk.suggestedSourceLocationId ?? 'best source'}`
+                          : ''}
+                      </small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </Panel>
-            <Panel title="Active transfers">
-              {snapshot.inventory.activeTransfers.length === 0 ? <p>No active transfers.</p> : null}
-              {snapshot.inventory.activeTransfers.map((transfer) => (
-                <div
-                  key={transfer.transferId}
-                  style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
-                >
-                  <strong>{transfer.state}</strong> •{' '}
-                  {transfer.sourceLocationName ?? transfer.sourceLocationId} →{' '}
-                  {transfer.destinationLocationName ?? transfer.destinationLocationId}
+              </Panel>
+
+              <Panel
+                title="Payment health"
+                description="Unknown and pending payments need attention before anyone attempts another charge."
+              >
+                <div className="ec-kpi-grid">
+                  <Metric
+                    label="Pending"
+                    value={`${(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%`}
+                  />
+                  <Metric
+                    label="Unknown"
+                    value={`${(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%`}
+                  />
+                  <Metric
+                    label="Failed"
+                    value={`${(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%`}
+                  />
                 </div>
-              ))}
-            </Panel>
-          </section>
-        </div>
-      ) : null}
+                <div className="ec-list" style={{ marginTop: 12 }}>
+                  {snapshot.payments.rails.map((rail) => (
+                    <div className="ec-list-row" key={rail.providerId}>
+                      <strong>{rail.providerId}</strong> • {rail.status}
+                      {rail.detailCode ? ` • ${rail.detailCode}` : ''}
+                    </div>
+                  ))}
+                </div>
+                <h3 style={{ fontSize: 14 }}>Settled method split</h3>
+                <div className="ec-list">
+                  {snapshot.payments.settledMethods.map((method) => (
+                    <div className="ec-list-row" key={`${method.providerId}:${method.currency}`}>
+                      {method.providerId}: {method.transactionCount} •{' '}
+                      {formatMinor(method.currency, method.valueMinor)}
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel
+                title="Register & sync health"
+                description="A delayed dashboard does not mean a register has lost its locally committed sales."
+              >
+                {snapshot.devices.length === 0 ? (
+                  <p className="ec-empty">No event devices observed yet.</p>
+                ) : null}
+                <div className="ec-list">
+                  {snapshot.devices.map((device) => {
+                    const salesAvailable = device.transactionCount !== undefined;
+                    return (
+                      <div className="ec-list-row" key={device.deviceId}>
+                        <strong>
+                          {device.deviceId} • {device.status}
+                        </strong>
+                        <div>
+                          {device.salesLocationName ?? 'Unknown location'} • backlog{' '}
+                          {device.edgeBacklogCount}
+                        </div>
+                        {salesAvailable ? (
+                          <div>
+                            {device.transactionCount} transactions •{' '}
+                            {moneyList(device.grossSales ?? [])} •{' '}
+                            {velocityList(device.currentSalesVelocity ?? [])}
+                          </div>
+                        ) : (
+                          <div>Device sales detail temporarily unavailable.</div>
+                        )}
+                        <small>
+                          {device.syncAgeSeconds === null
+                            ? 'No heartbeat'
+                            : `${device.syncAgeSeconds}s since heartbeat`}
+                        </small>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Panel>
+            </section>
+
+            <section className="ec-control-grid">
+              <Panel title="Top products" description="Current sales mix from closed event orders.">
+                <div className="ec-list">
+                  {snapshot.topProducts.map((product) => (
+                    <div className="ec-list-row" key={product.skuId}>
+                      <strong>{product.name}</strong> • {product.quantitySold} sold •{' '}
+                      {moneyList(product.grossSales)}
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+              <Panel
+                title="Active transfers"
+                description="Stock in motion remains visible until receipt is recorded."
+              >
+                {snapshot.inventory.activeTransfers.length === 0 ? (
+                  <p className="ec-empty">No active transfers.</p>
+                ) : null}
+                <div className="ec-list">
+                  {snapshot.inventory.activeTransfers.map((transfer) => (
+                    <div className="ec-list-row" key={transfer.transferId}>
+                      <strong>{transfer.state}</strong> •{' '}
+                      {transfer.sourceLocationName ?? transfer.sourceLocationId} →{' '}
+                      {transfer.destinationLocationName ?? transfer.destinationLocationId}
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </section>
+          </>
+        ) : null}
+      </div>
     </main>
   );
 }
