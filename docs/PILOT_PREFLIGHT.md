@@ -6,15 +6,18 @@ A PASS means only that the deployment is internally consistent enough to begin f
 
 ## Required inputs
 
-The Cloud API and Event Edge deployments must each set:
+The Cloud API, Event Edge and Control Web deployments must each report:
 
 `RELEASE_COMMIT=<40-character lowercase Git SHA>`
+
+For the production container images this identity is baked from the selected build candidate and is also retained as the OCI image revision label.
 
 The validation workstation needs:
 
 - `PILOT_EVIDENCE_MANIFEST` — path to the initialized pilot evidence JSON;
 - `CLOUD_HEALTH_URL` — Cloud `/health` URL;
 - `EDGE_HEALTH_URL` — Event Edge `/health` URL;
+- `CONTROL_HEALTH_URL` — Control Web `/api/health` URL;
 - `ABUSE_DEPLOYMENT_MODE`;
 - `TRUST_PROXY_HOPS`;
 - `ABUSE_UPSTREAM_CONFIRMED`.
@@ -35,6 +38,7 @@ Then run:
 PILOT_EVIDENCE_MANIFEST=artifacts/pilot/evidence.json \
 CLOUD_HEALTH_URL=https://cloud-pilot.example.com/health \
 EDGE_HEALTH_URL=https://edge-pilot.example.com/health \
+CONTROL_HEALTH_URL=https://control-pilot.example.com/api/health \
 ABUSE_DEPLOYMENT_MODE=single_instance_pilot \
 TRUST_PROXY_HOPS=0 \
 ABUSE_UPSTREAM_CONFIRMED=false \
@@ -55,9 +59,9 @@ The report verifies:
 - named pilot ownership;
 - valid structure for any already-claimed digest-bound PASS evidence;
 - valid deployment-mode configuration;
-- reachable Cloud API and Event Edge health endpoints;
-- correct service identities;
-- matching `RELEASE_COMMIT` from both deployments.
+- reachable Cloud API, Event Edge and Control Web health endpoints;
+- correct service identities and `ok` health status;
+- matching `RELEASE_COMMIT` from all three deployable surfaces.
 
 The report includes a SHA-256 digest and deliberately does not serialize unrelated environment values.
 
