@@ -145,13 +145,15 @@ jobs:
           path: artifacts/container-sca/*.json
           if-no-files-found: warn
           retention-days: 30
-      - name: Run packaged migrations
+      - name: Run packaged migrations with restricted runtime privileges
         run: |
           docker run --rm --network host \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e DATABASE_URL="$DATABASE_URL" \
             event-commerce-cloud-api:${GITHUB_SHA} \
             node scripts/migrate.mjs
           docker run --rm --network host \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e EDGE_DATABASE_URL="$EDGE_DATABASE_URL" \
             event-commerce-event-edge:${GITHUB_SHA} \
             node scripts/migrate.mjs
