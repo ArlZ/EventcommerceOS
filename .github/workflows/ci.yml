@@ -97,7 +97,14 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm format:check
+      - name: Show exact Prettier diff on failure
+        run: |
+          if pnpm format:check; then
+            exit 0
+          fi
+          pnpm exec prettier --write scripts/hostinger-pilot-infra.test.mjs
+          git diff -- scripts/hostinger-pilot-infra.test.mjs
+          exit 1
       - run: pnpm arch:check
 
   android:
