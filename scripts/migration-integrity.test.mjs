@@ -4,11 +4,13 @@ import {
   cloudScriptDatabaseConnectionString,
   migrationChecksum as cloudMigrationChecksum,
   migrationRecordAction as cloudMigrationRecordAction,
+  validateMigrationInventory as validateCloudMigrationInventory,
 } from '../apps/cloud-api/scripts/migration-safety.mjs';
 import {
   edgeScriptDatabaseConnectionString,
   migrationChecksum as edgeMigrationChecksum,
   migrationRecordAction as edgeMigrationRecordAction,
+  validateMigrationInventory as validateEdgeMigrationInventory,
 } from '../apps/event-edge/scripts/migration-safety.mjs';
 
 const SQL = 'CREATE TABLE example (id uuid PRIMARY KEY);\n';
@@ -67,9 +69,9 @@ test('migration checksums are deterministic lowercase SHA-256 across Cloud and E
   assert.match(cloudMigrationChecksum(SQL), /^[a-f0-9]{64}$/);
 });
 
-for (const [name, action] of [
-  ['Cloud', cloudMigrationRecordAction],
-  ['Event Edge', edgeMigrationRecordAction],
+for (const [name, action, validateInventory] of [
+  ['Cloud', cloudMigrationRecordAction, validateCloudMigrationInventory],
+  ['Event Edge', edgeMigrationRecordAction, validateEdgeMigrationInventory],
 ]) {
   test(`${name} migration ledger baselines legacy rows with no checksum`, () => {
     assert.equal(action(null, EXPECTED_SHA256), 'BASELINE');
@@ -83,6 +85,33 @@ for (const [name, action] of [
     assert.throws(
       () => action('0'.repeat(64), EXPECTED_SHA256),
       /Applied migration checksum mismatch/,
+    );
+  });
+
+  test(`${name} migration inventory accepts append-only forward history`, () => {
+    assert.doesNotThrow(() =>
+      validateInventory(
+        ['0001_initial.sql', '0002_forward.sql', '0003_next.sql'],
+        ['0001_initial.sql', '0002_forward.sql'],
+      ),
+    );
+  });
+
+  test(`${name} migration inventory rejects a deleted or renamed applied file`, () => {
+    assert.throws(
+      () => validateInventory(['0002_forward.sql'], ['0001_initial.sql', '0002_forward.sql']),
+      /Applied migration file missing from repository: 0001_initial.sql/,
+    );
+  });
+
+  test(`${name} migration inventory rejects an out-of-order backfill`, () => {
+    assert.throws(
+      () =>
+        validateInventory(
+          ['0001_initial.sql', '0002_backfill.sql', '0003_existing.sql'],
+          ['0001_initial.sql', '0003_existing.sql'],
+        ),
+      /Unapplied migration sorts before existing history: 0002_backfill.sql/,
     );
   });
 }
