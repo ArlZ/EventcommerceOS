@@ -5,14 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.DeviceEdgeProvisioning
@@ -46,60 +48,72 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContent {
-      var localDeviceId by remember { mutableStateOf<String?>(null) }
-      var provisioned by remember { mutableStateOf<DeviceEdgeProvisioning?>(null) }
-      var knownEndpoint by remember { mutableStateOf("") }
-      var editingProvisioning by remember { mutableStateOf(false) }
-      var loading by remember { mutableStateOf(true) }
+      EventCommercePosTheme {
+        var localDeviceId by remember { mutableStateOf<String?>(null) }
+        var provisioned by remember { mutableStateOf<DeviceEdgeProvisioning?>(null) }
+        var knownEndpoint by remember { mutableStateOf("") }
+        var editingProvisioning by remember { mutableStateOf(false) }
+        var loading by remember { mutableStateOf(true) }
 
-      LaunchedEffect(Unit) {
-        val deviceId = deviceState.id()
-        localDeviceId = deviceId
-        knownEndpoint = syncProvisioning.endpoint().orEmpty()
-        provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
-        loading = false
-      }
-
-      when {
-        loading -> Text("Loading POS device identity")
-        localDeviceId == null -> Text("POS device identity unavailable")
-        provisioned == null || editingProvisioning -> DeviceProvisioningScreen(
-          deviceId = localDeviceId!!,
-          initialEndpoint = provisioned?.endpoint ?: knownEndpoint,
-        ) { endpoint, token ->
-          val deviceId = localDeviceId!!
-          lifecycleScope.launch {
-            syncProvisioning.provision(endpoint, deviceId, token)
-            knownEndpoint = endpoint
-            provisioned = syncProvisioning.current()
-            editingProvisioning = false
-          }
+        LaunchedEffect(Unit) {
+          val deviceId = deviceState.id()
+          localDeviceId = deviceId
+          knownEndpoint = syncProvisioning.endpoint().orEmpty()
+          provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
+          loading = false
         }
-        else -> {
-          val activeProvisioning = provisioned!!
-          LaunchedEffect(
-            activeProvisioning.endpoint,
-            activeProvisioning.deviceId,
-            activeProvisioning.token,
-          ) {
-            DeviceSyncCoordinator(
-              DeviceSyncEngine(
-                database,
-                HttpsDeviceEdgeTransport(
-                  activeProvisioning.endpoint,
-                  activeProvisioning.deviceId,
-                  activeProvisioning.token,
-                ),
-                syncState,
-              ),
-            ).run()
-          }
-          Column(modifier = Modifier.fillMaxSize()) {
-            SyncStatusLine(syncQueue, syncState, syncProvisioning)
-            Button(onClick = { editingProvisioning = true }) {
-              Text("Update Edge credential")
+
+        when {
+          loading -> Text("Starting register…", modifier = Modifier.padding(24.dp))
+          localDeviceId == null -> Text(
+            "This register could not load its device identity.",
+            modifier = Modifier.padding(24.dp),
+          )
+          provisioned == null || editingProvisioning -> DeviceProvisioningScreen(
+            deviceId = localDeviceId!!,
+            initialEndpoint = provisioned?.endpoint ?: knownEndpoint,
+          ) { endpoint, token ->
+            val deviceId = localDeviceId!!
+            lifecycleScope.launch {
+              syncProvisioning.provision(endpoint, deviceId, token)
+              knownEndpoint = endpoint
+              provisioned = syncProvisioning.current()
+              editingProvisioning = false
             }
-            PosScreen(repository, payments)
+          }
+          else -> {
+            val activeProvisioning = provisioned!!
+            LaunchedEffect(
+              activeProvisioning.endpoint,
+              activeProvisioning.deviceId,
+              activeProvisioning.token,
+            ) {
+              DeviceSyncCoordinator(
+                DeviceSyncEngine(
+                  database,
+                  HttpsDeviceEdgeTransport(
+                    activeProvisioning.endpoint,
+                    activeProvisioning.deviceId,
+                    activeProvisioning.token,
+                  ),
+                  syncState,
+                ),
+              ).run()
+            }
+            Column(modifier = Modifier.fillMaxSize()) {
+              SyncStatusLine(syncQueue, syncState, syncProvisioning)
+              TextButton(
+                onClick = { editingProvisioning = true },
+                modifier = Modifier.padding(horizontal = 8.dp),
+              ) {
+                Text("Device settings")
+              }
+              PosScreen(
+                repository = repository,
+                payments = payments,
+                modifier = Modifier.weight(1f),
+              )
+            }
           }
         }
       }

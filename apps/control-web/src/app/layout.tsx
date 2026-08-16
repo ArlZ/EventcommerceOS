@@ -1,12 +1,18 @@
+import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { OperatorSessionControl } from './operator-session-control';
+import { AppShell } from './app-shell';
+import './globals.css';
+
+export const metadata: Metadata = {
+  title: 'Event Commerce OS — Event Control',
+  description: 'Live event commerce operations, inventory, devices, setup and reconciliation.',
+};
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body style={{ margin: 0 }}>
-        <OperatorSessionControl />
-        {children}
+      <body>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
