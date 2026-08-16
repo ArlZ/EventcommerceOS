@@ -10,7 +10,7 @@ x-cloud-build: &cloud-build
 
 services:
   postgres:
-    image: postgres:16.14-alpine3.22
+    image: postgres:16.14-alpine3.22@sha256:786dab398303b8ce7cb76b407bb21ef2e4dfbbbd4c6abcf3d29b3130467ffdbc
     restart: unless-stopped
     environment:
       POSTGRES_DB: event_commerce_cloud
