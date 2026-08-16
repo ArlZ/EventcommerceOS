@@ -1,6 +1,6 @@
 # Security — committed secret scanning
 
-Status: **in progress**
+Status: **implemented; awaiting exact-head CI**
 Base: `main` at `211f78b1fcbd87a5c9561893221e94b782b76738`
 
 ## Objective
@@ -22,13 +22,20 @@ Add a fail-closed repository-history gate for committed credentials, API keys, p
 
 - workflow runs on PRs and pushes to `main`;
 - checkout uses `fetch-depth: 0` and `persist-credentials: false`;
-- workflow has only `contents: read` permission;
+- workflow permissions are limited to `contents: read` and `pull-requests: read`;
 - action references are immutable and pass `scripts/check-workflow-pins.mjs`;
-- Gitleaks version is explicit;
+- Gitleaks version is explicitly pinned to 8.30.1;
 - comments and finding-artifact upload are disabled;
 - any scanner finding or scanner failure fails the workflow;
 - no wildcard allowlist/suppression is introduced;
 - current repository history passes or any real finding is remediated before merge.
+
+## Implementation notes
+
+- `gitleaks/gitleaks-action` is pinned to commit `e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e` (v3.0.0, Node 24 action runtime).
+- PR comments are disabled to avoid write permission and unnecessary finding propagation.
+- Gitleaks artifact upload is disabled so a finding does not create a second retained copy of sensitive match data.
+- No custom `gitleaks.toml` or allowlist is introduced initially.
 
 ## Non-goals
 
