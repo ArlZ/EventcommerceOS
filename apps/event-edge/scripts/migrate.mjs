@@ -6,6 +6,7 @@ import {
   edgeScriptDatabaseConnectionString,
   migrationChecksum,
   migrationRecordAction,
+  validateMigrationInventory,
 } from './migration-safety.mjs';
 
 const { Client } = pg;
@@ -24,6 +25,14 @@ try {
   );
 
   const files = (await readdir(root)).filter((name) => name.endsWith('.sql')).sort();
+  const ledger = await client.query(
+    'SELECT filename FROM edge_schema_migrations ORDER BY filename',
+  );
+  validateMigrationInventory(
+    files,
+    ledger.rows.map((row) => row.filename),
+  );
+
   for (const filename of files) {
     const sql = await readFile(join(root, filename), 'utf8');
     const checksum = migrationChecksum(sql);
@@ -58,6 +67,25 @@ try {
       throw error;
     }
   }
+
+  await client.query(
+    'ALTER TABLE edge_schema_migrations ALTER COLUMN checksum_sha256 SET NOT NULL',
+  );
+  await client.query(`
+    DO $migration_constraint$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'edge_schema_migrations_checksum_sha256_check'
+          AND conrelid = 'edge_schema_migrations'::regclass
+      ) THEN
+        ALTER TABLE edge_schema_migrations
+          ADD CONSTRAINT edge_schema_migrations_checksum_sha256_check
+          CHECK (checksum_sha256 ~ '^[0-9a-f]{64}$');
+      END IF;
+    END
+    $migration_constraint$
+  `);
 } finally {
   await client.query('SELECT pg_advisory_unlock($1)', [4004]).catch(() => undefined);
   await client.end();

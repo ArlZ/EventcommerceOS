@@ -23,3 +23,27 @@ export function migrationRecordAction(storedChecksum, expectedChecksum) {
     `Applied migration checksum mismatch: stored ${storedChecksum}, current ${expectedChecksum}`,
   );
 }
+
+export function validateMigrationInventory(currentFiles, appliedFilenames) {
+  const current = [...currentFiles].sort();
+  const applied = [...appliedFilenames].sort();
+  const currentSet = new Set(current);
+  const appliedSet = new Set(applied);
+
+  const missingApplied = applied.filter((filename) => !currentSet.has(filename));
+  if (missingApplied.length > 0) {
+    throw new Error(`Applied migration file missing from repository: ${missingApplied.join(', ')}`);
+  }
+
+  const lastApplied = applied.at(-1);
+  if (lastApplied !== undefined) {
+    const backfilled = current.filter(
+      (filename) => !appliedSet.has(filename) && filename <= lastApplied,
+    );
+    if (backfilled.length > 0) {
+      throw new Error(
+        `Unapplied migration sorts before existing history: ${backfilled.join(', ')}; last applied is ${lastApplied}`,
+      );
+    }
+  }
+}

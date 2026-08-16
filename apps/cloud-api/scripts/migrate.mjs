@@ -6,6 +6,7 @@ import {
   cloudScriptDatabaseConnectionString,
   migrationChecksum,
   migrationRecordAction,
+  validateMigrationInventory,
 } from './migration-safety.mjs';
 
 const { Client } = pg;
@@ -44,6 +45,11 @@ try {
   const files = (await readdir(migrationsDirectory))
     .filter((filename) => filename.endsWith('.sql'))
     .sort();
+  const ledger = await client.query('SELECT filename FROM schema_migrations ORDER BY filename');
+  validateMigrationInventory(
+    files,
+    ledger.rows.map((row) => row.filename),
+  );
 
   for (const filename of files) {
     const sql = await readFile(join(migrationsDirectory, filename), 'utf8');
@@ -79,6 +85,23 @@ try {
       throw error;
     }
   }
+
+  await client.query('ALTER TABLE schema_migrations ALTER COLUMN checksum_sha256 SET NOT NULL');
+  await client.query(`
+    DO $migration_constraint$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'schema_migrations_checksum_sha256_check'
+          AND conrelid = 'schema_migrations'::regclass
+      ) THEN
+        ALTER TABLE schema_migrations
+          ADD CONSTRAINT schema_migrations_checksum_sha256_check
+          CHECK (checksum_sha256 ~ '^[0-9a-f]{64}$');
+      END IF;
+    END
+    $migration_constraint$
+  `);
 } finally {
   await client.query('SELECT pg_advisory_unlock($1)', [2002]).catch(() => undefined);
   await client.end();
