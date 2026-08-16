@@ -60,15 +60,31 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Reject unsafe production Cloud API build origins
+        run: |
+          if docker build --target build .; then
+            echo "::error::production image build accepted a missing NEXT_PUBLIC_CLOUD_API_URL"
+            exit 1
+          fi
+          for origin in \
+            http://cloud-pilot.invalid \
+            https://cloud-pilot.invalid/path; do
+            if docker build --target build --build-arg NEXT_PUBLIC_CLOUD_API_URL="$origin" .; then
+              echo "::error::production image build accepted unsafe origin $origin"
+              exit 1
+            fi
+          done
       - name: Build Cloud API image
         run: >-
           docker build --target cloud-api
           --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --build-arg NEXT_PUBLIC_CLOUD_API_URL=https://cloud-pilot.invalid
           --tag event-commerce-cloud-api:${GITHUB_SHA} .
       - name: Build Event Edge image
         run: >-
           docker build --target event-edge
           --build-arg RELEASE_COMMIT=${GITHUB_SHA}
+          --build-arg NEXT_PUBLIC_CLOUD_API_URL=https://cloud-pilot.invalid
           --tag event-commerce-event-edge:${GITHUB_SHA} .
       - name: Build Control Web image
         run: >-
@@ -143,6 +159,7 @@ jobs:
         run: |
           docker run -d --network host --name cloud-api \
             -e DATABASE_URL="$DATABASE_URL" \
+            -e CONTROL_WEB_ORIGIN=https://control-pilot.invalid \
             -e ABUSE_DEPLOYMENT_MODE=single_instance_pilot \
             -e ABUSE_UPSTREAM_CONFIRMED=false \
             -e TRUST_PROXY_HOPS=0 \
