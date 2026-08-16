@@ -11,10 +11,7 @@ services:
     dockerContext: .
     healthCheckPath: /health
     maxShutdownDelaySeconds: 30
-    dockerCommand: >-
-      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node dist/main.js'
-    preDeployCommand: >-
-      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node scripts/migrate.mjs'
+    preDeployCommand: /usr/local/bin/render-migrate
     envVars:
       - key: RUNTIME_TARGET
         value: cloud-api
@@ -59,8 +56,6 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     maxShutdownDelaySeconds: 30
-    dockerCommand: >-
-      /bin/sh -c 'test "$RELEASE_COMMIT" = "$RENDER_GIT_COMMIT" || { echo "release SHA mismatch" >&2; exit 42; }; exec node server.js'
     envVars:
       - key: RUNTIME_TARGET
         value: control-web
