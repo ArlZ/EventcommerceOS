@@ -32,9 +32,7 @@ export function validateMigrationInventory(currentFiles, appliedFilenames) {
 
   const missingApplied = applied.filter((filename) => !currentSet.has(filename));
   if (missingApplied.length > 0) {
-    throw new Error(
-      `Applied migration file missing from repository: ${missingApplied.join(', ')}`,
-    );
+    throw new Error(`Applied migration file missing from repository: ${missingApplied.join(', ')}`);
   }
 
   const lastApplied = applied.at(-1);

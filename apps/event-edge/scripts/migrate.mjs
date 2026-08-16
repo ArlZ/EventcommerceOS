@@ -25,7 +25,9 @@ try {
   );
 
   const files = (await readdir(root)).filter((name) => name.endsWith('.sql')).sort();
-  const ledger = await client.query('SELECT filename FROM edge_schema_migrations ORDER BY filename');
+  const ledger = await client.query(
+    'SELECT filename FROM edge_schema_migrations ORDER BY filename',
+  );
   validateMigrationInventory(
     files,
     ledger.rows.map((row) => row.filename),
