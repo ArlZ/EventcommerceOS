@@ -26,7 +26,9 @@ export function controlWebOrigin(environment: NodeJS.ProcessEnv = process.env): 
     parsed.hash ||
     parsed.pathname !== '/'
   ) {
-    throw new Error('CONTROL_WEB_ORIGIN must be an origin without credentials, path, query or fragment');
+    throw new Error(
+      'CONTROL_WEB_ORIGIN must be an origin without credentials, path, query or fragment',
+    );
   }
   if (environment.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
     throw new Error('CONTROL_WEB_ORIGIN must use HTTPS in production');
