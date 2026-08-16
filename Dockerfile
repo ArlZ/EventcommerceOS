@@ -84,8 +84,12 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]
 
-# Render builds a Dockerfile without selecting a named target. Render injects
-# non-secret service environment variables as Docker build arguments, so the
-# pilot Blueprint sets RUNTIME_TARGET to one of the hardened stages above.
-# Existing CI continues to build the named stages directly with --target.
+# Render builds a Dockerfile without selecting a named target. The Blueprint
+# supplies RUNTIME_TARGET as a build argument and runtime environment value.
+# Keep Render's exact-release guard in executable wrappers so Render can use
+# the image CMD directly instead of parsing a compound dockerCommand string.
+# Existing CI continues to build the hardened named stages with --target.
 FROM ${RUNTIME_TARGET} AS render-runtime
+COPY --chown=node:node --chmod=0555 infra/render/pilot/start.sh /usr/local/bin/render-start
+COPY --chown=node:node --chmod=0555 infra/render/pilot/migrate.sh /usr/local/bin/render-migrate
+CMD ["/usr/local/bin/render-start"]
