@@ -45,12 +45,19 @@ test('Hostinger pilot exposes only API and Control through Traefik', () => {
   expectCompose('traefik.http.services.eventcommerceos-control.loadbalancer.server.port=3000');
 });
 
-test('Hostinger deployment workflow is manual and verifies the exact checkout', () => {
+test('Hostinger deployment workflow is manual, immutable and verifies the exact checkout', () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /^\s*push:/m);
-  assert.match(workflow, /uses: actions\/checkout@v5/);
+  assert.match(
+    workflow,
+    /uses: actions\/checkout@d23441a48e516b6c34aea4fa41551a30e30af803/,
+  );
+  assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /ref: \$\{\{ inputs\.release_commit \}\}/);
   assert.match(workflow, /test "\$\(git rev-parse HEAD\)" = "\$RELEASE_COMMIT"/);
-  assert.match(workflow, /uses: hostinger\/deploy-on-vps@v2/);
+  assert.match(
+    workflow,
+    /uses: hostinger\/deploy-on-vps@b0868cec74bfa63af6bfa7bdb0dfee2f9bef13ea/,
+  );
   assert.match(workflow, /docker-compose-path: infra\/hostinger\/pilot\/docker-compose\.yml/);
 });
