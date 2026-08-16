@@ -1,10 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
+import { edgeScriptDatabaseConnectionString } from './migration-safety.mjs';
 
 const { Client } = pg;
-const connectionString =
-  process.env.DATABASE_URL ??
-  'postgresql://event_commerce:localdev_only@localhost:5432/event_commerce_edge';
+const connectionString = edgeScriptDatabaseConnectionString();
 
 const action = process.argv[2];
 if (!['provision', 'rotate', 'reassign', 'revoke'].includes(action)) {
