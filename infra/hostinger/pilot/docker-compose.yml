@@ -1,0 +1,144 @@
+name: event-commerce-pilot
+
+services:
+  postgres:
+    image: postgres:16.14-alpine3.24@sha256:57c72fd2a128e416c7fcc499958864df5301e940bca0a56f58fddf30ffc07777
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: event_commerce_cloud
+      POSTGRES_USER: event_commerce
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - cloud-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U event_commerce -d event_commerce_cloud']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    stop_grace_period: 60s
+    shm_size: 256mb
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    networks:
+      - app-internal
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: '5'
+
+  cloud-api:
+    image: event-commerce/cloud-api:${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      target: cloud-api
+      args:
+        RELEASE_COMMIT: ${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+        NEXT_PUBLIC_CLOUD_API_URL: https://${API_DOMAIN:?API_DOMAIN is required}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '3001'
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+      CONTROL_WEB_ORIGIN: https://${CONTROL_DOMAIN:?CONTROL_DOMAIN is required}
+      DATABASE_URL: postgresql://event_commerce:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/event_commerce_cloud
+      DATABASE_CONNECTION_TIMEOUT_MS: '5000'
+      ABUSE_DEPLOYMENT_MODE: single_instance_pilot
+      ABUSE_UPSTREAM_CONFIRMED: 'false'
+      TRUST_PROXY_HOPS: '1'
+      MPESA_BASE_URL: https://sandbox.safaricom.co.ke
+      MPESA_CALLBACK_URL: https://${API_DOMAIN:?API_DOMAIN is required}/payments/providers/mpesa/callback
+      MPESA_TRANSACTION_TYPE: CustomerPayBillOnline
+      MPESA_TIMEOUT_MS: '10000'
+      MPESA_CONSUMER_KEY: ${MPESA_CONSUMER_KEY:-}
+      MPESA_CONSUMER_SECRET: ${MPESA_CONSUMER_SECRET:-}
+      MPESA_BUSINESS_SHORT_CODE: ${MPESA_BUSINESS_SHORT_CODE:-}
+      MPESA_PASSKEY: ${MPESA_PASSKEY:-}
+    expose:
+      - '3001'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - app-internal
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik-proxy}
+      - traefik.http.routers.event-commerce-api.rule=Host(`${API_DOMAIN}`)
+      - traefik.http.routers.event-commerce-api.entrypoints=websecure
+      - traefik.http.routers.event-commerce-api.tls=true
+      - traefik.http.routers.event-commerce-api.tls.certresolver=letsencrypt
+      - traefik.http.services.event-commerce-api.loadbalancer.server.port=3001
+      - traefik.http.middlewares.event-commerce-security.headers.stsSeconds=31536000
+      - traefik.http.middlewares.event-commerce-security.headers.stsIncludeSubdomains=true
+      - traefik.http.middlewares.event-commerce-security.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.event-commerce-security.headers.frameDeny=true
+      - traefik.http.routers.event-commerce-api.middlewares=event-commerce-security
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: '5'
+
+  control-web:
+    image: event-commerce/control-web:${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      target: control-web
+      args:
+        RELEASE_COMMIT: ${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+        NEXT_PUBLIC_CLOUD_API_URL: https://${API_DOMAIN:?API_DOMAIN is required}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      HOSTNAME: 0.0.0.0
+      RELEASE_COMMIT: ${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+    expose:
+      - '3000'
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik-proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik-proxy}
+      - traefik.http.routers.event-commerce-control.rule=Host(`${CONTROL_DOMAIN}`)
+      - traefik.http.routers.event-commerce-control.entrypoints=websecure
+      - traefik.http.routers.event-commerce-control.tls=true
+      - traefik.http.routers.event-commerce-control.tls.certresolver=letsencrypt
+      - traefik.http.services.event-commerce-control.loadbalancer.server.port=3000
+      - traefik.http.routers.event-commerce-control.middlewares=event-commerce-security
+    logging:
+      driver: json-file
+      options:
+        max-size: 25m
+        max-file: '5'
+
+volumes:
+  cloud-postgres-data:
+
+networks:
+  app-internal:
+    internal: true
+  traefik-proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik-proxy}
