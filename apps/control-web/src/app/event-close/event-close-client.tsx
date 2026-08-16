@@ -1,7 +1,7 @@
 'use client';
 
 import type { EventCloseReport, EventCloseStoredReportView } from '@event-commerce/contracts';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -50,18 +50,25 @@ function moneyRows(rows: Array<{ currency: string; amountMinor: string }>): stri
     : rows.map((row) => money(row.currency, row.amountMinor)).join(' • ');
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  description,
+  priority = false,
+  children,
+}: {
+  title: string;
+  description?: string;
+  priority?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <section
-      style={{
-        border: '1px solid #ddd',
-        borderRadius: 14,
-        background: '#fff',
-        padding: 16,
-        minWidth: 0,
-      }}
-    >
-      <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>{title}</h2>
+    <section className={`ec-panel${priority ? ' ec-panel--priority' : ''}`}>
+      <div className="ec-panel-heading">
+        <div>
+          <h2>{title}</h2>
+          {description ? <p>{description}</p> : null}
+        </div>
+      </div>
       {children}
     </section>
   );
@@ -69,35 +76,29 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <small>{label}</small>
-      <div style={{ fontSize: 20, fontWeight: 700 }}>{value}</div>
+    <div className="ec-kpi">
+      <span className="ec-kpi-label">{label}</span>
+      <strong className="ec-kpi-value">{value}</strong>
     </div>
   );
 }
 
-function ExceptionBox({
+function AttentionCard({
   title,
   count,
   children,
 }: {
   title: string;
   count: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <section
-      style={{
-        border: count > 0 ? '1px solid #ad3333' : '1px solid #ddd',
-        borderRadius: 12,
-        background: count > 0 ? '#fff7f7' : '#fff',
-        padding: 14,
-      }}
-    >
-      <strong>
-        {title} • {count}
-      </strong>
-      <div style={{ marginTop: 8 }}>{children}</div>
+    <section className="ec-attention-card" data-attention={count > 0}>
+      <div className="ec-attention-card-title">
+        <strong>{title}</strong>
+        <span className="ec-attention-count">{count}</span>
+      </div>
+      {children}
     </section>
   );
 }
@@ -201,371 +202,457 @@ export function EventCloseClient() {
 
   const reconciliationUnresolved =
     report?.financialReconciliation.some((row) => !row.conclusive) ?? false;
+  const attentionRequired =
+    (report?.unresolvedPayments.length ?? 0) > 0 ||
+    (report?.openTransfers.length ?? 0) > 0 ||
+    (report?.unresolvedCriticalAlerts.length ?? 0) > 0 ||
+    reconciliationUnresolved ||
+    (report?.close.sourceChangedSinceLastClose ?? false);
 
   return (
-    <main
-      style={{
-        fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        maxWidth: 1320,
-        margin: '0 auto',
-        padding: 24,
-        background: '#f7f7f5',
-        minHeight: '100vh',
-      }}
-    >
-      <header style={{ marginBottom: 20 }}>
-        <h1 style={{ marginBottom: 6 }}>Event Close & Reconciliation</h1>
-        <p style={{ marginTop: 0 }}>
-          Operational close snapshots truth. It does not erase uncertainty or rewrite source
-          ledgers.
-        </p>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 8,
-          }}
-        >
+    <main className="ec-page ec-page--wide">
+      <header className="ec-page-header">
+        <div>
+          <p className="ec-page-kicker">After trading</p>
+          <h1 className="ec-page-title">Close & reconcile the event</h1>
+          <p className="ec-page-description">
+            Review uncertainty before recording an operational close. Closing snapshots current truth;
+            it never erases unresolved payments, stock movement or later source corrections.
+          </p>
+        </div>
+        <span className="ec-status-pill" data-tone={attentionRequired ? 'warning' : 'success'}>
+          {report ? (attentionRequired ? 'Review required' : 'No projected exceptions') : 'Not loaded'}
+        </span>
+      </header>
+
+      <div className="ec-operations-stack">
+        <div className="ec-context-loader">
           <input
             aria-label="Organisation ID"
             placeholder="Organisation ID"
             value={organisationId}
             onChange={(event) => setOrganisationId(event.target.value)}
-            style={{ padding: 10 }}
           />
           <input
             aria-label="Event ID"
             placeholder="Event ID"
             value={eventId}
             onChange={(event) => setEventId(event.target.value)}
-            style={{ padding: 10 }}
           />
           <button type="button" disabled={busy} onClick={() => void load()}>
-            Load close report
+            Load close review
           </button>
         </div>
-        {error ? <p style={{ color: '#a32626' }}>{error}</p> : null}
-      </header>
 
-      {report ? (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <Panel title="Close state">
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-                gap: 12,
-              }}
+        {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
+
+        {!report ? (
+          <div className="ec-callout">
+            <strong>Load the event before closing.</strong> The review starts with unresolved payment,
+            inventory and operational signals, then moves into detailed reconciliation and immutable
+            close evidence.
+          </div>
+        ) : null}
+
+        {report ? (
+          <>
+            <Panel
+              title="Close readiness"
+              description="Read these signals before changing the event's operational state."
+              priority
             >
-              <Metric label="Event" value={report.event.name} />
-              <Metric label="Operational state" value={report.close.state} />
-              <Metric
-                label="Last close revision"
-                value={report.close.lastClosedRevision?.toString() ?? 'Not closed'}
-              />
-              <Metric
-                label="Current reconciliation"
-                value={reconciliationUnresolved ? 'UNRESOLVED' : 'CONCLUSIVE'}
-              />
-            </div>
-            {report.close.sourceChangedSinceLastClose ? (
-              <p style={{ color: '#a32626', fontWeight: 700 }}>
-                Source truth changed after the last close. The stored close revision is unchanged;
-                review the live reconciliation and re-close only after an audited reopen.
-              </p>
-            ) : null}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-              <input
-                aria-label="Close reason"
-                value={reason}
-                onChange={(event) => setReason(event.target.value)}
-                style={{ padding: 9, minWidth: 320, flex: 1 }}
-              />
-              {report.close.state === 'OPERATIONALLY_CLOSED' ? (
-                <button type="button" disabled={busy} onClick={() => void action('reopen')}>
-                  Reopen with audit reason
-                </button>
-              ) : (
-                <button type="button" disabled={busy} onClick={() => void action('close')}>
-                  Operationally close
-                </button>
-              )}
-              <button
-                type="button"
-                disabled={busy || !active}
-                onClick={() =>
-                  void download(
-                    `/event-close/events/${encodeURIComponent(active!.eventId)}/report.csv`,
-                    `event-close-${active!.eventId}-live.csv`,
-                  )
-                }
-              >
-                Export live CSV
-              </button>
-            </div>
-          </Panel>
+              <div className="ec-close-summary">
+                <Metric label="Event" value={report.event.name} />
+                <Metric label="Operational state" value={report.close.state} />
+                <Metric
+                  label="Current reconciliation"
+                  value={reconciliationUnresolved ? 'UNRESOLVED' : 'CONCLUSIVE'}
+                />
+                <Metric
+                  label="Last close revision"
+                  value={report.close.lastClosedRevision?.toString() ?? 'Not closed'}
+                />
+              </div>
 
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: 12,
-            }}
-          >
-            <ExceptionBox title="Unresolved payments" count={report.unresolvedPayments.length}>
-              {report.unresolvedPayments.length === 0 ? <span>None.</span> : null}
-              {report.unresolvedPayments.map((payment) => (
-                <div key={payment.paymentAttemptId} style={{ marginBottom: 8 }}>
-                  <strong>
-                    {payment.providerId} • {payment.status}
-                  </strong>
-                  <div>
-                    {payment.orderId} • {money(payment.currency, payment.amountMinor)}
-                  </div>
-                  <small>
-                    {payment.reconciliationErrorCode ??
-                      payment.failureCode ??
-                      'Awaiting provider truth'}
-                  </small>
+              {report.close.sourceChangedSinceLastClose ? (
+                <div className="ec-banner ec-banner--danger" style={{ marginTop: 14 }}>
+                  <strong>Source truth changed after the last close.</strong> The stored revision has
+                  not been rewritten. Review live reconciliation and use an audited reopen before
+                  recording a new close revision.
                 </div>
-              ))}
-            </ExceptionBox>
-            <ExceptionBox title="Open / unreceived transfers" count={report.openTransfers.length}>
-              {report.openTransfers.length === 0 ? <span>None.</span> : null}
-              {report.openTransfers.map((transfer) => (
-                <div key={transfer.transferId} style={{ marginBottom: 8 }}>
-                  <strong>{transfer.state}</strong> • {transfer.sourceLocationId} →{' '}
-                  {transfer.destinationLocationId}
-                </div>
-              ))}
-            </ExceptionBox>
-            <ExceptionBox
-              title="Unresolved critical alerts"
-              count={report.unresolvedCriticalAlerts.length}
-            >
-              {report.unresolvedCriticalAlerts.length === 0 ? <span>None.</span> : null}
-              {report.unresolvedCriticalAlerts.map((alert) => (
-                <div key={alert.alertId} style={{ marginBottom: 8 }}>
-                  <strong>{alert.alertType}</strong> • {alert.state}
-                  <div>
-                    {alert.skuId} • available {alert.availableQuantityBase}
-                  </div>
-                </div>
-              ))}
-            </ExceptionBox>
-          </section>
-
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12,
-            }}
-          >
-            <Panel title="Sales reconciliation">
-              <Metric label="Gross" value={moneyRows(report.sales.grossSales)} />
-              <Metric label="Discounts" value={moneyRows(report.sales.discounts)} />
-              <Metric label="Comps" value={moneyRows(report.sales.comps)} />
-              <Metric label="Voids" value={moneyRows(report.sales.voids)} />
-              <Metric label="Refunds" value={moneyRows(report.sales.refunds)} />
-              <Metric label="Net sales" value={moneyRows(report.sales.netSales)} />
-            </Panel>
-
-            <Panel title="Sales vs tender">
-              {report.financialReconciliation.map((row) => (
-                <div key={row.currency} style={{ marginBottom: 12 }}>
-                  <strong>
-                    {row.currency} • {row.conclusive ? 'CONCLUSIVE' : 'UNRESOLVED'}
-                  </strong>
-                  <div>Net sales: {money(row.currency, row.netSalesMinor)}</div>
-                  <div>Electronic: {money(row.currency, row.electronicNetTenderMinor)}</div>
-                  <div>Cash expected: {money(row.currency, row.cashExpectedMinor)}</div>
-                  <div>Accounted tender: {money(row.currency, row.accountedTenderMinor)}</div>
-                  <div>Variance: {money(row.currency, row.salesToTenderVarianceMinor)}</div>
-                </div>
-              ))}
-            </Panel>
-
-            <Panel title="Provider reconciliation">
-              {report.providerReconciliation.length === 0 ? <p>No provider payments.</p> : null}
-              {report.providerReconciliation.map((provider) => (
-                <div
-                  key={`${provider.providerId}:${provider.currency}`}
-                  style={{ marginBottom: 12 }}
-                >
-                  <strong>
-                    {provider.providerId} • {provider.transactionReconciliationStatus}
-                  </strong>
-                  <div>
-                    {provider.succeededCount} success •{' '}
-                    {money(provider.currency, provider.succeededValueMinor)}
-                  </div>
-                  <div>
-                    {provider.pendingCount} pending • {provider.unknownCount} unknown •{' '}
-                    {provider.failedCount} failed
-                  </div>
-                  <small>{provider.settlementStatus}</small>
-                </div>
-              ))}
-            </Panel>
-          </section>
-
-          <section
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 16,
-            }}
-          >
-            <Panel title="Cash expected vs declared">
-              {report.cash.scopes.length === 0 ? <p>No cash scopes.</p> : null}
-              {report.cash.scopes.map((scope) => (
-                <div
-                  key={`${scope.salesLocationId}|${scope.deviceId}|${scope.cashierId}|${scope.currency}`}
-                  style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
-                >
-                  <strong>{scope.salesLocationName ?? scope.salesLocationId}</strong>
-                  <div>
-                    {scope.deviceId} • {scope.cashierId}
-                  </div>
-                  <div>
-                    Expected {money(scope.currency, scope.expectedMinor)} • Declared{' '}
-                    {money(scope.currency, scope.declaredMinor)}
-                  </div>
-                  <small>
-                    {scope.declarationStatus} • variance{' '}
-                    {money(scope.currency, scope.varianceMinor)}
-                  </small>
-                </div>
-              ))}
-            </Panel>
-
-            <Panel title="Inventory count variance">
-              {report.inventoryVariances.length === 0 ? (
-                <p>No closed count variance detail.</p>
               ) : null}
-              {report.inventoryVariances.map((variance) => (
-                <div
-                  key={`${variance.inventoryLocationId}|${variance.skuId}`}
-                  style={{ borderBottom: '1px solid #eee', padding: '8px 0' }}
-                >
-                  <strong>{variance.skuName}</strong> •{' '}
-                  {variance.inventoryLocationName ?? variance.inventoryLocationId}
-                  <div>
-                    Expected {variance.expectedQuantityBase} • Physical{' '}
-                    {variance.physicalQuantityBase} • Variance {variance.varianceQuantityBase}
+
+              {reconciliationUnresolved ? (
+                <div className="ec-banner ec-banner--warning" style={{ marginTop: 14 }}>
+                  <strong>Financial reconciliation is not conclusive.</strong> Any operational close
+                  will preserve that uncertainty rather than guessing a final result.
+                </div>
+              ) : null}
+
+              <div className="ec-close-attention-grid">
+                <AttentionCard title="Unresolved payments" count={report.unresolvedPayments.length}>
+                  {report.unresolvedPayments.length === 0 ? (
+                    <p className="ec-empty">None projected.</p>
+                  ) : null}
+                  <div className="ec-list">
+                    {report.unresolvedPayments.map((payment) => (
+                      <div className="ec-list-row" key={payment.paymentAttemptId}>
+                        <strong>
+                          {payment.providerId} • {payment.status}
+                        </strong>
+                        <div>
+                          {payment.orderId} • {money(payment.currency, payment.amountMinor)}
+                        </div>
+                        <small>
+                          {payment.reconciliationErrorCode ??
+                            payment.failureCode ??
+                            'Awaiting provider truth'}
+                        </small>
+                      </div>
+                    ))}
                   </div>
-                  <small>
-                    {variance.valuationStatus === 'VALUED'
-                      ? `Value ${money(variance.valuationCurrency ?? '', variance.varianceValueMinor)}`
-                      : 'Unit cost missing — variance value is intentionally not guessed.'}
-                  </small>
-                </div>
-              ))}
+                </AttentionCard>
+
+                <AttentionCard title="Open / unreceived transfers" count={report.openTransfers.length}>
+                  {report.openTransfers.length === 0 ? (
+                    <p className="ec-empty">None projected.</p>
+                  ) : null}
+                  <div className="ec-list">
+                    {report.openTransfers.map((transfer) => (
+                      <div className="ec-list-row" key={transfer.transferId}>
+                        <strong>{transfer.state}</strong>
+                        <div>
+                          {transfer.sourceLocationId} → {transfer.destinationLocationId}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </AttentionCard>
+
+                <AttentionCard
+                  title="Unresolved critical alerts"
+                  count={report.unresolvedCriticalAlerts.length}
+                >
+                  {report.unresolvedCriticalAlerts.length === 0 ? (
+                    <p className="ec-empty">None projected.</p>
+                  ) : null}
+                  <div className="ec-list">
+                    {report.unresolvedCriticalAlerts.map((alert) => (
+                      <div className="ec-list-row" key={alert.alertId}>
+                        <strong>
+                          {alert.alertType} • {alert.state}
+                        </strong>
+                        <div>
+                          {alert.skuId} • available {alert.availableQuantityBase}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </AttentionCard>
+              </div>
             </Panel>
-          </section>
 
-          <Panel title="Payment method totals">
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th align="left">Method</th>
-                    <th align="left">Currency</th>
-                    <th align="right">Success</th>
-                    <th align="right">Gross</th>
-                    <th align="right">Refund</th>
-                    <th align="right">Reversal</th>
-                    <th align="right">Net tender</th>
-                    <th align="right">Unresolved</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.paymentMethods.map((method) => (
-                    <tr key={`${method.methodId}:${method.currency}`}>
-                      <td>{method.methodId}</td>
-                      <td>{method.currency}</td>
-                      <td align="right">{method.succeededCount}</td>
-                      <td align="right">{money(method.currency, method.grossTenderMinor)}</td>
-                      <td align="right">{money(method.currency, method.refundMinor)}</td>
-                      <td align="right">{money(method.currency, method.reversalMinor)}</td>
-                      <td align="right">{money(method.currency, method.netTenderMinor)}</td>
-                      <td align="right">{method.unresolvedAttemptCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          <Panel title="Drilldown by bar, device and cashier">
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th align="left">Dimension</th>
-                    <th align="left">ID</th>
-                    <th align="left">Currency</th>
-                    <th align="right">Txns</th>
-                    <th align="right">Gross</th>
-                    <th align="right">Discount</th>
-                    <th align="right">Comp</th>
-                    <th align="right">Void</th>
-                    <th align="right">Refund</th>
-                    <th align="right">Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.drilldowns.map((row) => (
-                    <tr key={`${row.dimensionType}|${row.dimensionId}|${row.currency}`}>
-                      <td>{row.dimensionType}</td>
-                      <td>{row.dimensionName ?? row.dimensionId}</td>
-                      <td>{row.currency}</td>
-                      <td align="right">{row.transactionCount}</td>
-                      <td align="right">{money(row.currency, row.grossSalesMinor)}</td>
-                      <td align="right">{money(row.currency, row.discountMinor)}</td>
-                      <td align="right">{money(row.currency, row.compMinor)}</td>
-                      <td align="right">{money(row.currency, row.voidMinor)}</td>
-                      <td align="right">{money(row.currency, row.refundMinor)}</td>
-                      <td align="right">{money(row.currency, row.netSalesMinor)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          <Panel title="Immutable close revisions">
-            {stored.length === 0 ? <p>No operational close revision stored yet.</p> : null}
-            {stored.map((item) => (
-              <div key={item.reportId} style={{ borderBottom: '1px solid #eee', padding: '9px 0' }}>
-                <strong>Revision {item.revision}</strong> •{' '}
-                {new Date(item.createdAt).toLocaleString()}
-                <div>
-                  SHA-256: <code>{item.sha256}</code>
+            <Panel
+              title="Record operational state"
+              description="Every close or reopen needs an audit reason. Uncertainty remains visible in the stored revision."
+            >
+              {attentionRequired ? (
+                <div className="ec-banner ec-banner--warning" style={{ marginBottom: 12 }}>
+                  Review items remain. Recording an operational close will snapshot them as they are;
+                  it will not mark them resolved.
                 </div>
-                <div>
-                  Source version: <code>{item.sourceVersionToken}</code>
-                </div>
+              ) : null}
+              <div className="ec-close-actions">
+                <input
+                  aria-label="Close reason"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+                {report.close.state === 'OPERATIONALLY_CLOSED' ? (
+                  <button type="button" disabled={busy} onClick={() => void action('reopen')}>
+                    Reopen with audit reason
+                  </button>
+                ) : (
+                  <button
+                    className="ec-button-primary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void action('close')}
+                  >
+                    Record operational close
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={busy || !active}
                   onClick={() =>
                     void download(
-                      `/event-close/events/${encodeURIComponent(active!.eventId)}/reports/${item.revision}/export.csv`,
-                      `event-close-${active!.eventId}-r${item.revision}.csv`,
+                      `/event-close/events/${encodeURIComponent(active!.eventId)}/report.csv`,
+                      `event-close-${active!.eventId}-live.csv`,
                     )
                   }
                 >
-                  Export revision {item.revision}
+                  Export live CSV
                 </button>
               </div>
-            ))}
-          </Panel>
-        </div>
-      ) : (
-        <p>Load an event to begin close review.</p>
-      )}
+            </Panel>
+
+            <section className="ec-control-grid">
+              <Panel title="Sales reconciliation" description="Commercial totals from event truth.">
+                <div className="ec-metric-list">
+                  <div className="ec-metric-pair">
+                    <small>Gross</small>
+                    <strong>{moneyRows(report.sales.grossSales)}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Discounts</small>
+                    <strong>{moneyRows(report.sales.discounts)}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Comps</small>
+                    <strong>{moneyRows(report.sales.comps)}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Voids</small>
+                    <strong>{moneyRows(report.sales.voids)}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Refunds</small>
+                    <strong>{moneyRows(report.sales.refunds)}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Net sales</small>
+                    <strong>{moneyRows(report.sales.netSales)}</strong>
+                  </div>
+                </div>
+              </Panel>
+
+              <Panel
+                title="Sales vs tender"
+                description="A non-conclusive currency remains explicitly unresolved."
+              >
+                <div className="ec-list">
+                  {report.financialReconciliation.map((row) => (
+                    <div className="ec-list-row" key={row.currency}>
+                      <strong>
+                        {row.currency} • {row.conclusive ? 'CONCLUSIVE' : 'UNRESOLVED'}
+                      </strong>
+                      <div>Net sales: {money(row.currency, row.netSalesMinor)}</div>
+                      <div>Electronic: {money(row.currency, row.electronicNetTenderMinor)}</div>
+                      <div>Cash expected: {money(row.currency, row.cashExpectedMinor)}</div>
+                      <div>Accounted tender: {money(row.currency, row.accountedTenderMinor)}</div>
+                      <div>Variance: {money(row.currency, row.salesToTenderVarianceMinor)}</div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel
+                title="Provider reconciliation"
+                description="Provider truth remains separate from local transaction intent."
+              >
+                {report.providerReconciliation.length === 0 ? (
+                  <p className="ec-empty">No provider payments.</p>
+                ) : null}
+                <div className="ec-list">
+                  {report.providerReconciliation.map((provider) => (
+                    <div
+                      className="ec-list-row"
+                      key={`${provider.providerId}:${provider.currency}`}
+                    >
+                      <strong>
+                        {provider.providerId} • {provider.transactionReconciliationStatus}
+                      </strong>
+                      <div>
+                        {provider.succeededCount} success •{' '}
+                        {money(provider.currency, provider.succeededValueMinor)}
+                      </div>
+                      <div>
+                        {provider.pendingCount} pending • {provider.unknownCount} unknown •{' '}
+                        {provider.failedCount} failed
+                      </div>
+                      <small>{provider.settlementStatus}</small>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </section>
+
+            <section className="ec-control-grid">
+              <Panel
+                title="Cash expected vs declared"
+                description="Review every cash scope and its variance before sign-off."
+              >
+                {report.cash.scopes.length === 0 ? (
+                  <p className="ec-empty">No cash scopes.</p>
+                ) : null}
+                <div className="ec-list">
+                  {report.cash.scopes.map((scope) => (
+                    <div
+                      className="ec-list-row"
+                      key={`${scope.salesLocationId}|${scope.deviceId}|${scope.cashierId}|${scope.currency}`}
+                    >
+                      <strong>{scope.salesLocationName ?? scope.salesLocationId}</strong>
+                      <div>
+                        {scope.deviceId} • {scope.cashierId}
+                      </div>
+                      <div>
+                        Expected {money(scope.currency, scope.expectedMinor)} • Declared{' '}
+                        {money(scope.currency, scope.declaredMinor)}
+                      </div>
+                      <small>
+                        {scope.declarationStatus} • variance{' '}
+                        {money(scope.currency, scope.varianceMinor)}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel
+                title="Inventory count variance"
+                description="Physical count remains distinct from expected ledger quantity."
+              >
+                {report.inventoryVariances.length === 0 ? (
+                  <p className="ec-empty">No closed count variance detail.</p>
+                ) : null}
+                <div className="ec-list">
+                  {report.inventoryVariances.map((variance) => (
+                    <div
+                      className="ec-list-row"
+                      key={`${variance.inventoryLocationId}|${variance.skuId}`}
+                    >
+                      <strong>{variance.skuName}</strong> •{' '}
+                      {variance.inventoryLocationName ?? variance.inventoryLocationId}
+                      <div>
+                        Expected {variance.expectedQuantityBase} • Physical{' '}
+                        {variance.physicalQuantityBase} • Variance {variance.varianceQuantityBase}
+                      </div>
+                      <small>
+                        {variance.valuationStatus === 'VALUED'
+                          ? `Value ${money(variance.valuationCurrency ?? '', variance.varianceValueMinor)}`
+                          : 'Unit cost missing — variance value is intentionally not guessed.'}
+                      </small>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </section>
+
+            <Panel
+              title="Payment method totals"
+              description="Method-level tender and unresolved attempt detail."
+            >
+              <div className="ec-table-wrap">
+                <table className="ec-table">
+                  <thead>
+                    <tr>
+                      <th align="left">Method</th>
+                      <th align="left">Currency</th>
+                      <th align="right">Success</th>
+                      <th align="right">Gross</th>
+                      <th align="right">Refund</th>
+                      <th align="right">Reversal</th>
+                      <th align="right">Net tender</th>
+                      <th align="right">Unresolved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.paymentMethods.map((method) => (
+                      <tr key={`${method.methodId}:${method.currency}`}>
+                        <td>{method.methodId}</td>
+                        <td>{method.currency}</td>
+                        <td align="right">{method.succeededCount}</td>
+                        <td align="right">{money(method.currency, method.grossTenderMinor)}</td>
+                        <td align="right">{money(method.currency, method.refundMinor)}</td>
+                        <td align="right">{money(method.currency, method.reversalMinor)}</td>
+                        <td align="right">{money(method.currency, method.netTenderMinor)}</td>
+                        <td align="right">{method.unresolvedAttemptCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Drilldown by bar, device and cashier"
+              description="Use operational dimensions to investigate variance without rewriting source records."
+            >
+              <div className="ec-table-wrap">
+                <table className="ec-table">
+                  <thead>
+                    <tr>
+                      <th align="left">Dimension</th>
+                      <th align="left">ID</th>
+                      <th align="left">Currency</th>
+                      <th align="right">Txns</th>
+                      <th align="right">Gross</th>
+                      <th align="right">Discount</th>
+                      <th align="right">Comp</th>
+                      <th align="right">Void</th>
+                      <th align="right">Refund</th>
+                      <th align="right">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.drilldowns.map((row) => (
+                      <tr key={`${row.dimensionType}|${row.dimensionId}|${row.currency}`}>
+                        <td>{row.dimensionType}</td>
+                        <td>{row.dimensionName ?? row.dimensionId}</td>
+                        <td>{row.currency}</td>
+                        <td align="right">{row.transactionCount}</td>
+                        <td align="right">{money(row.currency, row.grossSalesMinor)}</td>
+                        <td align="right">{money(row.currency, row.discountMinor)}</td>
+                        <td align="right">{money(row.currency, row.compMinor)}</td>
+                        <td align="right">{money(row.currency, row.voidMinor)}</td>
+                        <td align="right">{money(row.currency, row.refundMinor)}</td>
+                        <td align="right">{money(row.currency, row.netSalesMinor)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <Panel
+              title="Immutable close revisions"
+              description="Every stored close is digest-bound and remains available for audit."
+            >
+              {stored.length === 0 ? (
+                <p className="ec-empty">No operational close revision stored yet.</p>
+              ) : null}
+              {stored.map((item) => (
+                <div className="ec-revision-row" key={item.reportId}>
+                  <div className="ec-revision-meta">
+                    <strong>
+                      Revision {item.revision} • {new Date(item.createdAt).toLocaleString()}
+                    </strong>
+                    <span>
+                      SHA-256: <code>{item.sha256}</code>
+                    </span>
+                    <span>
+                      Source version: <code>{item.sourceVersionToken}</code>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || !active}
+                    onClick={() =>
+                      void download(
+                        `/event-close/events/${encodeURIComponent(active!.eventId)}/reports/${item.revision}/export.csv`,
+                        `event-close-${active!.eventId}-r${item.revision}.csv`,
+                      )
+                    }
+                  >
+                    Export revision {item.revision}
+                  </button>
+                </div>
+              ))}
+            </Panel>
+          </>
+        ) : null}
+      </div>
     </main>
   );
 }

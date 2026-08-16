@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { AppShell } from './app-shell';
 import './globals.css';
+import './operations.css';
 
 export const metadata: Metadata = {
   title: 'Event Commerce OS — Event Control',
