@@ -43,7 +43,7 @@ The default JSON report contains only:
 - service name;
 - up/down result;
 - latency in milliseconds;
-- backend release-match result;
+- release-match result;
 - a fixed low-cardinality failure reason such as `TIMEOUT`, `FETCH_FAILED`, `HTTP_503` or `RELEASE_MISMATCH`.
 
 The report does not retain endpoint URLs, response bodies or raw transport/provider error messages.
@@ -54,7 +54,7 @@ Exit codes:
 - `1` — one or more service probes were blocked;
 - `2` — monitor configuration itself is invalid.
 
-Cloud API and Event Edge `/health` are DB-backed readiness checks, so their probe status covers service process + database reachability. Their reported release must also equal `RUNTIME_MONITOR_EXPECTED_RELEASE`. Control Web identity/status is checked, but its current health contract does not report a baked release SHA.
+Cloud API and Event Edge `/health` are DB-backed readiness checks, so their probe status covers service process + database reachability. Control Web `/api/health` covers its deployed runtime process. All three health responses must identify the expected service, report `status: ok` and report the exact `RUNTIME_MONITOR_EXPECTED_RELEASE`. A stale Control Web deployment is therefore blocked in the same way as a stale Cloud API or Event Edge deployment.
 
 ## Prometheus output
 
@@ -62,7 +62,7 @@ Cloud API and Event Edge `/health` are DB-backed readiness checks, so their prob
 pnpm monitor:runtime -- --prometheus
 ```
 
-The output uses only the bounded `service` label and exposes:
+The output uses only the bounded `service` label and exposes the same three metric families for Cloud API, Event Edge and Control Web:
 
 ```text
 event_commerce_runtime_probe_up{service="cloud-api"}
@@ -70,7 +70,7 @@ event_commerce_runtime_probe_duration_seconds{service="cloud-api"}
 event_commerce_runtime_release_match{service="cloud-api"}
 ```
 
-No event, tenant, order, device, payment, customer, URL or failure-message values are used as metric labels.
+No event, tenant, order, device, payment, customer, URL, release SHA or failure-message values are used as metric labels.
 
 A Prometheus textfile collector can run the command on a schedule and atomically replace its `.prom` file only after a successful command execution. Other monitoring systems can use the JSON mode and the process exit code.
 
@@ -81,7 +81,7 @@ These are provider-neutral thresholds to configure in the chosen deployment moni
 ### Page immediately
 
 - `event_commerce_runtime_probe_up == 0` for Cloud API or Event Edge on two consecutive checks during an active event;
-- `event_commerce_runtime_release_match == 0` at any time after a deployment is declared complete;
+- `event_commerce_runtime_release_match == 0` for any service at any time after a deployment is declared complete;
 - all three services unavailable from the monitoring location.
 
 ### High-priority warning
@@ -101,7 +101,7 @@ For non-event development environments, a less frequent cadence is sufficient.
 After deploying a candidate:
 
 1. confirm each image/deployment record refers to the intended Git SHA;
-2. run `pnpm pilot:preflight` to verify the controlled-pilot release and manifest contract;
+2. run `pnpm pilot:preflight` to verify the exact release across Cloud API, Event Edge and Control Web plus the pilot manifest contract;
 3. run `pnpm monitor:runtime` from the intended monitoring location;
 4. configure the chosen monitor to schedule the same probe/output contract;
 5. test real alert delivery separately before relying on paging during a live pilot.

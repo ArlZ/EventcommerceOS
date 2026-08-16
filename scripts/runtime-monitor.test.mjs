@@ -28,7 +28,7 @@ function healthyFetch(overrides = {}) {
         return {
           service,
           status: 'ok',
-          releaseCommit: service === 'control-web' ? null : RELEASE,
+          releaseCommit: RELEASE,
           ...overrides[service],
         };
       },
@@ -60,7 +60,7 @@ test('runtime monitor passes healthy exact-release services', async () => {
     [
       ['cloud-api', true, true],
       ['event-edge', true, true],
-      ['control-web', true, null],
+      ['control-web', true, true],
     ],
   );
   assert.equal(
@@ -82,6 +82,21 @@ test('runtime monitor blocks a backend release mismatch', async () => {
   assert.equal(edge.up, false);
   assert.equal(edge.releaseMatch, false);
   assert.equal(edge.reason, 'RELEASE_MISMATCH');
+});
+
+test('runtime monitor blocks a stale Control Web release', async () => {
+  const config = runtimeMonitorConfig(configEnvironment());
+  const report = await runRuntimeMonitor({
+    config,
+    fetchImpl: healthyFetch({ 'control-web': { releaseCommit: 'c'.repeat(40) } }),
+    now: deterministicNow(),
+  });
+
+  assert.equal(report.status, 'BLOCKED');
+  const control = report.results.find((result) => result.service === 'control-web');
+  assert.equal(control.up, false);
+  assert.equal(control.releaseMatch, false);
+  assert.equal(control.reason, 'RELEASE_MISMATCH');
 });
 
 test('runtime monitor normalizes fetch failures without retaining error detail', async () => {
@@ -160,6 +175,7 @@ test('Prometheus output uses only bounded service labels and no endpoints', asyn
 
   assert.match(output, /event_commerce_runtime_probe_up\{service="cloud-api"\} 1/);
   assert.match(output, /event_commerce_runtime_release_match\{service="event-edge"\} 1/);
+  assert.match(output, /event_commerce_runtime_release_match\{service="control-web"\} 1/);
   assert.equal(output.includes('example.test'), false);
   assert.equal(output.includes(RELEASE), false);
   assert.equal(output.includes('reason='), false);

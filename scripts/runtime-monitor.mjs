@@ -92,7 +92,7 @@ async function probeOne({ service, url, expectedRelease, timeout, fetchImpl, now
         service,
         up: false,
         durationMs,
-        releaseMatch: service === 'control-web' ? null : false,
+        releaseMatch: false,
         reason: `HTTP_${response.status}`,
       };
     }
@@ -105,7 +105,7 @@ async function probeOne({ service, url, expectedRelease, timeout, fetchImpl, now
         service,
         up: false,
         durationMs,
-        releaseMatch: service === 'control-web' ? null : false,
+        releaseMatch: false,
         reason: 'INVALID_JSON',
       };
     }
@@ -115,7 +115,7 @@ async function probeOne({ service, url, expectedRelease, timeout, fetchImpl, now
         service,
         up: false,
         durationMs,
-        releaseMatch: service === 'control-web' ? null : false,
+        releaseMatch: false,
         reason: 'SERVICE_MISMATCH',
       };
     }
@@ -124,13 +124,13 @@ async function probeOne({ service, url, expectedRelease, timeout, fetchImpl, now
         service,
         up: false,
         durationMs,
-        releaseMatch: service === 'control-web' ? null : false,
+        releaseMatch: false,
         reason: 'STATUS_NOT_OK',
       };
     }
 
-    const releaseMatch = service === 'control-web' ? null : body?.releaseCommit === expectedRelease;
-    if (releaseMatch === false) {
+    const releaseMatch = body?.releaseCommit === expectedRelease;
+    if (!releaseMatch) {
       return {
         service,
         up: false,
@@ -153,7 +153,7 @@ async function probeOne({ service, url, expectedRelease, timeout, fetchImpl, now
       service,
       up: false,
       durationMs,
-      releaseMatch: service === 'control-web' ? null : false,
+      releaseMatch: false,
       reason: error?.name === 'AbortError' ? 'TIMEOUT' : 'FETCH_FAILED',
     };
   } finally {
@@ -217,10 +217,10 @@ export function renderPrometheus(report) {
   }
 
   lines.push(
-    '# HELP event_commerce_runtime_release_match Whether the deployed backend reports the expected release.',
+    '# HELP event_commerce_runtime_release_match Whether the deployed service reports the expected release.',
     '# TYPE event_commerce_runtime_release_match gauge',
   );
-  for (const result of report.results.filter((entry) => entry.releaseMatch !== null)) {
+  for (const result of report.results) {
     const service = prometheusLabelValue(result.service);
     lines.push(
       `event_commerce_runtime_release_match{service="${service}"} ${result.releaseMatch ? 1 : 0}`,

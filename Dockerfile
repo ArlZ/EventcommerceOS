@@ -59,6 +59,7 @@ LABEL org.opencontainers.image.source="https://github.com/ArlZ/EventcommerceOS" 
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV RELEASE_COMMIT=$RELEASE_COMMIT
 WORKDIR /app/apps/control-web
 COPY --from=build --chown=node:node /workspace/apps/control-web/.next/standalone /app
 COPY --from=build --chown=node:node /workspace/apps/control-web/.next/static ./.next/static
