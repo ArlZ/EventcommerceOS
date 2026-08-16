@@ -21,18 +21,12 @@ function assertFailedForDatabaseTarget(result, pattern) {
 
 test('operator administration refuses production execution without DATABASE_URL', () => {
   const result = run('apps/cloud-api/scripts/manage-operator-auth.mjs', ['create-identity']);
-  assertFailedForDatabaseTarget(
-    result,
-    /DATABASE_URL is required for production database tooling/,
-  );
+  assertFailedForDatabaseTarget(result, /DATABASE_URL is required for production database tooling/);
 });
 
 test('Edge credential administration refuses production execution without DATABASE_URL', () => {
   const result = run('apps/cloud-api/scripts/manage-edge-credential.mjs', ['provision']);
-  assertFailedForDatabaseTarget(
-    result,
-    /DATABASE_URL is required for production database tooling/,
-  );
+  assertFailedForDatabaseTarget(result, /DATABASE_URL is required for production database tooling/);
 });
 
 test('POS device administration requires EDGE_DATABASE_URL and never reuses generic DATABASE_URL in production', () => {
