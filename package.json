@@ -11,7 +11,7 @@
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test && node --test scripts/admin-db-target.test.mjs scripts/migration-integrity.test.mjs scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs scripts/runtime-monitor.test.mjs scripts/aws-pilot-infra.test.mjs scripts/render-pilot-infra.test.mjs scripts/hostinger-pilot-infra.test.mjs scripts/hostinger-managed-webapp.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/admin-db-target.test.mjs scripts/migration-integrity.test.mjs scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs scripts/runtime-monitor.test.mjs scripts/aws-pilot-infra.test.mjs scripts/render-pilot-infra.test.mjs scripts/hostinger-pilot-infra.test.mjs scripts/hostinger-managed-webapp.test.mjs && node scripts/prettier-probe.cjs",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
     "security:sca": "node scripts/sca-evidence.mjs",
