@@ -48,15 +48,23 @@ test('Docker builds before production deploy packaging', () => {
   assert.ok(cloudDeploy > controlBuild && edgeDeploy > cloudDeploy);
 });
 
+test('managed build scripts do not depend on pnpm being on PATH', () => {
+  assert.equal(packageJson.scripts?.build, 'corepack pnpm -r --if-present build');
+  assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
+  assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
+  assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
+  assert.match(packageJson.scripts?.['hostinger:control-web:start'] ?? '', /^corepack pnpm /);
+});
+
 test('managed Cloud API migrates before startup', () => {
   assert.equal(
     packageJson.scripts?.['hostinger:cloud-api:build'],
-    'pnpm --filter @event-commerce/cloud-api... build',
+    'corepack pnpm --filter @event-commerce/cloud-api... build',
   );
   const start = packageJson.scripts?.['hostinger:cloud-api:start'];
   const expected = [
-    'pnpm --filter @event-commerce/cloud-api db:migrate',
-    'pnpm --filter @event-commerce/cloud-api start',
+    'corepack pnpm --filter @event-commerce/cloud-api db:migrate',
+    'corepack pnpm --filter @event-commerce/cloud-api start',
   ].join(' && ');
   assert.equal(start, expected);
   assert.ok(start.indexOf('db:migrate') < start.indexOf(' start'));
@@ -65,11 +73,11 @@ test('managed Cloud API migrates before startup', () => {
 test('managed Event Control uses workspace scripts', () => {
   assert.equal(
     packageJson.scripts?.['hostinger:control-web:build'],
-    'pnpm --filter @event-commerce/control-web... build',
+    'corepack pnpm --filter @event-commerce/control-web... build',
   );
   assert.equal(
     packageJson.scripts?.['hostinger:control-web:start'],
-    'pnpm --filter @event-commerce/control-web start',
+    'corepack pnpm --filter @event-commerce/control-web start',
   );
 });
 
