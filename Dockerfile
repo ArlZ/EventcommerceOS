@@ -4,7 +4,7 @@ ARG NODE_IMAGE=node:22.23.2-alpine3.24@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb
 FROM ${NODE_IMAGE} AS pnpm-base
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@11.22.0 --activate
 WORKDIR /workspace
 
 FROM pnpm-base AS build
