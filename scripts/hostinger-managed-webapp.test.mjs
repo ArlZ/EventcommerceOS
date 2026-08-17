@@ -33,6 +33,21 @@ test('pnpm 11 project settings live in pnpm-workspace.yaml with reviewed build s
   assert.doesNotMatch(workspace, /^dangerouslyAllowAllBuilds:\s*true$/m);
 });
 
+test('Docker builds the workspace before pruning production deploy packages', () => {
+  assert.match(dockerfile, /^ENV CI=true$/m);
+  const cloudBuild = dockerfile.indexOf('pnpm --filter @event-commerce/cloud-api... build');
+  const edgeBuild = dockerfile.indexOf('pnpm --filter @event-commerce/event-edge... build');
+  const controlBuild = dockerfile.indexOf('pnpm --filter @event-commerce/control-web build');
+  const cloudDeploy = dockerfile.indexOf(
+    'pnpm --filter @event-commerce/cloud-api --prod deploy --legacy /out/cloud-api',
+  );
+  const edgeDeploy = dockerfile.indexOf(
+    'pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge',
+  );
+  assert.ok(cloudBuild >= 0 && edgeBuild > cloudBuild && controlBuild > edgeBuild);
+  assert.ok(cloudDeploy > controlBuild && edgeDeploy > cloudDeploy);
+});
+
 test('managed Cloud API build and startup remain workspace-aware and migrate before serving', () => {
   assert.equal(
     packageJson.scripts?.['hostinger:cloud-api:build'],
