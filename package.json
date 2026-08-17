@@ -8,7 +8,7 @@
     "pnpm": "11.22.0"
   },
   "scripts": {
-    "build": "pnpm -r --if-present build",
+    "build": "corepack pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test && node --test scripts/admin-db-target.test.mjs scripts/migration-integrity.test.mjs scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs scripts/runtime-monitor.test.mjs scripts/aws-pilot-infra.test.mjs scripts/render-pilot-infra.test.mjs scripts/hostinger-pilot-infra.test.mjs scripts/hostinger-managed-webapp.test.mjs",
@@ -20,10 +20,10 @@
     "pilot:evidence:validate": "node scripts/pilot-evidence.mjs validate",
     "pilot:preflight": "node scripts/pilot-preflight.mjs",
     "monitor:runtime": "node scripts/runtime-monitor.mjs",
-    "hostinger:cloud-api:build": "pnpm --filter @event-commerce/cloud-api... build",
-    "hostinger:cloud-api:start": "pnpm --filter @event-commerce/cloud-api db:migrate && pnpm --filter @event-commerce/cloud-api start",
-    "hostinger:control-web:build": "pnpm --filter @event-commerce/control-web... build",
-    "hostinger:control-web:start": "pnpm --filter @event-commerce/control-web start",
+    "hostinger:cloud-api:build": "corepack pnpm --filter @event-commerce/cloud-api... build",
+    "hostinger:cloud-api:start": "corepack pnpm --filter @event-commerce/cloud-api db:migrate && corepack pnpm --filter @event-commerce/cloud-api start",
+    "hostinger:control-web:build": "corepack pnpm --filter @event-commerce/control-web... build",
+    "hostinger:control-web:start": "corepack pnpm --filter @event-commerce/control-web start",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
   "devDependencies": {
