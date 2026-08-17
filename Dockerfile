@@ -9,17 +9,21 @@ WORKDIR /workspace
 
 FROM pnpm-base AS build
 ARG NEXT_PUBLIC_CLOUD_API_URL
+ENV CI=true
 ENV NEXT_PUBLIC_CLOUD_API_URL=$NEXT_PUBLIC_CLOUD_API_URL
 RUN node -e "const value=process.env.NEXT_PUBLIC_CLOUD_API_URL?.trim(); if(!value) throw new Error('NEXT_PUBLIC_CLOUD_API_URL is required for production image builds'); const parsed=new URL(value); if(parsed.protocol!=='https:' || parsed.origin!==value) throw new Error('NEXT_PUBLIC_CLOUD_API_URL must be a canonical HTTPS origin without credentials, path, query or fragment');"
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json eslint.config.mjs ./
 COPY apps ./apps
 COPY packages ./packages
 RUN pnpm install --frozen-lockfile
+# Build the full workspace surface before pruning deployable packages. pnpm deploy
+# may reconcile production node_modules state, so interleaving deploys with later
+# workspace builds can make a non-interactive Docker build attempt a modules purge.
 RUN pnpm --filter @event-commerce/cloud-api... build \
-  && pnpm --filter @event-commerce/cloud-api --prod deploy --legacy /out/cloud-api
-RUN pnpm --filter @event-commerce/event-edge... build \
-  && pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge
-RUN pnpm --filter @event-commerce/control-web build
+  && pnpm --filter @event-commerce/event-edge... build \
+  && pnpm --filter @event-commerce/control-web build
+RUN pnpm --filter @event-commerce/cloud-api --prod deploy --legacy /out/cloud-api
+RUN pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge
 
 FROM ${NODE_IMAGE} AS runtime-base
 RUN rm -rf \
