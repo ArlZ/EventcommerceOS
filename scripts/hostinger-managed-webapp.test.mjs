@@ -44,7 +44,9 @@ test('Docker builds the workspace before pruning production deploy packages', ()
   const edgeDeploy = dockerfile.indexOf(
     'pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge',
   );
-  assert.ok(cloudBuild >= 0 && edgeBuild > cloudBuild && controlBuild > edgeBuild);
+  assert.ok(
+    cloudBuild >= 0 && edgeBuild > cloudBuild && controlBuild > edgeBuild,
+  );
   assert.ok(cloudDeploy > controlBuild && edgeDeploy > cloudDeploy);
 });
 
