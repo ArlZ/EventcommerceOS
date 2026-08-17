@@ -1,27 +1,20 @@
-const { readFileSync } = require("node:fs");
+const { execFileSync } = require("node:child_process");
 const { resolve } = require("node:path");
 
-(async () => {
-  const { format } = await import("prettier");
-  const target = resolve(__dirname, "hostinger-managed-webapp.test.mjs");
-  const source = readFileSync(target, "utf8");
-  const formatted = await format(source, { filepath: target });
+const root = resolve(__dirname, "..");
+const target = "scripts/hostinger-managed-webapp.test.mjs";
 
-  if (source === formatted) {
-    console.log("PRETTIER_DIFF=NONE");
-    return;
-  }
+execFileSync("pnpm", ["exec", "prettier", target, "--write"], {
+  cwd: root,
+  stdio: "inherit",
+});
 
-  const current = source.split("\n");
-  const expected = formatted.split("\n");
-  const max = Math.max(current.length, expected.length);
-  console.log("PRETTIER_DIFF_BEGIN");
-  for (let index = 0; index < max; index += 1) {
-    if (current[index] !== expected[index]) {
-      console.log(`LINE ${index + 1}`);
-      console.log(`CURRENT=${JSON.stringify(current[index] ?? null)}`);
-      console.log(`EXPECTED=${JSON.stringify(expected[index] ?? null)}`);
-    }
-  }
-  console.log("PRETTIER_DIFF_END");
-})();
+const diff = execFileSync(
+  "git",
+  ["diff", "--no-ext-diff", "--", target],
+  { cwd: root, encoding: "utf8" },
+);
+
+console.log("PRETTIER_CLI_DIFF_BEGIN");
+console.log(diff || "PRETTIER_CLI_DIFF=NONE");
+console.log("PRETTIER_CLI_DIFF_END");
