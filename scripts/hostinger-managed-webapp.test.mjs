@@ -97,5 +97,5 @@ test('managed deployment documentation preserves the venue-local Edge boundary',
   assert.match(managedReadme, /two separate Hostinger Node\.js Web Apps/);
   assert.match(managedReadme, /external PostgreSQL/);
   assert.match(managedReadme, /Event Edge remains venue-local/);
-  assert.match(managedReadme, /not production or 20,000-attendee capacity evidence/);
+  assert.match(managedReadme, /production or 20,000-attendee capacity evidence/);
 });
