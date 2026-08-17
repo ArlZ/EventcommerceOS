@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import test from 'node:test';
+import { format } from 'prettier';
 
 const root = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(
@@ -25,6 +26,16 @@ const controlEnv = readFileSync(
   'utf8',
 );
 
+test('prints Prettier expected source when formatting differs', async () => {
+  const source = readFileSync(import.meta.filename, 'utf8');
+  const formatted = await format(source, { filepath: import.meta.filename });
+  if (source !== formatted) {
+    console.log(
+      `PRETTIER_EXPECTED_BASE64=${Buffer.from(formatted, 'utf8').toString('base64')}`,
+    );
+  }
+});
+
 test('managed Hostinger uses pnpm 11', () => {
   assert.equal(packageJson.packageManager, 'pnpm@11.22.0');
   assert.equal(packageJson.engines?.node, '22.x');
@@ -41,10 +52,7 @@ test('pnpm 11 settings live in the workspace file', () => {
   assert.match(workspace, /^  next@15\.5\.22>postcss: 8\.5\.26$/m);
   assert.match(workspace, /^  sharp@0\.34\.5: 0\.35\.0$/m);
   assert.match(workspace, /^allowBuilds:\n  esbuild: true$/m);
-  assert.doesNotMatch(
-    workspace,
-    /^dangerouslyAllowAllBuilds:\s*true$/m,
-  );
+  assert.doesNotMatch(workspace, /^dangerouslyAllowAllBuilds:\s*true$/m);
 });
 
 test('Docker builds before production deploy packaging', () => {
