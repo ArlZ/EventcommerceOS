@@ -41,7 +41,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify Hostinger-style isolated Control Web build
         working-directory: apps/control-web
-        run: pnpm exec next build
+        run: |
+          pnpm exec next build
+          git checkout -- next-env.d.ts tsconfig.json
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Verify applied migration drift fails closed
