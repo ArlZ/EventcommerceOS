@@ -22,13 +22,15 @@ test('managed Hostinger path uses the observed pnpm 11 runtime contract', () => 
   assert.match(dockerfile, /corepack prepare pnpm@11\.22\.0 --activate/);
 });
 
-test('pnpm 11 project overrides live in pnpm-workspace.yaml', () => {
+test('pnpm 11 project settings live in pnpm-workspace.yaml with reviewed build scripts only', () => {
   assert.match(workspace, /^overrides:/m);
   assert.match(workspace, /^  ajv@8\.12\.0: 8\.20\.0$/m);
   assert.match(workspace, /^  body-parser@1\.20\.4: 1\.20\.6$/m);
   assert.match(workspace, /^  multer@2\.0\.2: 2\.2\.0$/m);
   assert.match(workspace, /^  next@15\.5\.22>postcss: 8\.5\.26$/m);
   assert.match(workspace, /^  sharp@0\.34\.5: 0\.35\.0$/m);
+  assert.match(workspace, /^allowBuilds:\n  esbuild: true$/m);
+  assert.doesNotMatch(workspace, /^dangerouslyAllowAllBuilds:\s*true$/m);
 });
 
 test('managed Cloud API build and startup remain workspace-aware and migrate before serving', () => {
