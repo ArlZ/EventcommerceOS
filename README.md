@@ -51,8 +51,8 @@ The first wedge is event bar operations. The underlying domain model remains gen
 
 ## Development prerequisites
 
-- Node.js 22+
-- pnpm 10.12.1
+- Node.js 22.x
+- pnpm 11.22.0
 - Docker with Compose support
 - For Android: JDK 17, Android SDK 35 and Gradle 8.11.1 (or Android Studio with an equivalent supported toolchain)
 
@@ -65,6 +65,15 @@ pnpm install --frozen-lockfile
 ```
 
 `pnpm-lock.yaml` is committed and CI uses frozen-lockfile installation so dependency resolution is reproducible.
+
+## Hostinger deployment paths
+
+Two Hostinger cloud deployment paths are retained:
+
+- `infra/hostinger/managed` — simplified managed Node.js Web Apps for early controlled cloud testing;
+- `infra/hostinger/pilot` — hardened Docker/VPS path for the controlled pilot when deeper infrastructure control is required.
+
+Both preserve the venue-local Event Edge and local-first Android POS boundary.
 
 ## Start the local TypeScript stack
 
