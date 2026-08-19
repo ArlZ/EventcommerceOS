@@ -8,6 +8,7 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
 const hostingerEntry = readFileSync(resolve(root, 'server.js'), 'utf8');
+const hostingerBuild = readFileSync(resolve(root, 'scripts/hostinger-aware-build.mjs'), 'utf8');
 const managedReadme = readFileSync(resolve(root, 'infra/hostinger/managed/README.md'), 'utf8');
 const apiEnv = readFileSync(resolve(root, 'infra/hostinger/managed/cloud-api.env.example'), 'utf8');
 const controlEnv = readFileSync(
@@ -49,8 +50,13 @@ test('Docker builds before production deploy packaging', () => {
   assert.ok(cloudDeploy > controlBuild && edgeDeploy > cloudDeploy);
 });
 
-test('managed build scripts do not depend on pnpm being on PATH', () => {
-  assert.equal(packageJson.scripts?.build, 'corepack pnpm -r --if-present build');
+test('root build supports Hostinger target selection without pnpm PATH coupling', () => {
+  assert.equal(packageJson.scripts?.build, 'node scripts/hostinger-aware-build.mjs');
+  assert.match(hostingerBuild, /process\.env\.HOSTINGER_APP_TARGET \?\? 'all'/);
+  assert.match(hostingerBuild, /'control-web': \['pnpm', '--filter', '@event-commerce\/control-web\.\.\.', 'build'\]/);
+  assert.match(hostingerBuild, /'cloud-api': \['pnpm', '--filter', '@event-commerce\/cloud-api\.\.\.', 'build'\]/);
+  assert.match(hostingerBuild, /all: \['pnpm', '-r', '--if-present', 'build'\]/);
+  assert.match(hostingerBuild, /spawnSync\('corepack', args/);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
@@ -60,6 +66,7 @@ test('managed build scripts do not depend on pnpm being on PATH', () => {
 test('managed Event Control exposes an auto-detected root entry point', () => {
   assert.equal(packageJson.main, 'server.js');
   assert.equal(packageJson.scripts?.start, 'node server.js');
+  assert.match(hostingerEntry, /process\.env\.HOSTINGER_APP_TARGET \?\? 'control-web'/);
   assert.match(hostingerEntry, /apps['"], ['"]control-web/);
   assert.match(hostingerEntry, /process\.env\.PORT \?\? '3000'/);
   assert.match(hostingerEntry, /hostname = '0\.0\.0\.0'/);
@@ -78,6 +85,9 @@ test('managed Cloud API migrates before startup', () => {
   ].join(' && ');
   assert.equal(start, expected);
   assert.ok(start.indexOf('db:migrate') < start.indexOf(' start'));
+  assert.match(hostingerEntry, /if \(target === 'cloud-api'\)/);
+  assert.match(hostingerEntry, /scripts\/migrate\.mjs/);
+  assert.match(hostingerEntry, /dist\/main\.js/);
 });
 
 test('managed Event Control keeps workspace-specific scripts available', () => {
