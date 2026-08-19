@@ -19,7 +19,7 @@ if (!args) {
 
 console.log(`Building Event Commerce OS target: ${target}`);
 const result = spawnSync('corepack', args, {
-  env: process.env,
+  env: { ...process.env, HOSTINGER_APP_TARGET: target },
   stdio: 'inherit',
 });
 
