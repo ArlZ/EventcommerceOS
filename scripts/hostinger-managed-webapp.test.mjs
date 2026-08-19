@@ -5,6 +5,10 @@ import test from 'node:test';
 
 const root = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+const cloudApiPackageJson = JSON.parse(
+  readFileSync(resolve(root, 'apps/cloud-api/package.json'), 'utf8'),
+);
+const supabaseHelper = readFileSync(resolve(root, 'apps/cloud-api/db.js'), 'utf8');
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
 const hostingerEntry = readFileSync(resolve(root, 'server.js'), 'utf8');
@@ -78,6 +82,14 @@ test('managed Cloud API migrates before startup', () => {
   ].join(' && ');
   assert.equal(start, expected);
   assert.ok(start.indexOf('db:migrate') < start.indexOf(' start'));
+});
+
+test('managed Cloud API supports Hostinger Supabase integration', () => {
+  assert.equal(cloudApiPackageJson.dependencies?.['@supabase/supabase-js'], '^2.0.0');
+  assert.equal(cloudApiPackageJson.scripts?.['supabase:check'], 'node db.js');
+  assert.match(supabaseHelper, /process\.env\.SUPABASE_URL/);
+  assert.match(supabaseHelper, /from\('organisations'\)/);
+  assert.doesNotMatch(supabaseHelper, /NEXT_PUBLIC_/);
 });
 
 test('managed Event Control keeps workspace-specific scripts available', () => {
