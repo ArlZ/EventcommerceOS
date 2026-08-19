@@ -41,6 +41,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify Hostinger portable Control Web output
         working-directory: apps/control-web
+        env:
+          HOSTINGER_APP_TARGET: control-web
         run: |
           pnpm run build
           test -f .hostinger-output/.next/BUILD_ID
@@ -51,7 +53,9 @@ jobs:
           cd /tmp/hostinger-nodejs
           node -e "require.resolve('next'); console.log('Hostinger runtime can resolve next')"
           cd "$GITHUB_WORKSPACE"
+          rm -rf apps/control-web/.hostinger-output
           git checkout -- apps/control-web/next-env.d.ts apps/control-web/tsconfig.json
+          pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Verify applied migration drift fails closed
