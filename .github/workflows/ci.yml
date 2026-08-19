@@ -39,6 +39,10 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
+      - name: Print canonical Hostinger packaging format
+        run: |
+          pnpm exec prettier apps/control-web/scripts/stage-hostinger-output.mjs
+          exit 1
       - name: Verify Hostinger portable Control Web output
         working-directory: apps/control-web
         env:
