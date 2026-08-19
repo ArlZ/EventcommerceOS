@@ -10,8 +10,9 @@ import {
 import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-if (process.env.HOSTINGER_APP_TARGET !== 'control-web') {
-  console.log('Skipping Hostinger portable runtime staging outside a Control Web Hostinger build');
+const explicitTarget = process.env.HOSTINGER_APP_TARGET;
+if (explicitTarget && explicitTarget !== 'control-web') {
+  console.log(`Skipping Hostinger portable runtime staging for ${explicitTarget}`);
   process.exit(0);
 }
 
