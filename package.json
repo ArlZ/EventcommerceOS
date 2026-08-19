@@ -9,7 +9,7 @@
     "pnpm": "11.22.0"
   },
   "scripts": {
-    "build": "corepack pnpm -r --if-present build",
+    "build": "node scripts/hostinger-aware-build.mjs",
     "start": "node server.js",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
