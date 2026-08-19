@@ -10,6 +10,11 @@ import {
 import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+if (process.env.HOSTINGER_APP_TARGET !== 'control-web') {
+  console.log('Skipping Hostinger portable runtime staging outside a Control Web Hostinger build');
+  process.exit(0);
+}
+
 const appRoot = process.cwd();
 const repoRoot = resolve(appRoot, '../..');
 const outputRoot = resolve(appRoot, '.hostinger-output');
