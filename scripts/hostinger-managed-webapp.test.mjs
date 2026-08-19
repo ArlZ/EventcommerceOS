@@ -50,7 +50,7 @@ test('Docker builds before production deploy packaging', () => {
 });
 
 test('managed build scripts do not depend on pnpm being on PATH', () => {
-  assert.equal(packageJson.scripts?.build, 'corepack pnpm -r --if-present build');
+  assert.equal(packageJson.scripts?.build, 'node scripts/hostinger-aware-build.mjs');
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
