@@ -11,9 +11,7 @@ import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 if (process.env.HOSTINGER_APP_TARGET !== 'control-web') {
-  console.log(
-    'Skipping Hostinger portable runtime staging outside a Control Web Hostinger build',
-  );
+  console.log('Skipping Hostinger portable runtime staging outside a Control Web Hostinger build');
   process.exit(0);
 }
 
@@ -27,15 +25,7 @@ rmSync(deployRoot, { recursive: true, force: true });
 
 const deploy = spawnSync(
   'corepack',
-  [
-    'pnpm',
-    '--filter',
-    '@event-commerce/control-web',
-    '--prod',
-    'deploy',
-    '--legacy',
-    deployRoot,
-  ],
+  ['pnpm', '--filter', '@event-commerce/control-web', '--prod', 'deploy', '--legacy', deployRoot],
   {
     cwd: repoRoot,
     env: { ...process.env, CI: 'true' },
@@ -92,9 +82,7 @@ function ensureTopLevelPackageLink(packageName) {
   if (pathEntryExists(topLevelPackage)) {
     const entry = lstatSync(topLevelPackage);
     if (!entry.isSymbolicLink()) {
-      throw new Error(
-        `Broken runtime package entry is not a symlink: ${topLevelPackage}`,
-      );
+      throw new Error(`Broken runtime package entry is not a symlink: ${topLevelPackage}`);
     }
     unlinkSync(topLevelPackage);
   }
@@ -106,12 +94,7 @@ function ensureTopLevelPackageLink(packageName) {
     const prefix = `${packageName}@`;
     for (const entry of readdirSync(virtualStore)) {
       if (!entry.startsWith(prefix)) continue;
-      const candidate = resolve(
-        virtualStore,
-        entry,
-        'node_modules',
-        packageName,
-      );
+      const candidate = resolve(virtualStore, entry, 'node_modules', packageName);
       if (existsSync(candidate)) {
         packageSource = candidate;
         break;
@@ -125,9 +108,7 @@ function ensureTopLevelPackageLink(packageName) {
   }
 
   if (!packageSource) {
-    throw new Error(
-      `Portable deployment did not contain runtime package ${packageName}`,
-    );
+    throw new Error(`Portable deployment did not contain runtime package ${packageName}`);
   }
 
   symlinkSync(relative(nodeModulesRoot, packageSource), topLevelPackage, 'dir');
