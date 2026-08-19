@@ -8,7 +8,10 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
 const hostingerEntry = readFileSync(resolve(root, 'server.js'), 'utf8');
-const hostingerBuild = readFileSync(resolve(root, 'scripts/hostinger-aware-build.mjs'), 'utf8');
+const hostingerBuild = readFileSync(
+  resolve(root, 'scripts/hostinger-aware-build.mjs'),
+  'utf8',
+);
 const managedReadme = readFileSync(resolve(root, 'infra/hostinger/managed/README.md'), 'utf8');
 const apiEnv = readFileSync(resolve(root, 'infra/hostinger/managed/cloud-api.env.example'), 'utf8');
 const controlEnv = readFileSync(
@@ -53,8 +56,14 @@ test('Docker builds before production deploy packaging', () => {
 test('root build supports Hostinger target selection without pnpm PATH coupling', () => {
   assert.equal(packageJson.scripts?.build, 'node scripts/hostinger-aware-build.mjs');
   assert.match(hostingerBuild, /process\.env\.HOSTINGER_APP_TARGET \?\? 'all'/);
-  assert.match(hostingerBuild, /'control-web': \['pnpm', '--filter', '@event-commerce\/control-web\.\.\.', 'build'\]/);
-  assert.match(hostingerBuild, /'cloud-api': \['pnpm', '--filter', '@event-commerce\/cloud-api\.\.\.', 'build'\]/);
+  assert.match(
+    hostingerBuild,
+    /'control-web': \['pnpm', '--filter', '@event-commerce\/control-web\.\.\.', 'build'\]/,
+  );
+  assert.match(
+    hostingerBuild,
+    /'cloud-api': \['pnpm', '--filter', '@event-commerce\/cloud-api\.\.\.', 'build'\]/,
+  );
   assert.match(hostingerBuild, /all: \['pnpm', '-r', '--if-present', 'build'\]/);
   assert.match(hostingerBuild, /spawnSync\('corepack', args/);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
