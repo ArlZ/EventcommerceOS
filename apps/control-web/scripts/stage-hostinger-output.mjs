@@ -1,4 +1,12 @@
-import { cpSync, existsSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+} from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -35,7 +43,11 @@ if (deploy.status !== 0) {
   process.exit(deploy.status ?? 1);
 }
 
-cpSync(deployRoot, outputRoot, { recursive: true });
+// pnpm deploy creates relative links into node_modules/.pnpm. Preserve those
+// link targets verbatim when moving the portable tree, otherwise Node's copy
+// helper can rewrite them against the temporary deploy directory that is
+// removed immediately afterwards.
+cpSync(deployRoot, outputRoot, { recursive: true, verbatimSymlinks: true });
 rmSync(deployRoot, { recursive: true, force: true });
 
 for (const packageName of ['next', 'react', 'react-dom']) {
@@ -48,13 +60,13 @@ if (!existsSync(nextSource)) {
   throw new Error(`Next build output was not generated at ${nextSource}`);
 }
 rmSync(nextDestination, { recursive: true, force: true });
-cpSync(nextSource, nextDestination, { recursive: true });
+cpSync(nextSource, nextDestination, { recursive: true, verbatimSymlinks: true });
 
 const publicSource = resolve(appRoot, 'public');
 if (existsSync(publicSource)) {
   const publicDestination = resolve(outputRoot, 'public');
   rmSync(publicDestination, { recursive: true, force: true });
-  cpSync(publicSource, publicDestination, { recursive: true });
+  cpSync(publicSource, publicDestination, { recursive: true, verbatimSymlinks: true });
 }
 
 console.log(`Staged portable Hostinger Event Control runtime at ${outputRoot}`);
@@ -64,11 +76,18 @@ function ensureTopLevelPackageLink(packageName) {
   const topLevelPackage = resolve(nodeModulesRoot, packageName);
   if (existsSync(topLevelPackage)) return;
 
-  const virtualStore = resolve(nodeModulesRoot, '.pnpm');
-  const hoistedPackage = resolve(virtualStore, 'node_modules', packageName);
-  let packageSource = existsSync(hoistedPackage) ? hoistedPackage : undefined;
+  if (pathEntryExists(topLevelPackage)) {
+    const entry = lstatSync(topLevelPackage);
+    if (!entry.isSymbolicLink()) {
+      throw new Error(`Broken runtime package entry is not a symlink: ${topLevelPackage}`);
+    }
+    unlinkSync(topLevelPackage);
+  }
 
-  if (!packageSource && existsSync(virtualStore)) {
+  const virtualStore = resolve(nodeModulesRoot, '.pnpm');
+  let packageSource;
+
+  if (existsSync(virtualStore)) {
     const prefix = `${packageName}@`;
     for (const entry of readdirSync(virtualStore)) {
       if (!entry.startsWith(prefix)) continue;
@@ -81,8 +100,23 @@ function ensureTopLevelPackageLink(packageName) {
   }
 
   if (!packageSource) {
+    const hoistedPackage = resolve(virtualStore, 'node_modules', packageName);
+    if (existsSync(hoistedPackage)) packageSource = hoistedPackage;
+  }
+
+  if (!packageSource) {
     throw new Error(`Portable deployment did not contain runtime package ${packageName}`);
   }
 
   symlinkSync(relative(nodeModulesRoot, packageSource), topLevelPackage, 'dir');
+}
+
+function pathEntryExists(target) {
+  try {
+    lstatSync(target);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
 }
