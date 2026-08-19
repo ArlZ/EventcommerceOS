@@ -39,15 +39,15 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
-      - name: Verify Hostinger standalone Control Web output
+      - name: Verify Hostinger portable Control Web output
         working-directory: apps/control-web
         run: |
           pnpm run build
-          test -f .next/standalone/apps/control-web/server.js
-          test -d .next/standalone/apps/control-web/.next/static
+          test -f .hostinger-output/.next/BUILD_ID
+          test -d .hostinger-output/node_modules
           rm -rf /tmp/hostinger-nodejs
           mkdir -p /tmp/hostinger-nodejs
-          cp -R .next/standalone/. /tmp/hostinger-nodejs/
+          cp -R .hostinger-output/. /tmp/hostinger-nodejs/
           cd /tmp/hostinger-nodejs
           node -e "require.resolve('next'); console.log('Hostinger runtime can resolve next')"
           cd "$GITHUB_WORKSPACE"
