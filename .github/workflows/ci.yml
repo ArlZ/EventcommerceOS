@@ -39,10 +39,8 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
-      - name: Verify Hostinger portable Control Web output
+      - name: Verify Hostinger portable Control Web output without build target env
         working-directory: apps/control-web
-        env:
-          HOSTINGER_APP_TARGET: control-web
         run: |
           pnpm run build
           test -f .hostinger-output/.next/BUILD_ID
