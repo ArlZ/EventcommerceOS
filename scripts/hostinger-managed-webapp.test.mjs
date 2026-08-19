@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
+const hostingerEntry = readFileSync(resolve(root, 'server.js'), 'utf8');
 const managedReadme = readFileSync(resolve(root, 'infra/hostinger/managed/README.md'), 'utf8');
 const apiEnv = readFileSync(resolve(root, 'infra/hostinger/managed/cloud-api.env.example'), 'utf8');
 const controlEnv = readFileSync(
@@ -50,11 +51,19 @@ test('Docker builds before production deploy packaging', () => {
 
 test('managed build scripts do not depend on pnpm being on PATH', () => {
   assert.equal(packageJson.scripts?.build, 'corepack pnpm -r --if-present build');
-  assert.match(packageJson.scripts?.start ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:start'] ?? '', /^corepack pnpm /);
+});
+
+test('managed Event Control exposes an auto-detected root entry point', () => {
+  assert.equal(packageJson.main, 'server.js');
+  assert.equal(packageJson.scripts?.start, 'node server.js');
+  assert.match(hostingerEntry, /apps['"], ['"]control-web/);
+  assert.match(hostingerEntry, /process\.env\.PORT \?\? '3000'/);
+  assert.match(hostingerEntry, /hostname = '0\.0\.0\.0'/);
+  assert.match(hostingerEntry, /requireFromControlWeb\('next'\)/);
 });
 
 test('managed Cloud API migrates before startup', () => {
@@ -71,11 +80,7 @@ test('managed Cloud API migrates before startup', () => {
   assert.ok(start.indexOf('db:migrate') < start.indexOf(' start'));
 });
 
-test('managed Event Control uses workspace scripts', () => {
-  assert.equal(
-    packageJson.scripts?.start,
-    'corepack pnpm --filter @event-commerce/control-web start',
-  );
+test('managed Event Control keeps workspace-specific scripts available', () => {
   assert.equal(
     packageJson.scripts?.['hostinger:control-web:build'],
     'corepack pnpm --filter @event-commerce/control-web... build',
