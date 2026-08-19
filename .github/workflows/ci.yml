@@ -39,11 +39,14 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
-      - name: Verify Hostinger-style isolated Control Web build
-        working-directory: apps/control-web
+      - name: Verify Hostinger packaged Control Web build
+        env:
+          HOSTINGER_APP_TARGET: control-web
         run: |
-          pnpm exec next build
-          git checkout -- next-env.d.ts tsconfig.json
+          pnpm build
+          test -f apps/control-web/.next/standalone/apps/control-web/server.js
+          test -d apps/control-web/.next/standalone/apps/control-web/.next/static
+          git checkout -- apps/control-web/next-env.d.ts apps/control-web/tsconfig.json
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Verify applied migration drift fails closed
