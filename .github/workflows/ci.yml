@@ -39,14 +39,23 @@ jobs:
       - name: Verify immutable workflow dependencies
         run: node scripts/check-workflow-pins.mjs
       - run: pnpm install --frozen-lockfile
-      - name: Verify Hostinger packaged Control Web build
+      - name: Verify Hostinger portable Control Web output
+        working-directory: apps/control-web
         env:
           HOSTINGER_APP_TARGET: control-web
         run: |
-          pnpm build
-          test -f apps/control-web/.next/standalone/apps/control-web/server.js
-          test -d apps/control-web/.next/standalone/apps/control-web/.next/static
+          pnpm run build
+          test -f .hostinger-output/.next/BUILD_ID
+          test -d .hostinger-output/node_modules
+          rm -rf /tmp/hostinger-nodejs
+          mkdir -p /tmp/hostinger-nodejs
+          cp -R .hostinger-output/. /tmp/hostinger-nodejs/
+          cd /tmp/hostinger-nodejs
+          node -e "require.resolve('next'); console.log('Hostinger runtime can resolve next')"
+          cd "$GITHUB_WORKSPACE"
+          rm -rf apps/control-web/.hostinger-output
           git checkout -- apps/control-web/next-env.d.ts apps/control-web/tsconfig.json
+          pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
       - run: pnpm --filter @event-commerce/event-edge db:migrate
       - name: Verify applied migration drift fails closed
