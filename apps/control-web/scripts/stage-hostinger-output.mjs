@@ -54,10 +54,7 @@ if (deploy.status !== 0) {
 // link targets verbatim when moving the portable tree, otherwise Node's copy
 // helper can rewrite them against the temporary deploy directory that is
 // removed immediately afterwards.
-cpSync(deployRoot, outputRoot, {
-  recursive: true,
-  verbatimSymlinks: true,
-});
+cpSync(deployRoot, outputRoot, { recursive: true, verbatimSymlinks: true });
 rmSync(deployRoot, { recursive: true, force: true });
 
 for (const packageName of ['next', 'react', 'react-dom']) {
@@ -109,7 +106,12 @@ function ensureTopLevelPackageLink(packageName) {
     const prefix = `${packageName}@`;
     for (const entry of readdirSync(virtualStore)) {
       if (!entry.startsWith(prefix)) continue;
-      const candidate = resolve(virtualStore, entry, 'node_modules', packageName);
+      const candidate = resolve(
+        virtualStore,
+        entry,
+        'node_modules',
+        packageName,
+      );
       if (existsSync(candidate)) {
         packageSource = candidate;
         break;
