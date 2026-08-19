@@ -11,7 +11,9 @@ import { relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 if (process.env.HOSTINGER_APP_TARGET !== 'control-web') {
-  console.log('Skipping Hostinger portable runtime staging outside a Control Web Hostinger build');
+  console.log(
+    'Skipping Hostinger portable runtime staging outside a Control Web Hostinger build',
+  );
   process.exit(0);
 }
 
@@ -52,7 +54,10 @@ if (deploy.status !== 0) {
 // link targets verbatim when moving the portable tree, otherwise Node's copy
 // helper can rewrite them against the temporary deploy directory that is
 // removed immediately afterwards.
-cpSync(deployRoot, outputRoot, { recursive: true, verbatimSymlinks: true });
+cpSync(deployRoot, outputRoot, {
+  recursive: true,
+  verbatimSymlinks: true,
+});
 rmSync(deployRoot, { recursive: true, force: true });
 
 for (const packageName of ['next', 'react', 'react-dom']) {
@@ -65,13 +70,19 @@ if (!existsSync(nextSource)) {
   throw new Error(`Next build output was not generated at ${nextSource}`);
 }
 rmSync(nextDestination, { recursive: true, force: true });
-cpSync(nextSource, nextDestination, { recursive: true, verbatimSymlinks: true });
+cpSync(nextSource, nextDestination, {
+  recursive: true,
+  verbatimSymlinks: true,
+});
 
 const publicSource = resolve(appRoot, 'public');
 if (existsSync(publicSource)) {
   const publicDestination = resolve(outputRoot, 'public');
   rmSync(publicDestination, { recursive: true, force: true });
-  cpSync(publicSource, publicDestination, { recursive: true, verbatimSymlinks: true });
+  cpSync(publicSource, publicDestination, {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
 }
 
 console.log(`Staged portable Hostinger Event Control runtime at ${outputRoot}`);
@@ -84,7 +95,9 @@ function ensureTopLevelPackageLink(packageName) {
   if (pathEntryExists(topLevelPackage)) {
     const entry = lstatSync(topLevelPackage);
     if (!entry.isSymbolicLink()) {
-      throw new Error(`Broken runtime package entry is not a symlink: ${topLevelPackage}`);
+      throw new Error(
+        `Broken runtime package entry is not a symlink: ${topLevelPackage}`,
+      );
     }
     unlinkSync(topLevelPackage);
   }
@@ -110,7 +123,9 @@ function ensureTopLevelPackageLink(packageName) {
   }
 
   if (!packageSource) {
-    throw new Error(`Portable deployment did not contain runtime package ${packageName}`);
+    throw new Error(
+      `Portable deployment did not contain runtime package ${packageName}`,
+    );
   }
 
   symlinkSync(relative(nodeModulesRoot, packageSource), topLevelPackage, 'dir');
