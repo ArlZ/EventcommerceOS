@@ -21,7 +21,7 @@ RUN pnpm install --frozen-lockfile
 # workspace builds can make a non-interactive Docker build attempt a modules purge.
 RUN pnpm --filter @event-commerce/cloud-api... build \
   && pnpm --filter @event-commerce/event-edge... build \
-  && pnpm --filter @event-commerce/control-web build
+  && HOSTINGER_APP_TARGET=container pnpm --filter @event-commerce/control-web build
 RUN pnpm --filter @event-commerce/cloud-api --prod deploy --legacy /out/cloud-api
 RUN pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge
 
