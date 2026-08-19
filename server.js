@@ -1,3 +1,4 @@
+const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { createRequire } = require('node:module');
@@ -15,6 +16,30 @@ if (target === 'control-web') {
 }
 
 function startControlWeb() {
+  const standaloneCandidates = [
+    path.join(__dirname, 'standalone', 'apps', 'control-web', 'server.js'),
+    path.join(__dirname, 'apps', 'control-web', 'server.js'),
+    path.join(
+      __dirname,
+      'apps',
+      'control-web',
+      '.next',
+      'standalone',
+      'apps',
+      'control-web',
+      'server.js',
+    ),
+  ];
+  const standaloneServer = standaloneCandidates.find((candidate) => fs.existsSync(candidate));
+
+  if (standaloneServer) {
+    process.env.PORT ??= '3000';
+    process.env.HOSTNAME ??= '0.0.0.0';
+    console.log(`Starting packaged Event Control runtime from ${standaloneServer}`);
+    require(standaloneServer);
+    return;
+  }
+
   const appDir = path.join(__dirname, 'apps', 'control-web');
   const requireFromControlWeb = createRequire(path.join(appDir, 'package.json'));
   const next = requireFromControlWeb('next');
