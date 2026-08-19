@@ -28,6 +28,11 @@
     "hostinger:control-web:start": "corepack pnpm --filter @event-commerce/control-web start",
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm format:check && pnpm arch:check"
   },
+  "dependencies": {
+    "next": "15.5.22",
+    "react": "19.1.7",
+    "react-dom": "19.1.7"
+  },
   "devDependencies": {
     "@eslint/js": "9.28.0",
     "@types/node": "22.15.29",
