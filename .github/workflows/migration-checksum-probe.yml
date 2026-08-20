@@ -1,8 +1,8 @@
 name: Migration checksum probe
 
 on:
-  push:
-    branches: [agent/migration-checksum-probe]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
