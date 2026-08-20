@@ -8,6 +8,11 @@ const packageJson = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8
 const cloudApiPackageJson = JSON.parse(
   readFileSync(resolve(root, 'apps/cloud-api/package.json'), 'utf8'),
 );
+const controlWebPackageJson = JSON.parse(
+  readFileSync(resolve(root, 'apps/control-web/package.json'), 'utf8'),
+);
+const controlWebConfig = readFileSync(resolve(root, 'apps/control-web/next.config.ts'), 'utf8');
+const controlWebHtaccess = readFileSync(resolve(root, 'apps/control-web/public/.htaccess'), 'utf8');
 const supabaseHelper = readFileSync(resolve(root, 'apps/cloud-api/db.js'), 'utf8');
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
@@ -40,6 +45,10 @@ test('pnpm 11 settings live in the workspace file', () => {
 
 test('Docker builds before production deploy packaging', () => {
   assert.match(dockerfile, /^ENV CI=true$/m);
+  assert.match(
+    dockerfile,
+    /FROM pnpm-base AS build\nARG NEXT_PUBLIC_CLOUD_API_URL\nARG RELEASE_COMMIT\nENV CI=true\nENV NEXT_PUBLIC_CLOUD_API_URL=\$NEXT_PUBLIC_CLOUD_API_URL\nENV RELEASE_COMMIT=\$RELEASE_COMMIT/,
+  );
   const cloudBuild = dockerfile.indexOf('pnpm --filter @event-commerce/cloud-api... build');
   const edgeBuild = dockerfile.indexOf('pnpm --filter @event-commerce/event-edge... build');
   const controlBuild = dockerfile.indexOf('pnpm --filter @event-commerce/control-web build');
@@ -58,16 +67,24 @@ test('managed build scripts do not depend on pnpm being on PATH', () => {
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
-  assert.match(packageJson.scripts?.['hostinger:control-web:start'] ?? '', /^corepack pnpm /);
 });
 
-test('managed Event Control exposes an auto-detected root entry point', () => {
+test('managed Event Control exports static files instead of requiring a Next runtime', () => {
+  assert.equal(controlWebPackageJson.scripts?.build, 'next build');
+  assert.match(controlWebConfig, /output: 'export'/);
+  assert.match(controlWebConfig, /output: 'standalone'/);
+  assert.match(controlWebConfig, /HOSTINGER_APP_TARGET === undefined/);
+  assert.match(controlWebConfig, /trailingSlash: true/);
+  assert.match(controlWebHtaccess, /Header always set X-Frame-Options "DENY"/);
+  assert.match(managedReadme, /Output directory: out/);
+  assert.match(managedReadme, /no Next\.js server process/);
+});
+
+test('root entry remains available for managed server-side targets', () => {
   assert.equal(packageJson.main, 'server.js');
   assert.equal(packageJson.scripts?.start, 'node server.js');
-  assert.match(hostingerEntry, /apps['"], ['"]control-web/);
   assert.match(hostingerEntry, /process\.env\.PORT \?\? '3000'/);
   assert.match(hostingerEntry, /hostname = '0\.0\.0\.0'/);
-  assert.match(hostingerEntry, /requireFromControlWeb\('next'\)/);
 });
 
 test('managed Cloud API migrates before startup', () => {
@@ -92,17 +109,6 @@ test('managed Cloud API supports Hostinger Supabase integration', () => {
   assert.doesNotMatch(supabaseHelper, /NEXT_PUBLIC_/);
 });
 
-test('managed Event Control keeps workspace-specific scripts available', () => {
-  assert.equal(
-    packageJson.scripts?.['hostinger:control-web:build'],
-    'corepack pnpm --filter @event-commerce/control-web... build',
-  );
-  assert.equal(
-    packageJson.scripts?.['hostinger:control-web:start'],
-    'corepack pnpm --filter @event-commerce/control-web start',
-  );
-});
-
 test('managed API example stays PostgreSQL and sandbox only', () => {
   assert.match(apiEnv, /^NODE_ENV=production$/m);
   assert.match(apiEnv, /^PORT=3000$/m);
@@ -117,13 +123,12 @@ test('managed API example stays PostgreSQL and sandbox only', () => {
 });
 
 test('managed Event Control uses the public API origin', () => {
-  assert.match(controlEnv, /^PORT=3000$/m);
   assert.match(controlEnv, /^NEXT_PUBLIC_CLOUD_API_URL=https:\/\/api\.pilot\.example\.com$/m);
 });
 
 test('managed docs preserve the venue-local Edge boundary', () => {
-  assert.match(managedReadme, /two separate Hostinger Node\.js Web Apps/);
+  assert.match(managedReadme, /Event Control Web \(static Next\.js export\)/);
   assert.match(managedReadme, /external PostgreSQL/);
   assert.match(managedReadme, /Event Edge remains venue-local/);
-  assert.match(managedReadme, /production or 20,000-attendee capacity evidence/);
+  assert.match(managedReadme, /20,000-attendee capacity evidence/);
 });

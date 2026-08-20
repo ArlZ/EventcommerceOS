@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -33,37 +33,24 @@ if (result.status !== 0) {
 }
 
 if (target === 'control-web') {
-  stageControlWebStandaloneRuntime();
+  verifyControlWebStaticExport();
 }
 
 process.exit(0);
 
-function stageControlWebStandaloneRuntime() {
-  const appRoot = resolve('apps/control-web');
-  const standaloneAppRoot = resolve(appRoot, '.next/standalone/apps/control-web');
-  const standaloneServer = resolve(standaloneAppRoot, 'server.js');
-  const staticSource = resolve(appRoot, '.next/static');
-  const staticDestination = resolve(standaloneAppRoot, '.next/static');
+function verifyControlWebStaticExport() {
+  const outputRoot = resolve('apps/control-web/out');
+  const index = resolve(outputRoot, 'index.html');
+  const htaccess = resolve(outputRoot, '.htaccess');
 
-  if (!existsSync(standaloneServer)) {
-    console.error(`Next standalone server was not generated at ${standaloneServer}`);
+  if (!existsSync(index)) {
+    console.error(`Managed Control Web static export was not generated at ${index}`);
     process.exit(1);
   }
-  if (!existsSync(staticSource)) {
-    console.error(`Next static assets were not generated at ${staticSource}`);
+  if (!existsSync(htaccess)) {
+    console.error(`Managed Control Web security rules were not exported at ${htaccess}`);
     process.exit(1);
   }
 
-  rmSync(staticDestination, { recursive: true, force: true });
-  mkdirSync(resolve(standaloneAppRoot, '.next'), { recursive: true });
-  cpSync(staticSource, staticDestination, { recursive: true });
-
-  const publicSource = resolve(appRoot, 'public');
-  if (existsSync(publicSource)) {
-    const publicDestination = resolve(standaloneAppRoot, 'public');
-    rmSync(publicDestination, { recursive: true, force: true });
-    cpSync(publicSource, publicDestination, { recursive: true });
-  }
-
-  console.log(`Staged self-contained Event Control runtime at ${standaloneAppRoot}`);
+  console.log(`Verified managed Event Control static export at ${outputRoot}`);
 }

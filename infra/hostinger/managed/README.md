@@ -1,15 +1,15 @@
-# Hostinger managed Web App pilot path
+# Hostinger managed pilot path
 
-This directory documents the simplified Hostinger managed Node.js deployment path for early Event Commerce OS cloud testing.
+This directory documents the simplified Hostinger managed deployment path for early Event Commerce OS cloud testing.
 
 It is an alternative to `infra/hostinger/pilot`, which remains the hardened Docker/VPS path. The managed path intentionally trades infrastructure control for lower setup overhead. It does not change the offline-first architecture: Android POS remains local-first and Event Edge remains venue-local.
 
 ## Topology
 
-Deploy two separate Hostinger Node.js Web Apps from the same GitHub repository:
+Use two separately deployed cloud surfaces from the same GitHub repository:
 
 ```text
-event.nairobuy.com      -> Event Control Web (Next.js)
+event.nairobuy.com      -> Event Control Web (static Next.js export)
 api.event.nairobuy.com  -> Cloud API (NestJS) -> external PostgreSQL
 
 Venue LAN
@@ -18,77 +18,59 @@ Android POS -> Event Edge -> Cloud API when WAN is available
 
 Use an external PostgreSQL provider such as Supabase. Do not convert the application to Hostinger MySQL; the Event Commerce OS persistence and migration stack is PostgreSQL-native.
 
-## Repository/runtime contract
+## Event Control Web on Hostinger
 
-The repository root remains the deployment root so pnpm can resolve all workspace packages.
+Event Control does not require server-side rendering. Operational data is fetched from the separate Cloud API, so the managed Hostinger build exports the Next.js UI as static files and avoids a persistent Node.js runtime.
 
-Required runtime:
+Hostinger's managed Next.js runtime was observed generating a `nodejs/server.js` wrapper that attempted `require('next')` after deployment while omitting the required runtime dependency tree. The static export deliberately removes that failure mode.
 
-- Node.js 22.x;
-- pnpm 11.22.0;
-- repository root as the application root;
-- `pnpm install` performed by Hostinger;
-- the root `package.json` exposes `server.js` as the entry point;
-- the root build script builds the workspace through Corepack so it does not depend on Hostinger preserving pnpm on the child-shell PATH.
-
-Hostinger may not expose free-form Build command and Start command fields. The managed deployment therefore supports Hostinger's auto-detected flow. When Hostinger classifies the monorepo as `Other`, use `server.js` as the Entry file if the field is shown.
-
-pnpm configuration lives in `pnpm-workspace.yaml`. Do not move overrides back into the `pnpm` field of `package.json` because pnpm 11 no longer reads project settings from there.
-
-## App 1: Event Control Web
-
-Create a Hostinger Node.js Web App from `ArlZ/EventcommerceOS`.
-
-Recommended settings where Hostinger exposes them:
+Recommended hPanel settings:
 
 ```text
 Branch: main
 Node.js: 22.x
 Package manager: pnpm
-Framework: Other if Hostinger does not correctly detect the monorepo target
-Root directory: repository root
-Entry file: server.js (if requested)
-Port: 3000
+Build command: pnpm run build
+Output directory: out
 ```
 
 Environment variables:
 
 ```text
-HOSTINGER_APP_TARGET=control-web
 NODE_ENV=production
-PORT=3000
 NEXT_PUBLIC_CLOUD_API_URL=https://api.event.nairobuy.com
 ```
 
-`HOSTINGER_APP_TARGET` is optional for Event Control because `control-web` is the safe default, but set it explicitly in hPanel to make the deployment intent obvious.
+`HOSTINGER_APP_TARGET` is not required for the managed Event Control build. When no explicit target is available during the build, `apps/control-web/next.config.ts` selects `output: 'export'`. Explicit non-managed targets such as Docker use the existing standalone Next.js server build.
 
-## App 2: Cloud API
+The static export carries a `.htaccess` file with the baseline Control Web security headers. Hostinger supports `.htaccess` rules on web and cloud hosting.
 
-Create a second Hostinger Node.js Web App from the same repository.
+The expected managed output is:
 
-Use the same Node.js, package-manager, root-directory and entry-file settings, but set:
+```text
+apps/control-web/out/
+```
+
+There is intentionally no Next.js server process for `event.nairobuy.com` in this mode.
+
+## Cloud API on Hostinger
+
+Create a separate Hostinger Web App for the API. The Cloud API remains a server-side NestJS service and still requires PostgreSQL.
+
+Set:
 
 ```text
 HOSTINGER_APP_TARGET=cloud-api
+NODE_ENV=production
+PORT=3000
+CONTROL_WEB_ORIGIN=https://event.nairobuy.com
 ```
 
-The root `server.js` adapter runs the audited Cloud API migration runner before starting the built NestJS service. A migration failure prevents the API process from starting.
+Import the remaining variables from `cloud-api.env.example`, replacing all placeholders in hPanel. At minimum the API requires `DATABASE_URL`, validated proxy settings, and Safaricom sandbox values when M-PESA testing begins.
 
-Import the remaining variables from `cloud-api.env.example`, replacing all placeholders in hPanel. At minimum the API requires:
+The Cloud API includes compatibility with Hostinger's Supabase integration, but the transactional application path remains PostgreSQL-native. Keep database credentials in Hostinger/provider secret stores and never commit them.
 
-- `DATABASE_URL`;
-- `CONTROL_WEB_ORIGIN=https://event.nairobuy.com`;
-- `ABUSE_DEPLOYMENT_MODE=single_instance_pilot`;
-- `TRUST_PROXY_HOPS` validated against Hostinger's actual proxy behavior;
-- Safaricom sandbox values when M-PESA testing begins.
-
-Keep `MPESA_BASE_URL=https://sandbox.safaricom.co.ke` for the controlled pilot. Do not load live-money credentials merely because the managed deployment is reachable from the internet.
-
-### PostgreSQL
-
-Use an external PostgreSQL database. Supabase is the preferred low-ops starting point because Hostinger supports connecting Node.js apps to Supabase, but the application itself only needs a valid PostgreSQL `DATABASE_URL`.
-
-Use a TLS-required connection string suitable for a persistent Node.js service. Do not commit it to GitHub. Keep database credentials only in Hostinger environment variables and the database provider's secret store.
+Keep `MPESA_BASE_URL=https://sandbox.safaricom.co.ke` for the controlled pilot. Do not load live-money credentials merely because the managed deployment is internet-accessible.
 
 ## DNS and domains
 
@@ -105,30 +87,23 @@ Then set:
 - API `MPESA_CALLBACK_URL=https://api.event.nairobuy.com/payments/providers/mpesa/callback`;
 - Control Web `NEXT_PUBLIC_CLOUD_API_URL=https://api.event.nairobuy.com`.
 
-Redeploy after any environment-variable change that affects a build-time value.
+Redeploy Event Control after changing `NEXT_PUBLIC_CLOUD_API_URL` because it is compiled into the static frontend.
 
 ## Deployment order
 
-1. Deploy Event Control first and confirm the root page loads through `server.js`.
+1. Deploy Event Control with output directory `out` and confirm the root page loads without a Node runtime.
 2. Provision the external PostgreSQL database.
-3. Create the Cloud API managed Web App from the same repository.
-4. Add API environment variables, including `HOSTINGER_APP_TARGET=cloud-api` and `DATABASE_URL`.
+3. Create the Cloud API managed Web App.
+4. Add API environment variables, including `DATABASE_URL`.
 5. Deploy and verify `https://api.event.nairobuy.com/health` returns healthy.
-6. Redeploy Event Control with `NEXT_PUBLIC_CLOUD_API_URL=https://api.event.nairobuy.com`.
+6. Redeploy Event Control with the final public API origin.
 7. Verify browser requests from Event Control reach the Cloud API without CORS errors.
 8. Create an operator and exercise login, configuration, inventory and dashboard flows.
 9. Add M-PESA sandbox credentials only when the provider test matrix is ready.
 
 ## Release and safety limitations
 
-This managed path is intended to get the cloud surfaces online quickly for development and controlled pilot validation. Compared with the Docker/VPS path it does not currently prove:
-
-- exact OCI image/revision identity;
-- private container networking;
-- application container hardening controls;
-- database-level backup/restore scripts running on the same host;
-- controlled reverse-proxy configuration;
-- production load capacity.
+This managed path is intended to get the cloud surfaces online quickly for development and controlled pilot validation. It does not prove production load capacity, exact OCI image identity, private container networking, application-container hardening, controlled reverse-proxy configuration, or venue-scale recovery behavior.
 
 Those are not reasons to block early functional testing. They are reasons not to treat a successful managed deployment as production or 20,000-attendee capacity evidence.
 

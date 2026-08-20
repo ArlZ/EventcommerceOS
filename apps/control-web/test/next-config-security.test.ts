@@ -1,22 +1,28 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import nextConfig, { controlWebSecurityHeaders } from '../next.config';
+import nextConfig, { controlWebSecurityHeaders, managedStaticExport } from '../next.config';
 
 function headerValue(key: string): string | undefined {
   return controlWebSecurityHeaders.find((header) => header.key === key)?.value;
 }
 
-describe('Control Web response security configuration', () => {
-  it('disables framework disclosure and applies the baseline headers to every route', async () => {
-    expect(nextConfig.poweredByHeader).toBe(false);
-    expect(nextConfig.headers).toBeTypeOf('function');
+const htaccess = readFileSync(resolve(import.meta.dirname, '../public/.htaccess'), 'utf8');
 
-    const rules = await nextConfig.headers?.();
-    expect(rules).toEqual([
-      {
-        source: '/:path*',
-        headers: [...controlWebSecurityHeaders],
-      },
-    ]);
+describe('Control Web response security configuration', () => {
+  it('uses static export for the managed Hostinger build shape', () => {
+    expect(managedStaticExport).toBe(true);
+    expect(nextConfig.output).toBe('export');
+    expect(nextConfig.trailingSlash).toBe(true);
+    expect(nextConfig.images).toEqual({ unoptimized: true });
+    expect(nextConfig.poweredByHeader).toBe(false);
+  });
+
+  it('preserves baseline response headers in Hostinger .htaccess', () => {
+    for (const header of controlWebSecurityHeaders) {
+      expect(htaccess).toContain(`Header always set ${header.key}`);
+      expect(htaccess).toContain(header.value);
+    }
   });
 
   it('sets non-execution-breaking browser security controls', () => {
