@@ -24,15 +24,21 @@ Event Control does not require server-side rendering. Operational data is fetche
 
 Hostinger's managed Next.js runtime was observed generating a `nodejs/server.js` wrapper that attempted `require('next')` after deployment while omitting the required runtime dependency tree. The static export deliberately removes that failure mode.
 
-Recommended hPanel settings:
+Confirmed hPanel settings:
 
 ```text
 Branch: main
+Root directory: apps/control-web
+Framework preset: React
 Node.js: 22.x
 Package manager: pnpm
 Build command: pnpm run build
 Output directory: out
 ```
+
+The `React` framework preset is intentional even though the source application uses Next.js. In Hostinger this selects the static frontend hosting path. Do **not** switch this deployment back to the `Next.js` framework preset: with `Next.js` plus `.next`, Hostinger was confirmed to create `hbuilds/.../nodejs/server.js` and the deployment returned HTTP 503 with `Cannot find module 'next'`.
+
+With the configuration above, Hostinger copies the static export into `public_html`: `index.html`, `_next`, `.htaccess`, `404.html`, and the exported route directories are served directly. The active hbuild has no `nodejs` directory or generated `server.js`.
 
 Environment variables:
 
