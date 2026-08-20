@@ -1,10 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import nextConfig, {
-  controlWebSecurityHeaders,
-  managedStaticExport,
-} from '../next.config';
+import nextConfig, { controlWebSecurityHeaders, managedStaticExport } from '../next.config';
 
 function headerValue(key: string): string | undefined {
   return controlWebSecurityHeaders.find((header) => header.key === key)?.value;

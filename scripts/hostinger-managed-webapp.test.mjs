@@ -12,10 +12,7 @@ const controlWebPackageJson = JSON.parse(
   readFileSync(resolve(root, 'apps/control-web/package.json'), 'utf8'),
 );
 const controlWebConfig = readFileSync(resolve(root, 'apps/control-web/next.config.ts'), 'utf8');
-const controlWebHtaccess = readFileSync(
-  resolve(root, 'apps/control-web/public/.htaccess'),
-  'utf8',
-);
+const controlWebHtaccess = readFileSync(resolve(root, 'apps/control-web/public/.htaccess'), 'utf8');
 const supabaseHelper = readFileSync(resolve(root, 'apps/cloud-api/db.js'), 'utf8');
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
