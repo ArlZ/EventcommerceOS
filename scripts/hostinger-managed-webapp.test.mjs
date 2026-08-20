@@ -48,6 +48,10 @@ test('pnpm 11 settings live in the workspace file', () => {
 
 test('Docker builds before production deploy packaging', () => {
   assert.match(dockerfile, /^ENV CI=true$/m);
+  assert.match(
+    dockerfile,
+    /FROM pnpm-base AS build\nARG NEXT_PUBLIC_CLOUD_API_URL\nARG RELEASE_COMMIT\nENV CI=true\nENV NEXT_PUBLIC_CLOUD_API_URL=\$NEXT_PUBLIC_CLOUD_API_URL\nENV RELEASE_COMMIT=\$RELEASE_COMMIT/,
+  );
   const cloudBuild = dockerfile.indexOf('pnpm --filter @event-commerce/cloud-api... build');
   const edgeBuild = dockerfile.indexOf('pnpm --filter @event-commerce/event-edge... build');
   const controlBuild = dockerfile.indexOf('pnpm --filter @event-commerce/control-web build');
