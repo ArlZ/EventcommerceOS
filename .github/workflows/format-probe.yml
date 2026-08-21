@@ -3,6 +3,8 @@ name: Temporary Prettier probe
 on:
   push:
     branches: [agent/sync-device-health-endpoint]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
