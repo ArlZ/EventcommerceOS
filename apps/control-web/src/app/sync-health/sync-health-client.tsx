@@ -140,8 +140,8 @@ export function SyncHealthClient() {
 
       {!activeOrganisationId && !error ? (
         <div className="ec-callout">
-          <strong>Select an organisation to begin.</strong> Sync Health is operator-authenticated and
-          only returns register telemetry for the selected organisation.
+          <strong>Select an organisation to begin.</strong> Sync Health is operator-authenticated
+          and only returns register telemetry for the selected organisation.
         </div>
       ) : null}
 
