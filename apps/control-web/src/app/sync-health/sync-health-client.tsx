@@ -115,7 +115,9 @@ export function SyncHealthClient() {
       <div className="ec-context-bar">
         <div>
           <strong>Cloud device telemetry</strong>
-          {activeOrganisationId ? ` • organisation ${activeOrganisationId}` : ' • select an organisation'}
+          {activeOrganisationId
+            ? ` • organisation ${activeOrganisationId}`
+            : ' • select an organisation'}
           {activeOrganisationId ? ' • refreshes every 5 seconds' : ''}
         </div>
         <button
