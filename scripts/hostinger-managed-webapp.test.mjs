@@ -76,6 +76,7 @@ test('managed Event Control exports static files instead of requiring a Next run
   assert.match(controlWebConfig, /HOSTINGER_APP_TARGET === undefined/);
   assert.match(controlWebConfig, /trailingSlash: true/);
   assert.match(controlWebHtaccess, /Header always set X-Frame-Options "DENY"/);
+  assert.match(managedReadme, /Framework preset: React/);
   assert.match(managedReadme, /Output directory: out/);
   assert.match(managedReadme, /no Next\.js server process/);
 });
@@ -87,7 +88,7 @@ test('root entry remains available for managed server-side targets', () => {
   assert.match(hostingerEntry, /hostname = '0\.0\.0\.0'/);
 });
 
-test('managed Cloud API migrates before startup', () => {
+test('managed Cloud API migrates before startup when that root script is used', () => {
   assert.equal(
     packageJson.scripts?.['hostinger:cloud-api:build'],
     'corepack pnpm --filter @event-commerce/cloud-api... build',
@@ -101,7 +102,7 @@ test('managed Cloud API migrates before startup', () => {
   assert.ok(start.indexOf('db:migrate') < start.indexOf(' start'));
 });
 
-test('managed Cloud API supports Hostinger Supabase integration', () => {
+test('managed Cloud API supports Hostinger Supabase integration compatibility', () => {
   assert.equal(cloudApiPackageJson.dependencies?.['@supabase/supabase-js'], '^2.0.0');
   assert.equal(cloudApiPackageJson.scripts?.['supabase:check'], 'node db.js');
   assert.match(supabaseHelper, /process\.env\.SUPABASE_URL/);
@@ -109,21 +110,34 @@ test('managed Cloud API supports Hostinger Supabase integration', () => {
   assert.doesNotMatch(supabaseHelper, /NEXT_PUBLIC_/);
 });
 
-test('managed API example stays PostgreSQL and sandbox only', () => {
+test('managed API example stays PostgreSQL, production-origin scoped and sandbox only', () => {
   assert.match(apiEnv, /^NODE_ENV=production$/m);
   assert.match(apiEnv, /^PORT=3000$/m);
+  assert.match(apiEnv, /^CONTROL_WEB_ORIGIN=https:\/\/event\.nairobuy\.com$/m);
   assert.match(apiEnv, /^DATABASE_URL=postgresql:\/\//m);
   assert.match(apiEnv, /^ABUSE_DEPLOYMENT_MODE=single_instance_pilot$/m);
   assert.match(apiEnv, /^TRUST_PROXY_HOPS=1$/m);
   assert.match(apiEnv, /^MPESA_BASE_URL=https:\/\/sandbox\.safaricom\.co\.ke$/m);
+  assert.match(
+    apiEnv,
+    /^MPESA_CALLBACK_URL=https:\/\/api-event\.nairobuy\.com\/payments\/providers\/mpesa\/callback$/m,
+  );
   assert.doesNotMatch(apiEnv, /^MPESA_BASE_URL=https:\/\/api\.safaricom\.co\.ke$/m);
   assert.match(apiEnv, /^MPESA_CONSUMER_KEY=$/m);
   assert.match(apiEnv, /^MPESA_CONSUMER_SECRET=$/m);
   assert.match(apiEnv, /^MPESA_PASSKEY=$/m);
 });
 
-test('managed Event Control uses the public API origin', () => {
-  assert.match(controlEnv, /^NEXT_PUBLIC_CLOUD_API_URL=https:\/\/api\.pilot\.example\.com$/m);
+test('managed Event Control uses the live public API origin', () => {
+  assert.match(controlEnv, /^NEXT_PUBLIC_CLOUD_API_URL=https:\/\/api-event\.nairobuy\.com$/m);
+});
+
+test('managed docs record the verified Hostinger backend shape', () => {
+  assert.match(managedReadme, /api-event\.nairobuy\.com/);
+  assert.match(managedReadme, /Framework preset: Other/);
+  assert.match(managedReadme, /Root directory: \.\//);
+  assert.match(managedReadme, /Entry file: apps\/cloud-api\/dist\/main\.js/);
+  assert.match(managedReadme, /Output directory: <empty>/);
 });
 
 test('managed docs preserve the venue-local Edge boundary', () => {
