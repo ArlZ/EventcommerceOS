@@ -8,10 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import type { DeviceCloudStatus, EdgeCloudAck } from '@event-commerce/contracts';
-import {
-  OperatorAuthService,
-  type HeadersRecord,
-} from '../auth/operator-auth.service';
+import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { CloudSyncService } from './cloud-sync.service';
 import { EdgeCloudAuthService } from './edge-cloud-auth.service';
 import { SyncDeviceHealthService } from './sync-device-health.service';
