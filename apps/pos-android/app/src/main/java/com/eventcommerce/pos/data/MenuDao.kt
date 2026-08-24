@@ -22,11 +22,11 @@ interface MenuDao {
   @Query("UPDATE menu_versions SET isActive = 0 WHERE isActive = 1")
   suspend fun deactivateActive()
 
-  @Query("DELETE FROM menu_items WHERE menuVersion = :version")
-  suspend fun deleteItems(version: Long)
+  @Query("DELETE FROM menu_items")
+  suspend fun deleteAllItems()
 
-  @Query("DELETE FROM menu_versions WHERE version = :version")
-  suspend fun deleteVersion(version: Long)
+  @Query("DELETE FROM menu_versions")
+  suspend fun deleteAllVersions()
 
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun insertVersion(value: MenuVersionEntity)
