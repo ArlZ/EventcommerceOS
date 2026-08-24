@@ -25,7 +25,7 @@ jobs:
       - run: python .github/operator-price-entry.py
       - run: pnpm exec prettier --write apps/control-web/src/app/configuration/configuration-client.tsx apps/control-web/src/app/configuration/pricing.ts apps/control-web/test/configuration-pricing.test.ts
       - name: Verify pricing helper tests
-        run: pnpm --filter @event-commerce/control-web test -- configuration-pricing.test.ts
+        run: pnpm --filter @event-commerce/control-web exec vitest run test/configuration-pricing.test.ts
       - name: Commit product changes
         shell: bash
         run: |
