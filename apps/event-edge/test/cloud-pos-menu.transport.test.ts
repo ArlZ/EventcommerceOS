@@ -96,4 +96,30 @@ describe('CloudPosMenuTransport', () => {
 
     await expect(transport.latest(eventId)).rejects.toThrow('checksum does not match content');
   });
+
+  it('fails closed if Cloud returns a valid snapshot from another event scope', async () => {
+    process.env.CLOUD_SYNC_URL = 'https://api.example.test/sync/edge-events';
+    process.env.EDGE_ID = 'edge-pilot';
+    process.env.EDGE_CLOUD_SYNC_TOKEN = 'x'.repeat(48);
+    const otherUnsigned = {
+      ...unsigned,
+      eventId: '77777777-7777-4777-8777-777777777777',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          {
+            ...snapshot,
+            eventId: otherUnsigned.eventId,
+            checksum: posMenuChecksum(otherUnsigned),
+          },
+        ],
+      }),
+    );
+    const transport = new CloudPosMenuTransport();
+
+    await expect(transport.latest(eventId)).rejects.toThrow('escaped the requested event scope');
+  });
 });
