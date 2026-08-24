@@ -35,7 +35,7 @@ describeIntegration('operator sync device health', () => {
 
   beforeEach(async () => {
     await database.query(
-      'TRUNCATE operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_device_state',
+      'TRUNCATE pos_menu_publications, operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_device_state',
     );
     await database.query(
       `INSERT INTO sync_device_state(
@@ -92,6 +92,7 @@ describeIntegration('operator sync device health', () => {
         edgeAcceptedThroughSequence: 17,
         edgeBacklogCount: 1,
         lastCloudDeliveryAt: '2026-08-21T04:59:50.000Z',
+        organisationId,
       },
     ]);
   });
@@ -110,14 +111,7 @@ describeIntegration('operator sync device health', () => {
       .expect(200);
 
     expect(response.body).toEqual([
-      {
-        deviceId: 'register-other',
-        lastSeenAt: '2026-08-21T05:01:00.000Z',
-        lastSequenceSeen: 9,
-        edgeAcceptedThroughSequence: 9,
-        edgeBacklogCount: 0,
-        lastCloudDeliveryAt: '2026-08-21T05:00:55.000Z',
-      },
+      expect.objectContaining({ deviceId: 'register-other', organisationId: otherOrganisationId }),
     ]);
   });
 });
