@@ -72,7 +72,7 @@ await request('/inventory/configuration/snapshot', {
       },
     ],
     salesMappings: [{ salesLocationId, inventoryLocationId }],
-    recipes: [{ soldSkuId: skuId, componentSkuId: skuId, quantityPerSoldUnit: '1' }],
+    recipes: [],
     alertConfigs: [],
     responsibilities: [],
     permissions: [
