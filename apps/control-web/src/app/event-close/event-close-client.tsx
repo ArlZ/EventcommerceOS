@@ -123,6 +123,7 @@ export function EventCloseClient() {
   const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [reason, setReason] = useState('Operational close review completed');
   const [pendingAction, setPendingAction] = useState<'close' | 'reopen' | null>(null);
+  const [contextHydrated, setContextHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +131,13 @@ export function EventCloseClient() {
     const context = readEventControlContext();
     if (context.organisationId) setOrganisationId(context.organisationId);
     if (context.eventId) setEventId(context.eventId);
+    setContextHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
+    void load();
+  }, [contextHydrated]);
 
   async function refresh(target: ActiveEvent): Promise<void> {
     const [nextReport, revisions, nextConfiguration] = await Promise.all([

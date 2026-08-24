@@ -86,6 +86,7 @@ export function InventoryOperationsClient() {
   const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [contextHydrated, setContextHydrated] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   useEffect(() => {
@@ -94,7 +95,13 @@ export function InventoryOperationsClient() {
     if (context.organisationName) setOrganisationName(context.organisationName);
     if (context.eventId) setEventId(context.eventId);
     if (context.eventName) setEventName(context.eventName);
+    setContextHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextHydrated || !eventId.trim()) return;
+    void refresh();
+  }, [contextHydrated]);
 
   async function refresh() {
     const selectedEventId = eventId.trim();
@@ -224,7 +231,10 @@ export function InventoryOperationsClient() {
       <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
         <input
           value={eventId}
-          onChange={(event) => setEventId(event.target.value)}
+          onChange={(event) => {
+            setEventId(event.target.value);
+            setEventName('');
+          }}
           placeholder="Event ID"
           aria-label="Event ID"
         />

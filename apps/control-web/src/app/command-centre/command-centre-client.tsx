@@ -16,9 +16,9 @@ import {
   snapshotIsStale,
   type CommandCentreRealtimeMode,
 } from './command-centre-state';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
-const contextStorageKey = 'event-commerce.command-centre-context';
 const lifecycleSteps = ['DRAFT', 'CONFIGURED', 'READY', 'LIVE', 'CLOSING', 'RECONCILED', 'CLOSED'];
 
 type ActiveEvent = { organisationId: string; eventId: string };
@@ -373,6 +373,8 @@ export function CommandCentreClient() {
   const [snapshot, setSnapshot] = useState<CommandCentreSnapshot | null>(null);
   const [mode, setMode] = useState<CommandCentreRealtimeMode>('IDLE');
   const [error, setError] = useState<string | null>(null);
+  const [contextHydrated, setContextHydrated] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(false);
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
@@ -384,6 +386,16 @@ export function CommandCentreClient() {
         target.organisationId,
       );
       setSnapshot(next);
+      const currentContext = readEventControlContext();
+      writeEventControlContext({
+        organisationId: target.organisationId,
+        organisationName:
+          currentContext.organisationId === target.organisationId
+            ? (currentContext.organisationName ?? null)
+            : null,
+        eventId: target.eventId,
+        eventName: next.event.name,
+      });
       setError(null);
     },
     [actorId],
@@ -395,13 +407,15 @@ export function CommandCentreClient() {
       setError('Enter both organisation ID and event ID.');
       return;
     }
+    setLoadingContext(true);
     try {
       await fetchSnapshot(target);
       setActive(target);
-      window.sessionStorage.setItem(contextStorageKey, JSON.stringify(target));
       setMode((current) => nextRealtimeMode(current, 'CONNECT'));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to load event command centre');
+    } finally {
+      setLoadingContext(false);
     }
   }
 
@@ -411,16 +425,16 @@ export function CommandCentreClient() {
   }, []);
 
   useEffect(() => {
-    const stored = window.sessionStorage.getItem(contextStorageKey);
-    if (!stored) return;
-    try {
-      const parsed = JSON.parse(stored) as Partial<ActiveEvent>;
-      if (typeof parsed.organisationId === 'string') setOrganisationId(parsed.organisationId);
-      if (typeof parsed.eventId === 'string') setEventId(parsed.eventId);
-    } catch {
-      window.sessionStorage.removeItem(contextStorageKey);
-    }
+    const context = readEventControlContext();
+    if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.eventId) setEventId(context.eventId);
+    setContextHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
+    void load();
+  }, [contextHydrated]);
 
   useEffect(() => {
     if (!active) return;
@@ -532,7 +546,7 @@ export function CommandCentreClient() {
         </div>
       </header>
 
-      <div className="ec-operations-stack">
+      <div className="ec-operations-stack" aria-busy={loadingContext || busyAlertId !== null}>
         {snapshot ? (
           <details className="ec-context-switcher">
             <summary>Change event context</summary>
@@ -555,8 +569,8 @@ export function CommandCentreClient() {
                 placeholder="Event ID"
                 aria-label="Event ID"
               />
-              <button type="submit" className="ec-button-primary">
-                Load event
+              <button type="submit" className="ec-button-primary" disabled={loadingContext}>
+                {loadingContext ? 'Loading…' : 'Load event'}
               </button>
             </form>
           </details>
@@ -565,8 +579,8 @@ export function CommandCentreClient() {
             <div>
               <strong>Select event context</strong>
               <p>
-                Use the organisation and event IDs from Setup. The last successful selection is
-                remembered in this tab.
+                The event selected elsewhere in Event Control loads automatically. Enter different
+                IDs here only when you need to switch context or retry a failed load.
               </p>
             </div>
             <form
@@ -588,8 +602,8 @@ export function CommandCentreClient() {
                 placeholder="Event ID"
                 aria-label="Event ID"
               />
-              <button type="submit" className="ec-button-primary">
-                Load live event
+              <button type="submit" className="ec-button-primary" disabled={loadingContext}>
+                {loadingContext ? 'Loading live event…' : 'Load live event'}
               </button>
             </form>
           </section>
