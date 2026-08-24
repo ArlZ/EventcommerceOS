@@ -54,10 +54,8 @@ The helper:
 2. starts/recreates the Compose services without deleting the PostgreSQL data volume;
 3. waits for Caddy to create its internal CA;
 4. exports only the public root certificate as `infra/edge-pilot/event-edge-root-ca.crt`;
-5. attempts to validate the HTTPS health endpoint with the exported root CA, including a Schannel retry with revocation checking disabled; if Windows Schannel itself cannot consume the CA, performs a reachability-only HTTPS health check and labels that result explicitly; and
+5. verifies the Windows host is publishing the configured LAN HTTPS port, then independently verifies Caddy's CA chain, LAN-IP certificate identity and `/health` response inside the Linux Edge stack without depending on Windows Schannel; and
 6. prints the exact POS sync endpoint and the public root certificate SHA-256 fingerprint.
-
-The Windows fallback is only a host diagnostic. It does not relax Android TLS policy: the POS app still requires HTTPS and the exported Event Edge root CA must be installed and fingerprint-verified on each dedicated pilot register before provisioning.
 
 The expected POS endpoint is shaped like:
 
@@ -110,7 +108,7 @@ The bootstrap:
 3. maps `Pilot Bar` to `Pilot Store`;
 4. installs the packaged Pilot Water SKU with no recipe so a sale posts one direct `SALE` depletion;
 5. grants the pilot operator local inventory permissions;
-6. posts one idempotent `RECEIPT` opening movement (default 100 bottles); and
+6. posts one idempotent `RECEIPT` opening movement (default 100 bottles);
 7. prints the local stock projection without printing any secret.
 
 Re-running with unchanged inputs is safe. If a previously used idempotency key is supplied with different movement content, Event Edge fails closed rather than silently altering stock history.
