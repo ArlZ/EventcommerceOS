@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
           localDeviceId = deviceId
           knownEndpoint = syncProvisioning.endpoint().orEmpty()
           provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
-          menuVersion = repository.activeMenu()?.version
+          menuVersion = repository.activeProductionMenu()?.version
           loading = false
         }
 
@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
               activeProvisioning.token,
             ) {
               if (menuVersion != null) {
-                menuVersion = repository.activeMenu()?.version
+                menuVersion = repository.activeProductionMenu()?.version
               }
               MenuRefreshCoordinator(
                 repository,
