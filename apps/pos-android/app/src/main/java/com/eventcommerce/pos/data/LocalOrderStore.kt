@@ -36,10 +36,17 @@ class LocalOrderStore(
         }
         val selected = requireNotNull(menus.item(menu.version, menuItemId)) { "menu item is unavailable" }
         val now = clock()
+        val salesLocationId = if (menu.eventId == LocalPosRepository.DEVELOPMENT_EVENT_ID) {
+          DEVELOPMENT_SALES_LOCATION_ID
+        } else {
+          requireNotNull(menus.assignedSalesLocationId()) {
+            "register has no authenticated sales location assignment"
+          }
+        }
         val order = active ?: OrderEntity(
           id = idFactory(),
           eventId = menu.eventId,
-          salesLocationId = DEVELOPMENT_SALES_LOCATION_ID,
+          salesLocationId = salesLocationId,
           deviceId = deviceState.id(),
           menuVersion = menu.version,
           state = OrderState.OPEN.name,
