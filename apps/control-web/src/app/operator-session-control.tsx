@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
 import { readEventControlContext, selectOrganisationContext } from './event-context';
 
 const STORAGE_KEY = 'event-commerce.operator-access-token';
@@ -79,45 +79,48 @@ export function OperatorSessionControl() {
     };
   }, []);
 
-  async function verifyStoredToken(accessToken: string, closeOnSuccess: boolean): Promise<void> {
-    if (!validToken(accessToken)) {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-      setState('inactive');
-      setProfile(null);
-      return;
-    }
-
-    setState('checking');
-    setMessage(null);
-    try {
-      const response = await fetch(`${cloudApiBase}/auth/operator/session`, { cache: 'no-store' });
-      if (!response.ok) {
+  const verifyStoredToken = useCallback(
+    async (accessToken: string, closeOnSuccess: boolean): Promise<void> => {
+      if (!validToken(accessToken)) {
         window.sessionStorage.removeItem(STORAGE_KEY);
         setState('inactive');
         setProfile(null);
-        setInvalid(true);
-        setMessage('This operator session is expired, revoked or invalid.');
         return;
       }
-      const nextProfile = (await response.json()) as OperatorSessionProfile;
-      setProfile(nextProfile);
-      setState('active');
-      setInvalid(false);
+
+      setState('checking');
       setMessage(null);
-      if (closeOnSuccess) setDialogOpen(false);
-    } catch {
-      setState('unverified');
-      setProfile(null);
-      setMessage('Cloud API could not verify this session. Protected actions may be unavailable.');
-    }
-  }
+      try {
+        const response = await fetch(`${cloudApiBase}/auth/operator/session`, { cache: 'no-store' });
+        if (!response.ok) {
+          window.sessionStorage.removeItem(STORAGE_KEY);
+          setState('inactive');
+          setProfile(null);
+          setInvalid(true);
+          setMessage('This operator session is expired, revoked or invalid.');
+          return;
+        }
+        const nextProfile = (await response.json()) as OperatorSessionProfile;
+        setProfile(nextProfile);
+        setState('active');
+        setInvalid(false);
+        setMessage(null);
+        if (closeOnSuccess) setDialogOpen(false);
+      } catch {
+        setState('unverified');
+        setProfile(null);
+        setMessage('Cloud API could not verify this session. Protected actions may be unavailable.');
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!fetchReady) return;
     const existing = window.sessionStorage.getItem(STORAGE_KEY) ?? '';
     if (!existing) return;
     void verifyStoredToken(existing, false);
-  }, [fetchReady]);
+  }, [fetchReady, verifyStoredToken]);
 
   function save(): void {
     const normalized = token.trim();
@@ -257,7 +260,11 @@ export function OperatorSessionControl() {
                   <button type="button" onClick={clear}>
                     End session
                   </button>
-                  <button type="button" className="ec-button-primary" onClick={() => setDialogOpen(false)}>
+                  <button
+                    type="button"
+                    className="ec-button-primary"
+                    onClick={() => setDialogOpen(false)}
+                  >
                     Done
                   </button>
                 </div>
