@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Headers, Inject, Post, UnauthorizedException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  Post,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   EdgeLocalAdminAuthService,
   type EdgeLocalAdminHeaders,
@@ -13,7 +21,8 @@ type HeadersRecord = Record<string, string | string[] | undefined>;
 @Controller('pos-menu')
 export class PosMenuController {
   constructor(
-    @Inject(EdgeLocalAdminAuthService) private readonly localAdmin: EdgeLocalAdminAuthService,
+    @Inject(EdgeLocalAdminAuthService)
+    private readonly localAdmin: EdgeLocalAdminAuthService,
     @Inject(DeviceEdgeAuthService) private readonly deviceAuth: DeviceEdgeAuthService,
     @Inject(PosMenuService) private readonly menus: PosMenuService,
   ) {}
