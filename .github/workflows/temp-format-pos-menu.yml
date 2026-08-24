@@ -1,0 +1,44 @@
+name: Temporary POS menu formatter
+
+on:
+  push:
+    branches:
+      - agent/cloud-edge-menu-publication
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.head_commit.message != 'Apply POS menu Prettier formatting'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: true
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec prettier --write
+          apps/cloud-api/src/sync/pos-menu-publication.service.ts
+          apps/event-edge/src/pos-menu/cloud-pos-menu.transport.ts
+          apps/event-edge/src/pos-menu/pos-menu.service.ts
+          apps/event-edge/test/pos-menu.service.test.ts
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/cloud-api/src/sync/pos-menu-publication.service.ts \
+            apps/event-edge/src/pos-menu/cloud-pos-menu.transport.ts \
+            apps/event-edge/src/pos-menu/pos-menu.service.ts \
+            apps/event-edge/test/pos-menu.service.test.ts
+          git commit -m "Apply POS menu Prettier formatting"
+          git push origin HEAD:agent/cloud-edge-menu-publication
