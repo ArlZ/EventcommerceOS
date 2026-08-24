@@ -27,8 +27,8 @@ export function operatorSessionCookie(
   environment: NodeJS.ProcessEnv = process.env,
 ): string {
   return serializeCookie(OPERATOR_SESSION_COOKIE, token, {
-    maxAgeSeconds: rememberDevice ? 30 * 24 * 60 * 60 : undefined,
     secure: environment.NODE_ENV === 'production',
+    ...(rememberDevice ? { maxAgeSeconds: 30 * 24 * 60 * 60 } : {}),
   });
 }
 
