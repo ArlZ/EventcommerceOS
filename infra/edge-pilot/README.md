@@ -63,13 +63,35 @@ The bootstrap:
 
 Re-running with unchanged inputs is safe. If a previously used idempotency key is supplied with different movement content, Event Edge fails closed rather than silently altering stock history.
 
+## Run the one-sale Edge rehearsal
+
+After bootstrap and before provisioning a physical Android register, run one synthetic POS sale through the real POS-device authentication and device-sync boundary:
+
+```sh
+docker compose --env-file .env -f compose.yml exec -T event-edge node /pilot/rehearsal.mjs
+```
+
+The rehearsal deliberately fails closed unless the configured Pilot Water stock is still exactly the untouched opening quantity (default `100`). It then:
+
+1. provisions an ephemeral POS device through the supported device-credential administration script;
+2. submits one authenticated `ORDER_CLOSED_CASH` event through `/sync/device-events`;
+3. verifies the Edge accepts the event;
+4. verifies local inventory moves exactly once from `100` to `99`;
+5. revokes the ephemeral POS credential immediately; and
+6. prints only non-secret rehearsal evidence.
+
+Do not rerun this one-sale rehearsal against the same bootstrap state after it passes. A second run is expected to stop before creating another sale because stock is no longer the untouched opening quantity. Use a fresh rehearsal event or an attributable inventory correction/count procedure rather than rewriting ledger history.
+
+This local smoke test does not replace the supported Android-device, LAN, HTTPS, offline/reconnect or payment-provider evidence required by the controlled pilot runbook.
+
 ## Cloud verification
 
-After bootstrap, allow the inventory forwarder a few seconds to deliver its outbox to `https://api-event.nairobuy.com`. Verify through the authenticated Control/Cloud path (or controlled database inspection) that:
+After bootstrap or the one-sale rehearsal, allow the forwarders a few seconds to deliver their outboxes to `https://api-event.nairobuy.com`. Verify through the authenticated Control/Cloud path (or controlled database inspection) that:
 
 - the Edge credential authenticated;
 - the configuration event arrived;
 - opening stock appears in the Cloud inventory projection;
+- after the one-sale rehearsal, the order/device state arrives and Cloud stock converges to `99`;
 - no reconciliation exception was created.
 
 Do not seed Cloud inventory tables directly. Event Edge is the source of operational inventory ledger events.
