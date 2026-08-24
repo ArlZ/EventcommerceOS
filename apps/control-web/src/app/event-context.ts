@@ -1,9 +1,15 @@
 export type EventControlContext = {
   organisationId?: string;
+  organisationName?: string;
   eventId?: string;
+  eventName?: string;
 };
 
 const storageKey = 'event-commerce.command-centre-context';
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
 
 export function readEventControlContext(): EventControlContext {
   if (typeof window === 'undefined') return {};
@@ -11,11 +17,15 @@ export function readEventControlContext(): EventControlContext {
   if (!stored) return {};
   try {
     const parsed = JSON.parse(stored) as Partial<EventControlContext>;
+    const organisationId = stringField(parsed.organisationId);
+    const organisationName = stringField(parsed.organisationName);
+    const eventId = stringField(parsed.eventId);
+    const eventName = stringField(parsed.eventName);
     return {
-      ...(typeof parsed.organisationId === 'string'
-        ? { organisationId: parsed.organisationId }
-        : {}),
-      ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
+      ...(organisationId ? { organisationId } : {}),
+      ...(organisationName ? { organisationName } : {}),
+      ...(eventId ? { eventId } : {}),
+      ...(eventName ? { eventName } : {}),
     };
   } catch {
     window.sessionStorage.removeItem(storageKey);

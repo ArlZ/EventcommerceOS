@@ -91,12 +91,21 @@ export function EventScheduleClient() {
     const context = readEventControlContext();
     if (context.organisationId) setOrganisationId(context.organisationId);
     if (context.eventId) setEventId(context.eventId);
+    if (context.organisationName) {
+      setStatus(`Ready to load ${context.organisationName} schedules.`);
+    }
   }, []);
 
   const activeEvents =
     configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
   const selectedEvent = activeEvents.find((event) => event.id === eventId) ?? null;
   const editable = selectedEvent ? canEditEventSchedule(selectedEvent.lifecycle) : false;
+  const dirty = Boolean(
+    selectedEvent &&
+      (timezone !== selectedEvent.timezone ||
+        startsAt !== selectedEvent.startsAt ||
+        endsAt !== selectedEvent.endsAt),
+  );
 
   function selectEvent(event: EventRecord | null): void {
     if (!event) {
@@ -110,7 +119,23 @@ export function EventScheduleClient() {
     setTimezone(event.timezone);
     setStartsAt(event.startsAt);
     setEndsAt(event.endsAt);
-    writeEventControlContext({ organisationId, eventId: event.id });
+    writeEventControlContext({
+      organisationId,
+      ...(configuration?.organisation.name
+        ? { organisationName: configuration.organisation.name }
+        : {}),
+      eventId: event.id,
+      eventName: event.name,
+    });
+  }
+
+  function resetSchedule(): void {
+    if (!selectedEvent) return;
+    setTimezone(selectedEvent.timezone);
+    setStartsAt(selectedEvent.startsAt);
+    setEndsAt(selectedEvent.endsAt);
+    setStatus('Unsaved schedule changes were reset.');
+    setStatusTone('success');
   }
 
   async function loadOrganisation(id = organisationId): Promise<void> {
@@ -141,10 +166,18 @@ export function EventScheduleClient() {
         setTimezone(nextEvent.timezone);
         setStartsAt(nextEvent.startsAt);
         setEndsAt(nextEvent.endsAt);
-        writeEventControlContext({ organisationId: nextOrganisationId, eventId: nextEvent.id });
+        writeEventControlContext({
+          organisationId: nextOrganisationId,
+          organisationName: view.organisation.name,
+          eventId: nextEvent.id,
+          eventName: nextEvent.name,
+        });
       } else {
         selectEvent(null);
-        writeEventControlContext({ organisationId: nextOrganisationId });
+        writeEventControlContext({
+          organisationId: nextOrganisationId,
+          organisationName: view.organisation.name,
+        });
       }
       setStatus(`Loaded ${view.organisation.name}.`);
       setStatusTone('success');
@@ -162,6 +195,11 @@ export function EventScheduleClient() {
     if (!editable) {
       setStatus('Schedule editing is restricted to DRAFT events in Event Control.');
       setStatusTone('danger');
+      return;
+    }
+    if (!dirty) {
+      setStatus('No schedule changes to save.');
+      setStatusTone('success');
       return;
     }
 
@@ -188,7 +226,7 @@ export function EventScheduleClient() {
   }
 
   return (
-    <div className="ec-operations-stack" style={{ marginTop: 18 }}>
+    <div className="ec-operations-stack" style={{ marginTop: 18 }} aria-busy={busy}>
       <section className={`ec-banner ec-banner--${statusTone}`} aria-live="polite">
         <strong>{busy ? 'Working…' : 'Schedule status'}</strong> • {status}
       </section>
@@ -200,7 +238,7 @@ export function EventScheduleClient() {
             <h2>Load event schedules</h2>
             <p>
               Use the same organisation setup ID used in Event Control. The last organisation used
-              in Live is carried into this screen for the current browser tab.
+              elsewhere in Event Control is carried into this screen for the current browser tab.
             </p>
           </div>
         </div>
@@ -300,8 +338,11 @@ export function EventScheduleClient() {
                 timestamps with an explicit offset.
               </p>
             </div>
-            <span className="ec-status-pill" data-tone={editable ? 'warning' : 'danger'}>
-              {editable ? 'Editable draft' : 'Read only'}
+            <span
+              className="ec-status-pill"
+              data-tone={!editable ? 'danger' : dirty ? 'warning' : 'success'}
+            >
+              {!editable ? 'Read only' : dirty ? 'Unsaved changes' : 'Saved schedule'}
             </span>
           </div>
 
@@ -352,14 +393,24 @@ export function EventScheduleClient() {
                 style={fieldStyle}
               />
             </label>
-            <button
-              className="ec-button-primary"
-              type="submit"
-              disabled={!editable || busy}
-              style={{ padding: '9px 12px' }}
-            >
-              Save event schedule
-            </button>
+            <div className="ec-form-actions">
+              <button
+                className="ec-button-primary"
+                type="submit"
+                disabled={!editable || busy || !dirty}
+                style={{ padding: '9px 12px' }}
+              >
+                Save schedule changes
+              </button>
+              <button
+                type="button"
+                disabled={!editable || busy || !dirty}
+                onClick={resetSchedule}
+                style={{ padding: '9px 12px' }}
+              >
+                Reset changes
+              </button>
+            </div>
           </form>
         </section>
       ) : null}

@@ -13,6 +13,19 @@ function ageLabel(value: string): string {
   return `${Math.floor(ageSeconds / 3600)}h ago`;
 }
 
+function updatedLabel(value: number | null): string {
+  if (value === null) return 'Not loaded yet';
+  const seconds = Math.max(0, Math.floor((Date.now() - value) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  return `${Math.floor(seconds / 60)}m ago`;
+}
+
+function compactId(value: string): string {
+  if (value.length <= 22) return value;
+  return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
+
 function deviceNeedsAttention(device: DeviceCloudStatus): boolean {
   return device.edgeBacklogCount > 0 || !device.lastCloudDeliveryAt;
 }
@@ -45,14 +58,17 @@ function deviceStatus(device: DeviceCloudStatus): {
 
 export function SyncHealthClient() {
   const [organisationId, setOrganisationId] = useState('');
+  const [organisationName, setOrganisationName] = useState('');
   const [activeOrganisationId, setActiveOrganisationId] = useState('');
   const [devices, setDevices] = useState<DeviceCloudStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   useEffect(() => {
     const context = readEventControlContext();
     if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.organisationName) setOrganisationName(context.organisationName);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -65,6 +81,7 @@ export function SyncHealthClient() {
       });
       if (!response.ok) throw new Error(`Cloud API returned ${response.status}`);
       setDevices((await response.json()) as DeviceCloudStatus[]);
+      setLastUpdatedAt(Date.now());
       setError(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to load sync health');
@@ -79,12 +96,16 @@ export function SyncHealthClient() {
       setError('Enter an organisation ID.');
       return;
     }
-    writeEventControlContext({ organisationId: nextOrganisationId });
+    writeEventControlContext({
+      organisationId: nextOrganisationId,
+      ...(organisationName ? { organisationName } : {}),
+    });
     if (nextOrganisationId === activeOrganisationId) {
       void refresh();
       return;
     }
     setDevices([]);
+    setLastUpdatedAt(null);
     setError(null);
     setActiveOrganisationId(nextOrganisationId);
   }
@@ -117,7 +138,12 @@ export function SyncHealthClient() {
   );
 
   return (
-    <section className="ec-operations-stack" style={{ marginTop: 18 }}>
+    <section
+      className="ec-operations-stack"
+      style={{ marginTop: 18 }}
+      aria-busy={loading}
+      aria-live="polite"
+    >
       <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
         <input
           value={organisationId}
@@ -126,7 +152,7 @@ export function SyncHealthClient() {
           aria-label="Organisation ID"
         />
         <button type="button" onClick={loadOrganisation} disabled={loading}>
-          {loading ? 'Loading…' : activeOrganisationId ? 'Refresh devices' : 'Load sync health'}
+          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh devices' : 'Load sync health'}
         </button>
       </div>
 
@@ -136,11 +162,15 @@ export function SyncHealthClient() {
 
       <div className="ec-context-bar">
         <div>
-          <strong>Cloud device telemetry</strong>
-          {activeOrganisationId
-            ? ` • organisation ${activeOrganisationId}`
-            : ' • select an organisation'}
-          {activeOrganisationId ? ' • refreshes every 5 seconds' : ''}
+          <strong>{organisationName || 'Cloud device telemetry'}</strong>
+          {activeOrganisationId ? (
+            <>
+              <span className="ec-context-subtle"> • refreshes every 5 seconds</span>
+              <span className="ec-context-subtle"> • updated {updatedLabel(lastUpdatedAt)}</span>
+            </>
+          ) : (
+            <span className="ec-context-subtle"> • select an organisation</span>
+          )}
         </div>
         {activeOrganisationId ? (
           <span className="ec-status-pill" data-tone={attentionDevices > 0 ? 'warning' : 'success'}>
@@ -167,12 +197,12 @@ export function SyncHealthClient() {
         <div className="ec-callout">
           <strong>Select an organisation to begin.</strong> Sync Health is operator-authenticated
           and only returns register telemetry for the selected organisation. The organisation last
-          used in Live is carried into this screen for the current browser tab.
+          used elsewhere in Event Control is carried into this screen for the current browser tab.
         </div>
       ) : null}
 
-      {activeOrganisationId && devices.length === 0 && !error ? (
-        <div className="ec-callout">
+      {activeOrganisationId && devices.length === 0 && !error && !loading ? (
+        <div className="ec-empty-state">
           <strong>No register telemetry has reached Cloud yet.</strong> This does not prove a local
           POS is unavailable; confirm Event Edge and venue connectivity before intervening at the
           bar.
@@ -189,8 +219,12 @@ export function SyncHealthClient() {
           return (
             <article className="ec-panel" key={device.deviceId}>
               <div className="ec-panel-heading">
-                <div>
-                  <h2>{device.deviceId}</h2>
+                <div className="ec-entity-heading">
+                  <p className="ec-eyebrow">Register</p>
+                  <h2>{compactId(device.deviceId)}</h2>
+                  <code className="ec-entity-id" title={device.deviceId}>
+                    {device.deviceId}
+                  </code>
                   <p>Last register activity {ageLabel(device.lastSeenAt)}</p>
                 </div>
                 <span className="ec-status-pill" data-tone={status.tone}>
