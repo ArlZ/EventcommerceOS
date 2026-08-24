@@ -27,7 +27,14 @@ class LocalPosRepository(
 
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
-  suspend fun activeProductionMenu(): CachedMenu? = activeMenu()?.takeUnless(::isBuiltInDevelopmentMenu)
+  suspend fun activeProductionMenu(): CachedMenu? =
+    activeMenu()?.takeUnless { isBuiltInDevelopmentMenu(it) }
+
+  suspend fun hasOpenDevelopmentOrder(): Boolean {
+    val open = orders.current() ?: return false
+    val pinnedMenu = menus.version(open.menuVersion) ?: return true
+    return isBuiltInDevelopmentMenu(pinnedMenu)
+  }
 
   suspend fun retireUnusedDevelopmentMenu(): Boolean = db.withTransaction {
     val active = menus.active() ?: return@withTransaction false
