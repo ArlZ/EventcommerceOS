@@ -29,6 +29,8 @@ import com.eventcommerce.pos.security.KeystorePosDeviceCredentialStore
 import com.eventcommerce.pos.sync.DeviceSyncCoordinator
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
+import com.eventcommerce.pos.sync.HttpsMenuEdgeTransport
+import com.eventcommerce.pos.sync.MenuRefreshCoordinator
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -100,6 +102,21 @@ class MainActivity : ComponentActivity() {
                 ),
               ).run()
             }
+            LaunchedEffect(
+              "menu",
+              activeProvisioning.endpoint,
+              activeProvisioning.deviceId,
+              activeProvisioning.token,
+            ) {
+              MenuRefreshCoordinator(
+                repository,
+                HttpsMenuEdgeTransport(
+                  activeProvisioning.endpoint,
+                  activeProvisioning.deviceId,
+                  activeProvisioning.token,
+                ),
+              ).run()
+            }
             Column(modifier = Modifier.fillMaxSize()) {
               SyncStatusLine(syncQueue, syncState, syncProvisioning)
               TextButton(
@@ -111,6 +128,7 @@ class MainActivity : ComponentActivity() {
               PosScreen(
                 repository = repository,
                 payments = payments,
+                allowDevelopmentMenu = false,
                 modifier = Modifier.weight(1f),
               )
             }
