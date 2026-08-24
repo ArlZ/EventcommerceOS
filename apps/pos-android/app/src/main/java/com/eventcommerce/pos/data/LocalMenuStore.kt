@@ -21,8 +21,12 @@ class LocalMenuStore(
     MenuIntegrity.validate(candidate)
     val current = dao.activeVersion()
     if (current != null && candidate.version == current.version) {
+      require(candidate.eventId == current.eventId) { "menu version collides with another event" }
       require(candidate.checksum == current.checksum) { "menu version already exists with different content" }
       return snapshot(current)
+    }
+    require(current == null || candidate.eventId == current.eventId) {
+      "register already contains a menu for another event"
     }
     require(current == null || candidate.version > current.version) { "menu version must advance monotonically" }
 
@@ -45,6 +49,14 @@ class LocalMenuStore(
       faultInjector.beforeCommit("installMenu")
     }
     return snapshot(requireNotNull(dao.activeVersion()))
+  }
+
+  suspend fun clearAll() {
+    db.withTransaction {
+      dao.deleteAllItems()
+      dao.deleteAllVersions()
+      faultInjector.beforeCommit("clearMenus")
+    }
   }
 
   suspend fun item(version: Long, itemId: String): MenuItemEntity? = dao.item(version, itemId)
