@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,7 +33,15 @@ import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
 import com.eventcommerce.pos.sync.HttpsPosMenuEdgeTransport
 import com.eventcommerce.pos.sync.PosMenuSyncCoordinator
 import com.eventcommerce.pos.sync.posMenuProvisioningBinding
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+private fun menuRetryDelayMs(failures: Int): Long {
+  val exponent = (failures - 1).coerceIn(0, 4)
+  return (1_000L * (1L shl exponent)).coerceAtMost(30_000L)
+}
 
 class MainActivity : ComponentActivity() {
   private val database by lazy { AppDatabase.get(applicationContext) }
@@ -59,6 +68,8 @@ class MainActivity : ComponentActivity() {
         var loading by remember { mutableStateOf(true) }
         var menuReady by remember { mutableStateOf(false) }
         var menuError by remember { mutableStateOf<String?>(null) }
+        var menuRevision by remember { mutableStateOf(0L) }
+        var displayedMenuSignature by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
           val deviceId = deviceState.id()
@@ -98,7 +109,9 @@ class MainActivity : ComponentActivity() {
                 activeProvisioning.deviceId,
                 activeProvisioning.token,
               )
-              menuReady = repository.activeProvisionedMenu(menuBinding) != null
+              val cachedMenu = repository.activeProvisionedMenu(menuBinding)
+              menuReady = cachedMenu != null
+              displayedMenuSignature = cachedMenu?.let { "${it.version}:${it.checksum}" }
               menuError = null
 
               launch {
@@ -115,21 +128,35 @@ class MainActivity : ComponentActivity() {
                 ).run()
               }
 
-              runCatching {
-                PosMenuSyncCoordinator(
-                  repository,
-                  HttpsPosMenuEdgeTransport(
-                    activeProvisioning.endpoint,
-                    activeProvisioning.deviceId,
-                    activeProvisioning.token,
-                  ),
-                  menuBinding,
-                ).refresh()
-              }.onSuccess {
-                menuReady = true
-              }.onFailure { failure ->
-                menuReady = repository.activeProvisionedMenu(menuBinding) != null
-                menuError = failure.message ?: "Unable to load this register's Event Edge menu"
+              val menuSync = PosMenuSyncCoordinator(
+                repository,
+                HttpsPosMenuEdgeTransport(
+                  activeProvisioning.endpoint,
+                  activeProvisioning.deviceId,
+                  activeProvisioning.token,
+                ),
+                menuBinding,
+              )
+              var failures = 0
+              while (isActive) {
+                try {
+                  val installed = menuSync.refresh()
+                  failures = 0
+                  menuReady = true
+                  menuError = null
+                  val signature = "${installed.version}:${installed.checksum}"
+                  if (repository.currentOpenOrder() == null && displayedMenuSignature != signature) {
+                    displayedMenuSignature = signature
+                    menuRevision += 1
+                  }
+                  delay(30_000)
+                } catch (failure: Throwable) {
+                  if (failure is CancellationException) throw failure
+                  failures += 1
+                  menuReady = repository.activeProvisionedMenu(menuBinding) != null
+                  menuError = failure.message ?: "Unable to load this register's Event Edge menu"
+                  delay(menuRetryDelayMs(failures))
+                }
               }
             }
 
@@ -142,11 +169,13 @@ class MainActivity : ComponentActivity() {
                 Text("Device settings")
               }
               if (menuReady) {
-                PosScreen(
-                  repository = repository,
-                  payments = payments,
-                  modifier = Modifier.weight(1f),
-                )
+                key(menuRevision) {
+                  PosScreen(
+                    repository = repository,
+                    payments = payments,
+                    modifier = Modifier.weight(1f),
+                  )
+                }
               } else {
                 Column(modifier = Modifier.padding(24.dp)) {
                   Text("Menu unavailable")
