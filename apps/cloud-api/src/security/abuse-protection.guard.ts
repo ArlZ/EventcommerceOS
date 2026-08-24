@@ -61,6 +61,14 @@ function providerFromCallback(path: string): string | undefined {
   return match?.[1]?.trim().toLowerCase();
 }
 
+function isEdgeSyncPath(path: string): boolean {
+  return (
+    path === '/sync/edge-events' ||
+    path === '/inventory/edge-events' ||
+    /^\/sync\/events\/[0-9a-f-]+\/pos-menu-publications$/i.test(path)
+  );
+}
+
 function isEdgePaymentPath(path: string): boolean {
   return (
     path === '/payments/initiate' ||
@@ -97,7 +105,7 @@ export function classifyAbuseRequest(
     };
   }
 
-  if (path === '/sync/edge-events' || path === '/inventory/edge-events') {
+  if (isEdgeSyncPath(path)) {
     return {
       policy: 'EDGE_SYNC',
       principalKey: fingerprint(`edge:${edgeId}:${authorization}`),
