@@ -56,7 +56,7 @@ The bootstrap:
 1. verifies local Edge health;
 2. installs the event inventory snapshot;
 3. maps `Pilot Bar` to `Pilot Store`;
-4. installs the Pilot Water SKU and one-to-one depletion recipe;
+4. installs the packaged Pilot Water SKU with no recipe so a sale posts one direct `SALE` depletion;
 5. grants the pilot operator local inventory permissions;
 6. posts one idempotent `RECEIPT` opening movement (default 100 bottles);
 7. prints the local stock projection without printing any secret.
