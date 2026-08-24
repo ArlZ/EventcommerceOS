@@ -5,10 +5,16 @@ import com.eventcommerce.pos.domain.MenuCandidateItem
 import com.eventcommerce.pos.domain.MenuIntegrity
 import org.json.JSONObject
 
+data class DeliveredMenuSnapshot(
+  val salesLocationId: String,
+  val candidate: MenuCandidate,
+)
+
 object MenuSnapshotJson {
-  fun candidate(text: String): MenuCandidate {
+  fun snapshot(text: String): DeliveredMenuSnapshot {
     val value = JSONObject(text)
-    require(value.getString("salesLocationId").isNotBlank()) { "menu sales location is required" }
+    val salesLocationId = value.getString("salesLocationId").trim()
+    require(salesLocationId.isNotBlank()) { "menu sales location is required" }
     val itemValues = value.getJSONArray("items")
     val items = buildList {
       for (index in 0 until itemValues.length()) {
@@ -37,6 +43,6 @@ object MenuSnapshotJson {
       items = items,
     )
     MenuIntegrity.validate(candidate)
-    return candidate
+    return DeliveredMenuSnapshot(salesLocationId, candidate)
   }
 }
