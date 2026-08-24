@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import pg from 'pg';
-
-const { Client } = pg;
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -19,8 +16,8 @@ function positiveBigInt(name) {
 }
 
 function command(action, env) {
-  const result = spawnSync(process.execPath, ['scripts/manage-pos-device.mjs', action], {
-    cwd: process.cwd(),
+  const result = spawnSync(process.execPath, ['/app/scripts/manage-pos-device.mjs', action], {
+    cwd: '/app',
     env: { ...process.env, ...env },
     encoding: 'utf8',
   });
@@ -40,17 +37,28 @@ function tokenFromProvisioning(output) {
   return token;
 }
 
-async function stockOnHand(client, eventId, inventoryLocationId, skuId) {
-  const result = await client.query(
-    `SELECT on_hand::text AS on_hand
-     FROM edge_inventory_stock_projection
-     WHERE event_id=$1 AND inventory_location_id=$2 AND sku_id=$3`,
-    [eventId, inventoryLocationId, skuId],
+async function stockOnHand(adminToken, eventId, inventoryLocationId, skuId) {
+  const response = await fetch(
+    `http://127.0.0.1:3002/inventory/events/${encodeURIComponent(eventId)}/stock`,
+    {
+      headers: { authorization: `Bearer ${adminToken}` },
+      signal: AbortSignal.timeout(10_000),
+    },
   );
-  if (result.rowCount !== 1) {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Pilot stock query failed with HTTP ${response.status}: ${text}`);
+  }
+  const rows = text ? JSON.parse(text) : [];
+  if (!Array.isArray(rows)) throw new Error('Pilot stock response is invalid');
+  const row = rows.find(
+    (candidate) =>
+      candidate?.inventoryLocationId === inventoryLocationId && candidate?.skuId === skuId,
+  );
+  if (!row || !/^-?\d+$/.test(String(row.onHandBase ?? ''))) {
     throw new Error('Pilot stock projection is missing; run bootstrap before rehearsal');
   }
-  return BigInt(result.rows[0].on_hand);
+  return BigInt(row.onHandBase);
 }
 
 function rehearsalOccurredAt(openingAt, eventEndAt) {
@@ -64,7 +72,7 @@ function rehearsalOccurredAt(openingAt, eventEndAt) {
   return new Date(occurredMs).toISOString();
 }
 
-const databaseUrl = required('EDGE_DATABASE_URL');
+const adminToken = required('EDGE_LOCAL_ADMIN_TOKEN');
 const eventId = required('PILOT_EVENT_ID');
 const salesLocationId = required('PILOT_SALES_LOCATION_ID');
 const inventoryLocationId = required('PILOT_INVENTORY_LOCATION_ID');
@@ -85,12 +93,10 @@ const deviceEnv = {
   DEVICE_CREDENTIAL_ACTOR: actor,
 };
 
-const database = new Client({ connectionString: databaseUrl });
 let provisioned = false;
 
 try {
-  await database.connect();
-  const before = await stockOnHand(database, eventId, inventoryLocationId, skuId);
+  const before = await stockOnHand(adminToken, eventId, inventoryLocationId, skuId);
   if (before !== openingStock) {
     throw new Error(
       `One-sale rehearsal is fail-closed: expected untouched opening stock ${openingStock}, found ${before}`,
@@ -151,10 +157,10 @@ try {
   }
 
   const expectedAfter = openingStock - 1n;
-  let after = await stockOnHand(database, eventId, inventoryLocationId, skuId);
+  let after = await stockOnHand(adminToken, eventId, inventoryLocationId, skuId);
   for (let attempt = 0; after !== expectedAfter && attempt < 20; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 100));
-    after = await stockOnHand(database, eventId, inventoryLocationId, skuId);
+    after = await stockOnHand(adminToken, eventId, inventoryLocationId, skuId);
   }
   if (after !== expectedAfter) {
     throw new Error(`Expected local stock ${expectedAfter} after one sale, found ${after}`);
@@ -189,5 +195,4 @@ try {
       // Preserve the primary rehearsal failure; an operator can revoke the ephemeral device manually.
     }
   }
-  await database.end().catch(() => undefined);
 }
