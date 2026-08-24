@@ -13,9 +13,11 @@ import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -163,6 +165,26 @@ class LocalPosRepositoryTest {
     assertNotNull(stillActive)
     assertEquals(active.version, stillActive?.version)
     assertEquals(active.checksum, stillActive?.checksum)
+  }
+
+  @Test
+  fun `unused built in development menu is retired before production use`() = runBlocking {
+    repository.ensureDevelopmentMenu()
+
+    assertNull(repository.activeProductionMenu())
+    assertTrue(repository.retireUnusedDevelopmentMenu())
+    assertNull(repository.activeMenu())
+    assertFalse(repository.retireUnusedDevelopmentMenu())
+  }
+
+  @Test
+  fun `development menu referenced by an order is never deleted automatically`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repository.addItem(menu.items.first().itemId)
+
+    assertFalse(repository.retireUnusedDevelopmentMenu())
+    assertNotNull(repository.activeMenu())
+    assertNull(repository.activeProductionMenu())
   }
 
   private fun openDatabase(): AppDatabase =
