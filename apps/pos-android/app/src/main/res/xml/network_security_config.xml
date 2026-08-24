@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system" />
+      <!-- Pilot registers are dedicated devices. Install only the exported Event Edge root CA. -->
+      <certificates src="user" />
+    </trust-anchors>
+  </base-config>
+</network-security-config>
