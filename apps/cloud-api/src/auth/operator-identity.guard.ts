@@ -4,6 +4,21 @@ import { OperatorAuthService, type HeadersRecord } from './operator-auth.service
 
 interface HttpRequest {
   headers: HeadersRecord;
+  path?: string;
+  url?: string;
+}
+
+function requestPath(request: HttpRequest): string {
+  return (request.path ?? request.url ?? '/').split('?', 1)[0] || '/';
+}
+
+function isPublicOperatorAuthPath(path: string): boolean {
+  return (
+    path === '/operator-auth/login/password' ||
+    path === '/operator-auth/login/resend' ||
+    path === '/operator-auth/login/verify' ||
+    path === '/operator-auth/logout'
+  );
 }
 
 @Injectable()
@@ -18,6 +33,10 @@ export class OperatorIdentityGuard implements CanActivate {
     // including machine/provider routes, before any controller can inspect them.
     delete request.headers['x-actor-id'];
     delete request.headers['x-role'];
+
+    // A stale browser session must never prevent the operator from reaching the login or logout
+    // endpoints that can replace/clear it. Those endpoints perform their own proof checks.
+    if (isPublicOperatorAuthPath(requestPath(request))) return true;
 
     if (!this.operators.isOperatorAuthorization(request.headers)) return true;
 
