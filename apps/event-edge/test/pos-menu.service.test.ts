@@ -90,6 +90,8 @@ describe('PosMenuService', () => {
     const service = new PosMenuService(database);
 
     await expect(service.current('event-1', 'bar-1')).resolves.toEqual(snapshot);
-    await expect(service.current('event-1', 'bar-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.current('event-1', 'bar-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
