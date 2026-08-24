@@ -42,12 +42,16 @@ import com.eventcommerce.pos.domain.LocalOrder
 import com.eventcommerce.pos.domain.OrderState
 import com.eventcommerce.pos.payments.EdgePaymentRailAvailability
 import com.eventcommerce.pos.payments.PaymentCoordinator
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.coroutines.coroutineContext
 
 @Composable
 fun PosScreen(
   repository: LocalPosRepository,
   payments: PaymentCoordinator,
+  allowDevelopmentMenu: Boolean = true,
   modifier: Modifier = Modifier,
 ) {
   var menu by remember { mutableStateOf<CachedMenu?>(null) }
@@ -87,12 +91,19 @@ fun PosScreen(
     }
   }
 
-  LaunchedEffect(Unit) {
+  LaunchedEffect(allowDevelopmentMenu) {
     runCatching {
-      repository.ensureDevelopmentMenu()
+      if (allowDevelopmentMenu) repository.ensureDevelopmentMenu()
       refresh()
     }.onFailure { failure -> error = failure.message ?: "Unable to open this register" }
     paymentRails = payments.railAvailability()
+  }
+
+  LaunchedEffect(repository) {
+    while (coroutineContext.isActive) {
+      delay(3_000)
+      runCatching { refresh() }
+    }
   }
 
   Surface(modifier = modifier.fillMaxSize()) {
@@ -120,6 +131,28 @@ fun PosScreen(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
+        }
+      }
+
+      if (!allowDevelopmentMenu && menu == null) {
+        Surface(
+          color = MaterialTheme.colorScheme.errorContainer,
+          shape = MaterialTheme.shapes.medium,
+        ) {
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            Text(
+              "No event menu installed",
+              color = MaterialTheme.colorScheme.onErrorContainer,
+              fontWeight = FontWeight.Bold,
+            )
+            Text(
+              "This register cannot take orders until it receives a valid menu from Event Edge. A previously installed event menu remains available when the network is offline.",
+              color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+          }
         }
       }
 
@@ -165,7 +198,7 @@ fun PosScreen(
       }
 
       val current = order
-      val orderEditable = current == null || current.state == OrderState.OPEN
+      val orderEditable = menu != null && (current == null || current.state == OrderState.OPEN)
       val categories = listOf("All") +
         (menu?.items?.map { it.category }?.distinct()?.sorted() ?: emptyList())
 
