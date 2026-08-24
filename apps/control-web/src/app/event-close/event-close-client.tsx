@@ -289,32 +289,68 @@ export function EventCloseClient() {
       </header>
 
       <div className="ec-operations-stack" aria-busy={busy}>
-        <div className="ec-context-loader">
-          <input
-            aria-label="Organisation ID"
-            placeholder="Organisation ID"
-            value={organisationId}
-            onChange={(event) => setOrganisationId(event.target.value)}
-          />
-          <input
-            aria-label="Event ID"
-            placeholder="Event ID"
-            value={eventId}
-            onChange={(event) => setEventId(event.target.value)}
-          />
-          <button type="button" disabled={busy} onClick={() => void load()}>
-            {busy ? 'Working…' : report ? 'Refresh close review' : 'Load close review'}
-          </button>
-        </div>
+        {report ? (
+          <>
+            <div className="ec-context-bar">
+              <div>
+                <strong>{report.event.name}</strong>
+                {configuration?.organisation.name ? ` • ${configuration.organisation.name}` : ''}
+              </div>
+              <div className="ec-context-bar-actions">
+                <button type="button" disabled={busy} onClick={() => void load()}>
+                  {busy ? 'Refreshing…' : 'Refresh close review'}
+                </button>
+              </div>
+            </div>
+            <details className="ec-context-switcher">
+              <summary>Change event context</summary>
+              <div className="ec-context-loader ec-context-loader--embedded">
+                <input
+                  aria-label="Organisation ID"
+                  placeholder="Organisation ID"
+                  value={organisationId}
+                  onChange={(event) => setOrganisationId(event.target.value)}
+                />
+                <input
+                  aria-label="Event ID"
+                  placeholder="Event ID"
+                  value={eventId}
+                  onChange={(event) => setEventId(event.target.value)}
+                />
+                <button type="button" disabled={busy} onClick={() => void load()}>
+                  {busy ? 'Loading…' : 'Load event'}
+                </button>
+              </div>
+            </details>
+          </>
+        ) : (
+          <div className="ec-context-loader">
+            <input
+              aria-label="Organisation ID"
+              placeholder="Organisation ID"
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+            />
+            <input
+              aria-label="Event ID"
+              placeholder="Event ID"
+              value={eventId}
+              onChange={(event) => setEventId(event.target.value)}
+            />
+            <button type="button" disabled={busy} onClick={() => void load()}>
+              {busy ? 'Loading…' : 'Load close review'}
+            </button>
+          </div>
+        )}
 
         {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
 
         {!report ? (
           <div className="ec-callout">
-            <strong>Load the event before closing.</strong> The organisation and event last used
-            elsewhere in Event Control are carried into this screen for the current browser tab. The
-            review starts with unresolved payment, inventory and operational signals, then moves
-            into detailed reconciliation and immutable close evidence.
+            <strong>Load the event before closing.</strong> If Event Control already knows the
+            event, this review loads it automatically. Otherwise use the IDs above once; the review
+            starts with unresolved payment, inventory and operational signals, then moves into
+            detailed reconciliation and immutable close evidence.
           </div>
         ) : null}
 

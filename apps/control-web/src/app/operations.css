@@ -92,6 +92,19 @@
   color: var(--ec-ink);
 }
 
+.ec-context-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ec-context-bar-actions button {
+  flex: 0 0 auto;
+  padding: 7px 11px;
+}
+
 .ec-banner {
   border: 1px solid var(--ec-border);
   border-radius: var(--ec-radius-md);
