@@ -34,7 +34,8 @@ describe('POS menu snapshot validation', () => {
   });
 
   it('rejects duplicate item and SKU identities', () => {
-    const duplicated = [...base.items, { ...base.items[0], itemId: 'another-id' }];
+    const first = base.items[0]!;
+    const duplicated = [...base.items, { ...first, itemId: 'another-id' }];
     const unsigned = { ...base, items: duplicated };
     expect(() => parsePosMenuSnapshot({ ...unsigned, checksum: posMenuChecksum(unsigned) })).toThrow(
       'duplicate menu item sku id',
