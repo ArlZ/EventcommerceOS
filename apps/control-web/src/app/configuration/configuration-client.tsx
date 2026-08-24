@@ -1,8 +1,9 @@
 'use client';
 
 import type { FormEvent, ReactNode } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -91,6 +92,7 @@ function ItemActions({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
   const active = item.lifecycle !== 'ARCHIVED';
 
   async function saveRename(): Promise<void> {
@@ -132,16 +134,33 @@ function ItemActions({
             <strong>{item.name}</strong>
             {item.lifecycle ? <div className="ec-alert-meta">{item.lifecycle}</div> : null}
           </div>
-          <div className="ec-alert-actions" style={{ marginTop: 0 }}>
-            <ActionButton type="button" onClick={() => setEditing(true)}>
-              Rename
-            </ActionButton>
-            {active ? (
-              <ActionButton type="button" onClick={() => void onArchive()}>
-                Archive
+          {confirmingArchive ? (
+            <div className="ec-inline-confirm" role="group" aria-label={`Archive ${item.name}`}>
+              <span>Archive this item?</span>
+              <ActionButton
+                type="button"
+                onClick={() => {
+                  void onArchive().then(() => setConfirmingArchive(false));
+                }}
+              >
+                Confirm archive
               </ActionButton>
-            ) : null}
-          </div>
+              <ActionButton type="button" onClick={() => setConfirmingArchive(false)}>
+                Keep active
+              </ActionButton>
+            </div>
+          ) : (
+            <div className="ec-alert-actions" style={{ marginTop: 0 }}>
+              <ActionButton type="button" onClick={() => setEditing(true)}>
+                Rename
+              </ActionButton>
+              {active ? (
+                <ActionButton type="button" onClick={() => setConfirmingArchive(true)}>
+                  Archive
+                </ActionButton>
+              ) : null}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -161,6 +180,12 @@ export function ConfigurationClient() {
   const [busy, setBusy] = useState(false);
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
+  useEffect(() => {
+    const context = readEventControlContext();
+    if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.eventId) setEventId(context.eventId);
+  }, []);
+
   async function refresh(id = organisationId): Promise<void> {
     if (!id) return;
     setBusy(true);
@@ -174,6 +199,21 @@ export function ConfigurationClient() {
         id,
       );
       setConfiguration(view);
+      const currentEvent = view.events.find(
+        (item) => item.id === eventId && item.lifecycle !== 'ARCHIVED',
+      );
+      const nextEvent =
+        currentEvent ??
+        view.events.find((item) => item.lifecycle === 'DRAFT') ??
+        view.events.find((item) => item.lifecycle !== 'ARCHIVED') ??
+        null;
+      setEventId(nextEvent?.id ?? '');
+      writeEventControlContext({
+        organisationId: id,
+        organisationName: view.organisation.name,
+        eventId: nextEvent?.id ?? null,
+        eventName: nextEvent?.name ?? null,
+      });
       setStatus(`Loaded ${view.organisation.name}. Continue with the next incomplete step.`);
       setStatusTone('success');
     } catch (error) {
@@ -250,6 +290,12 @@ export function ConfigurationClient() {
         endsAt: form.get('endsAt'),
       });
       setEventId(created.id);
+      writeEventControlContext({
+        organisationId,
+        organisationName: configuration?.organisation.name ?? null,
+        eventId: created.id,
+        eventName: String(form.get('name') ?? ''),
+      });
     }, 'Event created. Add the places where guests will buy and stock will be held.');
   }
 
@@ -323,7 +369,7 @@ export function ConfigurationClient() {
     menuReady;
 
   return (
-    <div className="ec-operations-stack" style={{ marginTop: 18 }}>
+    <div className="ec-operations-stack" style={{ marginTop: 18 }} aria-busy={busy}>
       <section className={`ec-banner ec-banner--${statusTone}`} aria-live="polite">
         <strong>{busy ? 'Working…' : 'Setup status'}</strong> • {status}
       </section>
@@ -333,7 +379,11 @@ export function ConfigurationClient() {
           <div className="ec-panel-heading">
             <div>
               <h2>Open an organisation</h2>
-              <p>Create a new pilot operator or load an existing organisation by its setup ID.</p>
+              <p>
+                Create a new pilot operator or load an existing organisation by its setup ID. The
+                last organisation used elsewhere in Event Control is carried into this screen for
+                the current browser tab.
+              </p>
             </div>
           </div>
           <div className="ec-control-grid">
@@ -359,7 +409,7 @@ export function ConfigurationClient() {
                 disabled={busy}
               />
               <ActionButton type="submit" disabled={busy || !organisationId.trim()}>
-                Load existing organisation
+                {busy ? 'Loading…' : 'Load existing organisation'}
               </ActionButton>
             </form>
           </div>
@@ -441,9 +491,17 @@ export function ConfigurationClient() {
                   id="event-select"
                   value={eventId}
                   onChange={(event) => {
-                    setEventId(event.target.value);
+                    const nextEventId = event.target.value;
+                    const nextEvent = activeEvents.find((item) => item.id === nextEventId) ?? null;
+                    setEventId(nextEventId);
                     setMenuId('');
                     setMenuItemId('');
+                    writeEventControlContext({
+                      organisationId,
+                      organisationName: configuration.organisation.name,
+                      eventId: nextEvent?.id ?? null,
+                      eventName: nextEvent?.name ?? null,
+                    });
                   }}
                   style={fieldStyle}
                 >
