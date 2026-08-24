@@ -5,6 +5,7 @@ import com.eventcommerce.pos.domain.MenuCandidateItem
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -22,6 +23,15 @@ fun posMenuCurrentEndpoint(syncEndpoint: String): String {
     "POS provisioning endpoint must be the Event Edge device sync endpoint"
   }
   return URI(uri.scheme, null, uri.host, uri.port, "/pos-menu/current", null, null).toASCIIString()
+}
+
+fun posMenuProvisioningBinding(syncEndpoint: String, deviceId: String, token: String): String {
+  require(deviceId.isNotBlank()) { "POS device ID must not be blank" }
+  require(token.length >= 32) { "POS device credential must be at least 32 characters" }
+  val canonical = "${posMenuCurrentEndpoint(syncEndpoint)}\n$deviceId\n$token"
+  return MessageDigest.getInstance("SHA-256")
+    .digest(canonical.toByteArray(Charsets.UTF_8))
+    .joinToString("") { byte -> "%02x".format(byte) }
 }
 
 class HttpsPosMenuEdgeTransport(
