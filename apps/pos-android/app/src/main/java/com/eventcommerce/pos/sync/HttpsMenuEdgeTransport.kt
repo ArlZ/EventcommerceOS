@@ -32,7 +32,7 @@ class HttpsMenuEdgeTransport(
       connection.setRequestProperty("X-Device-Id", provisionedDeviceId)
       val code = connection.responseCode
       if (code !in 200..299) throw IllegalStateException("Event Edge menu returned HTTP $code")
-      MenuSnapshotJson.candidate(
+      MenuSnapshotJson.snapshot(
         connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() },
       )
     } finally {
