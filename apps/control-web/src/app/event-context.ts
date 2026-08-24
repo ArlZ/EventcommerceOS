@@ -44,3 +44,14 @@ export function writeEventControlContext(next: EventControlContext): void {
     }),
   );
 }
+
+export function selectOrganisationContext(organisationId: string, organisationName: string): void {
+  if (typeof window === 'undefined') return;
+  window.sessionStorage.setItem(
+    storageKey,
+    JSON.stringify({
+      organisationId,
+      organisationName,
+    }),
+  );
+}
