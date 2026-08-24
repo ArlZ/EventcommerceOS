@@ -1,4 +1,11 @@
+import { WorkflowRail } from '../workflow-ui';
 import { EventScheduleClient } from './event-schedule-client';
+
+const workflow = [
+  { label: 'Select event', detail: 'Load the organisation and choose the event being prepared.' },
+  { label: 'Review window', detail: 'Confirm timezone, start and end against the operating plan.' },
+  { label: 'Lock before Edge', detail: 'Save the DRAFT schedule before bootstrap and rehearsal.' },
+];
 
 export default function EventSchedulePage() {
   return (
@@ -16,6 +23,7 @@ export default function EventSchedulePage() {
           Draft control
         </span>
       </header>
+      <WorkflowRail steps={workflow} />
       <div className="ec-callout">
         <strong>Use this before Edge bootstrap:</strong> the Event Edge rehearsal must use the same
         event end time recorded in Cloud.
