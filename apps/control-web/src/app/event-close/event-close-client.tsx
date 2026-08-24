@@ -364,7 +364,11 @@ export function EventCloseClient() {
           <>
             <Panel
               title="Close readiness"
-              description="Start with what still needs action, then decide whether to close now or resolve it first."
+              description={
+                isOperationallyClosed
+                  ? 'Review what changed after the stored close before deciding whether an audited reopen is needed.'
+                  : 'Start with what still needs action, then decide whether to close now or resolve it first.'
+              }
               priority
             >
               <div className="ec-close-summary">
