@@ -27,6 +27,14 @@ function boolean(value: unknown, label: string): boolean {
   return value;
 }
 
+function optionalBoolean(value: unknown, label: string): boolean {
+  return value === undefined ? false : boolean(value, label);
+}
+
+function optionalInteger(value: unknown, label: string): number {
+  return value === undefined ? 0 : safeInteger(value, label, 0);
+}
+
 function appendField(parts: string[], value: string): void {
   parts.push(`${value.length}:${value}|`);
 }
@@ -42,6 +50,12 @@ function crc32(value: string): string {
   return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
 }
 
+function compareItemIds(left: PosMenuItemSnapshot, right: PosMenuItemSnapshot): number {
+  if (left.itemId < right.itemId) return -1;
+  if (left.itemId > right.itemId) return 1;
+  return 0;
+}
+
 export function posMenuChecksum(
   snapshot: Omit<PosMenuSnapshot, 'checksum' | 'salesLocationId'>,
 ): string {
@@ -52,19 +66,15 @@ export function posMenuChecksum(
   appendField(parts, snapshot.activatedAtEpochMs.toString());
   appendField(parts, snapshot.sourceActor);
   appendField(parts, snapshot.currency);
-  [...snapshot.items]
-    .sort((left, right) =>
-      left.itemId < right.itemId ? -1 : left.itemId > right.itemId ? 1 : 0,
-    )
-    .forEach((item) => {
-      appendField(parts, item.itemId);
-      appendField(parts, item.skuId);
-      appendField(parts, item.name);
-      appendField(parts, item.category);
-      appendField(parts, item.priceMinor.toString());
-      appendField(parts, item.favourite ? '1' : '0');
-      appendField(parts, item.sortOrder.toString());
-    });
+  [...snapshot.items].sort(compareItemIds).forEach((item) => {
+    appendField(parts, item.itemId);
+    appendField(parts, item.skuId);
+    appendField(parts, item.name);
+    appendField(parts, item.category);
+    appendField(parts, item.priceMinor.toString());
+    appendField(parts, item.favourite ? '1' : '0');
+    appendField(parts, item.sortOrder.toString());
+  });
   return crc32(parts.join(''));
 }
 
@@ -76,14 +86,8 @@ function parseItem(value: unknown, index: number): PosMenuItemSnapshot {
     name: text(row.name, `items[${index}].name`),
     category: text(row.category, `items[${index}].category`),
     priceMinor: safeInteger(row.priceMinor, `items[${index}].priceMinor`, 0),
-    favourite:
-      row.favourite === undefined
-        ? false
-        : boolean(row.favourite, `items[${index}].favourite`),
-    sortOrder:
-      row.sortOrder === undefined
-        ? 0
-        : safeInteger(row.sortOrder, `items[${index}].sortOrder`, 0),
+    favourite: optionalBoolean(row.favourite, `items[${index}].favourite`),
+    sortOrder: optionalInteger(row.sortOrder, `items[${index}].sortOrder`),
   };
 }
 
