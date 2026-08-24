@@ -26,6 +26,10 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Validate pilot helper syntax
+        run: |
+          node --check infra/edge-pilot/bootstrap.mjs
+          node --check infra/edge-pilot/rehearsal.mjs
       - name: Validate venue Compose configuration
         env:
           RELEASE_COMMIT: 1111111111111111111111111111111111111111
