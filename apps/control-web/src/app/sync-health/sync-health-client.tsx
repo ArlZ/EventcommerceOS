@@ -160,7 +160,7 @@ export function SyncHealthClient() {
           aria-label="Organisation ID"
         />
         <button type="button" onClick={loadOrganisation} disabled={loading}>
-          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh devices' : 'Load sync health'}
+          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh now' : 'Load sync health'}
         </button>
       </div>
 
