@@ -5,6 +5,7 @@ import type {
   EventCloseStoredReportView,
   EventConfigurationView,
 } from '@event-commerce/contracts';
+import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { readEventControlContext, writeEventControlContext } from '../event-context';
 
@@ -280,11 +281,7 @@ export function EventCloseClient() {
           </p>
         </div>
         <span className="ec-status-pill" data-tone={attentionRequired ? 'warning' : 'success'}>
-          {report
-            ? attentionRequired
-              ? 'Review required'
-              : 'No projected exceptions'
-            : 'Not loaded'}
+          {report ? (attentionRequired ? 'Resolve before close' : 'Ready to close') : 'Not loaded'}
         </span>
       </header>
 
@@ -358,7 +355,7 @@ export function EventCloseClient() {
           <>
             <Panel
               title="Close readiness"
-              description="Read these signals before changing the event's operational state."
+              description="Start with what still needs action, then decide whether to close now or resolve it first."
               priority
             >
               <div className="ec-close-summary">
@@ -366,13 +363,39 @@ export function EventCloseClient() {
                 <Metric label="Operational state" value={report.close.state} />
                 <Metric
                   label="Current reconciliation"
-                  value={reconciliationUnresolved ? 'UNRESOLVED' : 'CONCLUSIVE'}
+                  value={reconciliationUnresolved ? 'Needs review' : 'Conclusive'}
                 />
                 <Metric
                   label="Last close revision"
                   value={report.close.lastClosedRevision?.toString() ?? 'Not closed'}
                 />
               </div>
+
+              {attentionRequired ? (
+                <div className="ec-banner ec-banner--warning" style={{ marginTop: 14 }}>
+                  <strong>Resolve what you can before closing.</strong> You can still record a
+                  close, but unresolved items will remain visible in the stored evidence. Use the
+                  shortcuts below to investigate before choosing that option.
+                  <div className="ec-form-actions" style={{ marginTop: 10 }}>
+                    {report.unresolvedPayments.length > 0 || reconciliationUnresolved ? (
+                      <Link className="ec-panel-link" href="/command-centre">
+                        Review payments in Live →
+                      </Link>
+                    ) : null}
+                    {report.openTransfers.length > 0 ||
+                    report.unresolvedCriticalAlerts.length > 0 ? (
+                      <Link className="ec-panel-link" href="/inventory">
+                        Review inventory →
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="ec-banner ec-banner--success" style={{ marginTop: 14 }}>
+                  <strong>Ready to close.</strong> No unresolved payment, transfer, critical
+                  inventory or financial reconciliation exceptions are currently projected.
+                </div>
+              )}
 
               {report.close.sourceChangedSinceLastClose ? (
                 <div className="ec-banner ec-banner--danger" style={{ marginTop: 14 }}>
@@ -414,10 +437,7 @@ export function EventCloseClient() {
                   </div>
                 </AttentionCard>
 
-                <AttentionCard
-                  title="Open / unreceived transfers"
-                  count={report.openTransfers.length}
-                >
+                <AttentionCard title="Transfers not received" count={report.openTransfers.length}>
                   {report.openTransfers.length === 0 ? (
                     <p className="ec-empty">None projected.</p>
                   ) : null}
@@ -435,7 +455,7 @@ export function EventCloseClient() {
                 </AttentionCard>
 
                 <AttentionCard
-                  title="Unresolved critical alerts"
+                  title="Critical inventory alerts"
                   count={report.unresolvedCriticalAlerts.length}
                 >
                   {report.unresolvedCriticalAlerts.length === 0 ? (
@@ -458,13 +478,17 @@ export function EventCloseClient() {
             </Panel>
 
             <Panel
-              title="Record operational state"
-              description="Every close or reopen needs an audit reason. Uncertainty remains visible in the stored revision."
+              title={attentionRequired ? 'Close with unresolved items' : 'Record operational close'}
+              description={
+                attentionRequired
+                  ? 'Closing now is allowed, but it will preserve the unresolved items above rather than clearing them.'
+                  : 'No projected blockers remain. Every close or reopen still requires an audit reason.'
+              }
             >
               {attentionRequired ? (
                 <div className="ec-banner ec-banner--warning" style={{ marginBottom: 12 }}>
-                  Review items remain. Recording an operational close will snapshot them as they
-                  are; it will not mark them resolved.
+                  <strong>Closing will not resolve these items.</strong> The close revision will
+                  preserve their current state so they remain visible for follow-up and audit.
                 </div>
               ) : null}
               <div className="ec-close-actions">
@@ -478,12 +502,16 @@ export function EventCloseClient() {
                     <div>
                       <strong>
                         {pendingAction === 'close'
-                          ? 'Confirm operational close'
+                          ? attentionRequired
+                            ? 'Confirm close with unresolved items'
+                            : 'Confirm operational close'
                           : 'Confirm audited reopen'}
                       </strong>
                       <small>
                         {pendingAction === 'close'
-                          ? 'This records an immutable close revision using the current reconciliation state.'
+                          ? attentionRequired
+                            ? 'This records the current state without marking unresolved payments, transfers, alerts or reconciliation items as resolved.'
+                            : 'This records an immutable close revision using the current reconciliation state.'
                           : 'This reopens operations with the audit reason entered above.'}
                       </small>
                     </div>
@@ -512,7 +540,9 @@ export function EventCloseClient() {
                     disabled={busy}
                     onClick={() => setPendingAction('close')}
                   >
-                    Record operational close
+                    {attentionRequired
+                      ? 'Record close with unresolved items'
+                      : 'Record operational close'}
                   </button>
                 )}
                 <button
