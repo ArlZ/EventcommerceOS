@@ -24,6 +24,24 @@ class LocalPosRepository(
 
   suspend fun installMenu(candidate: MenuCandidate): CachedMenu = menus.install(candidate)
 
+  suspend fun installProvisionedMenu(candidate: MenuCandidate): CachedMenu {
+    val current = activeMenu()
+    val development = developmentMenuCandidate()
+    if (
+      current != null &&
+        current.eventId == development.eventId &&
+        current.menuId == development.menuId &&
+        current.version == development.version &&
+        current.checksum == development.checksum
+    ) {
+      require(orders.current() == null) {
+        "cannot replace the development menu while an order is open"
+      }
+      return menus.replaceDevelopmentMenu(current.version, current.checksum, candidate)
+    }
+    return menus.install(candidate)
+  }
+
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
   suspend fun menuForSale(): CachedMenu? {
