@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
         var editingProvisioning by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(true) }
         var menuVersion by remember { mutableStateOf<Long?>(null) }
+        var legacyDevelopmentOrderBlocked by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
           val deviceId = deviceState.id()
@@ -65,7 +66,12 @@ class MainActivity : ComponentActivity() {
           knownEndpoint = syncProvisioning.endpoint().orEmpty()
           provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
           repository.retireUnusedDevelopmentMenu()
-          menuVersion = repository.activeProductionMenu()?.version
+          legacyDevelopmentOrderBlocked = repository.hasOpenDevelopmentOrder()
+          menuVersion = if (legacyDevelopmentOrderBlocked) {
+            null
+          } else {
+            repository.activeProductionMenu()?.version
+          }
           loading = false
         }
 
@@ -84,6 +90,7 @@ class MainActivity : ComponentActivity() {
               syncProvisioning.provision(endpoint, deviceId, token)
               knownEndpoint = endpoint
               provisioned = syncProvisioning.current()
+              legacyDevelopmentOrderBlocked = repository.hasOpenDevelopmentOrder()
               menuVersion = null
               editingProvisioning = false
             }
@@ -95,7 +102,7 @@ class MainActivity : ComponentActivity() {
               activeProvisioning.deviceId,
               activeProvisioning.token,
             ) {
-              if (menuVersion != null) {
+              if (menuVersion != null && !legacyDevelopmentOrderBlocked) {
                 menuVersion = repository.activeProductionMenu()?.version
               }
               MenuRefreshCoordinator(
@@ -105,7 +112,9 @@ class MainActivity : ComponentActivity() {
                   activeProvisioning.deviceId,
                   activeProvisioning.token,
                 ),
-              ).run { installedVersion -> menuVersion = installedVersion }
+              ).run { installedVersion ->
+                if (!legacyDevelopmentOrderBlocked) menuVersion = installedVersion
+              }
             }
             LaunchedEffect(
               activeProvisioning.endpoint,
@@ -132,13 +141,16 @@ class MainActivity : ComponentActivity() {
               ) {
                 Text("Device settings")
               }
-              if (menuVersion == null) {
-                Text(
+              when {
+                legacyDevelopmentOrderBlocked -> Text(
+                  "Production sales are blocked because this register contains an unfinished legacy development order. Preserve the register data and complete an explicit recovery/reset before using it live.",
+                  modifier = Modifier.padding(24.dp),
+                )
+                menuVersion == null -> Text(
                   "Waiting for this register's event menu. Keep Event Edge connected; no sales can start until a validated menu is available.",
                   modifier = Modifier.padding(24.dp),
                 )
-              } else {
-                key(menuVersion) {
+                else -> key(menuVersion) {
                   PosScreen(
                     repository = repository,
                     payments = payments,
