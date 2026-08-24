@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import type { PoolClient } from 'pg';
+import type { PoolClient, QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
 import { SupabaseAuthTransport, type SupabaseAuthProof } from './supabase-auth.transport';
 
@@ -24,7 +24,7 @@ interface ChallengeRow {
   remember_device: boolean;
 }
 
-interface ProfileRow {
+interface ProfileRow extends QueryResultRow {
   display_name: string;
   email: string | null;
   platform_role: 'PLATFORM_ADMIN' | null;
@@ -124,7 +124,7 @@ export class OperatorLoginService {
     }
 
     try {
-      if (proof.email !== email) throw new UnauthorizedException('Email identity mismatch');
+      if (proof.email !== email) throw new UnauthorizedException('Incorrect email or password');
       const identities = await this.database.query<OperatorRow>(
         `SELECT id::text,email,supabase_user_id::text
          FROM operator_identities
@@ -137,7 +137,7 @@ export class OperatorLoginService {
         !identity.email ||
         (identity.supabase_user_id !== null && identity.supabase_user_id !== proof.userId)
       ) {
-        throw new UnauthorizedException('Operator identity unavailable');
+        throw new UnauthorizedException('Incorrect email or password');
       }
 
       const challengeToken = `ecom_login_${randomBytes(32).toString('base64url')}`;
@@ -146,14 +146,7 @@ export class OperatorLoginService {
         `INSERT INTO operator_login_challenges(
            id,actor_id,supabase_user_id,email,challenge_sha256,remember_device,expires_at
          ) VALUES ($1,$2,$3,$4,$5,$6,now()+interval '10 minutes')`,
-        [
-          challengeId,
-          identity.id,
-          proof.userId,
-          email,
-          digest(challengeToken),
-          remember,
-        ],
+        [challengeId, identity.id, proof.userId, email, digest(challengeToken), remember],
       );
 
       try {
@@ -172,8 +165,6 @@ export class OperatorLoginService {
         maskedEmail: maskOperatorEmail(email),
         resendAfterSeconds: 60,
       };
-    } catch (error) {
-      authFailure(error, 'Incorrect email or password');
     } finally {
       await this.supabase.signOut(proof.accessToken);
     }
@@ -299,7 +290,11 @@ export class OperatorLoginService {
       [
         challenge.actor_id,
         sessionId,
-        JSON.stringify({ ttlMinutes, emailVerification: true, rememberDevice: challenge.remember_device }),
+        JSON.stringify({
+          ttlMinutes,
+          emailVerification: true,
+          rememberDevice: challenge.remember_device,
+        }),
       ],
     );
 
