@@ -1,0 +1,407 @@
+name: PR98 interaction safety
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/control-ui-interaction-safety'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/control-ui-interaction-safety
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Apply Setup and Close interaction safeguards
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"Missing expected snippet: {label}")
+              return text.replace(old, new, 1)
+
+          context_path = Path('apps/control-web/src/app/event-context.ts')
+          text = context_path.read_text()
+          text = replace_once(
+              text,
+              "export type EventControlContext = {\n  organisationId?: string;\n  organisationName?: string;\n  eventId?: string;\n  eventName?: string;\n};",
+              "export type EventControlContext = {\n  organisationId?: string | null;\n  organisationName?: string | null;\n  eventId?: string | null;\n  eventName?: string | null;\n};",
+              'nullable context fields',
+          )
+          pattern = re.compile(r"^export function writeEventControlContext\(next: EventControlContext\): void \{.*?^\}\n", re.M | re.S)
+          replacement = """export function writeEventControlContext(next: EventControlContext): void {
+            if (typeof window === 'undefined') return;
+            const merged = { ...readEventControlContext(), ...next };
+            const organisationId = stringField(merged.organisationId);
+            const organisationName = stringField(merged.organisationName);
+            const eventId = stringField(merged.eventId);
+            const eventName = stringField(merged.eventName);
+            window.sessionStorage.setItem(
+              storageKey,
+              JSON.stringify({
+                ...(organisationId ? { organisationId } : {}),
+                ...(organisationName ? { organisationName } : {}),
+                ...(eventId ? { eventId } : {}),
+                ...(eventName ? { eventName } : {}),
+              }),
+            );
+          }
+          """
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit('Unable to replace context writer')
+          context_path.write_text(text)
+
+          setup_path = Path('apps/control-web/src/app/configuration/configuration-client.tsx')
+          text = setup_path.read_text()
+          text = replace_once(
+              text,
+              "import { useMemo, useState } from 'react';\nimport type { EventConfigurationView } from '@event-commerce/contracts';",
+              "import { useEffect, useMemo, useState } from 'react';\nimport type { EventConfigurationView } from '@event-commerce/contracts';\nimport { readEventControlContext, writeEventControlContext } from '../event-context';",
+              'setup imports',
+          )
+          text = replace_once(
+              text,
+              "  const [name, setName] = useState(item.name);\n  const active = item.lifecycle !== 'ARCHIVED';",
+              "  const [name, setName] = useState(item.name);\n  const [confirmingArchive, setConfirmingArchive] = useState(false);\n  const active = item.lifecycle !== 'ARCHIVED';",
+              'archive confirmation state',
+          )
+          old_actions = """          <div className=\"ec-alert-actions\" style={{ marginTop: 0 }}>
+            <ActionButton type=\"button\" onClick={() => setEditing(true)}>
+              Rename
+            </ActionButton>
+            {active ? (
+              <ActionButton type=\"button\" onClick={() => void onArchive()}>
+                Archive
+              </ActionButton>
+            ) : null}
+          </div>
+          """
+          new_actions = """          {confirmingArchive ? (
+            <div className=\"ec-inline-confirm\" role=\"group\" aria-label={`Archive ${item.name}`}>
+              <span>Archive this item?</span>
+              <ActionButton
+                type=\"button\"
+                onClick={() => {
+                  void onArchive().then(() => setConfirmingArchive(false));
+                }}
+              >
+                Confirm archive
+              </ActionButton>
+              <ActionButton type=\"button\" onClick={() => setConfirmingArchive(false)}>
+                Keep active
+              </ActionButton>
+            </div>
+          ) : (
+            <div className=\"ec-alert-actions\" style={{ marginTop: 0 }}>
+              <ActionButton type=\"button\" onClick={() => setEditing(true)}>
+                Rename
+              </ActionButton>
+              {active ? (
+                <ActionButton type=\"button\" onClick={() => setConfirmingArchive(true)}>
+                  Archive
+                </ActionButton>
+              ) : null}
+            </div>
+          )}
+          """
+          text = replace_once(text, old_actions, new_actions, 'archive confirmation controls')
+          text = replace_once(
+              text,
+              "  const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');\n\n  async function refresh",
+              "  const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');\n\n  useEffect(() => {\n    const context = readEventControlContext();\n    if (context.organisationId) setOrganisationId(context.organisationId);\n    if (context.eventId) setEventId(context.eventId);\n  }, []);\n\n  async function refresh",
+              'setup context hydration',
+          )
+          text = replace_once(
+              text,
+              "      setConfiguration(view);\n      setStatus(`Loaded ${view.organisation.name}. Continue with the next incomplete step.`);",
+              "      setConfiguration(view);\n      const currentEvent = view.events.find(\n        (item) => item.id === eventId && item.lifecycle !== 'ARCHIVED',\n      );\n      const nextEvent =\n        currentEvent ??\n        view.events.find((item) => item.lifecycle === 'DRAFT') ??\n        view.events.find((item) => item.lifecycle !== 'ARCHIVED') ??\n        null;\n      setEventId(nextEvent?.id ?? '');\n      writeEventControlContext({\n        organisationId: id,\n        organisationName: view.organisation.name,\n        eventId: nextEvent?.id ?? null,\n        eventName: nextEvent?.name ?? null,\n      });\n      setStatus(`Loaded ${view.organisation.name}. Continue with the next incomplete step.`);",
+              'setup selected event continuity',
+          )
+          text = replace_once(
+              text,
+              "      setEventId(created.id);\n    }, 'Event created. Add the places where guests will buy and stock will be held.');",
+              "      setEventId(created.id);\n      writeEventControlContext({\n        organisationId,\n        organisationName: configuration?.organisation.name ?? null,\n        eventId: created.id,\n        eventName: String(form.get('name') ?? ''),\n      });\n    }, 'Event created. Add the places where guests will buy and stock will be held.');",
+              'new event context',
+          )
+          text = replace_once(
+              text,
+              "                  onChange={(event) => {\n                    setEventId(event.target.value);\n                    setMenuId('');\n                    setMenuItemId('');\n                  }}",
+              "                  onChange={(event) => {\n                    const nextEventId = event.target.value;\n                    const nextEvent = activeEvents.find((item) => item.id === nextEventId) ?? null;\n                    setEventId(nextEventId);\n                    setMenuId('');\n                    setMenuItemId('');\n                    writeEventControlContext({\n                      organisationId,\n                      organisationName: configuration.organisation.name,\n                      eventId: nextEvent?.id ?? null,\n                      eventName: nextEvent?.name ?? null,\n                    });\n                  }}",
+              'setup event selection context',
+          )
+          setup_path.write_text(text)
+
+          close_path = Path('apps/control-web/src/app/event-close/event-close-client.tsx')
+          text = close_path.read_text()
+          text = replace_once(
+              text,
+              "import type { EventCloseReport, EventCloseStoredReportView } from '@event-commerce/contracts';\nimport { useMemo, useState, type ReactNode } from 'react';",
+              "import type {\n  EventCloseReport,\n  EventCloseStoredReportView,\n  EventConfigurationView,\n} from '@event-commerce/contracts';\nimport { useEffect, useMemo, useState, type ReactNode } from 'react';\nimport { readEventControlContext, writeEventControlContext } from '../event-context';",
+              'close imports',
+          )
+          text = replace_once(
+              text,
+              "function moneyRows(rows: Array<{ currency: string; amountMinor: string }>): string {",
+              "function compactId(value: string): string {\n  if (value.length <= 20) return value;\n  return `${value.slice(0, 8)}…${value.slice(-6)}`;\n}\n\nfunction moneyRows(rows: Array<{ currency: string; amountMinor: string }>): string {",
+              'compact close ids',
+          )
+          text = replace_once(
+              text,
+              "  const [stored, setStored] = useState<EventCloseStoredReportView[]>([]);\n  const [reason, setReason] = useState('Operational close review completed');\n  const [busy, setBusy] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  async function refresh",
+              "  const [stored, setStored] = useState<EventCloseStoredReportView[]>([]);\n  const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);\n  const [reason, setReason] = useState('Operational close review completed');\n  const [pendingAction, setPendingAction] = useState<'close' | 'reopen' | null>(null);\n  const [busy, setBusy] = useState(false);\n  const [error, setError] = useState<string | null>(null);\n\n  useEffect(() => {\n    const context = readEventControlContext();\n    if (context.organisationId) setOrganisationId(context.organisationId);\n    if (context.eventId) setEventId(context.eventId);\n  }, []);\n\n  async function refresh",
+              'close context state',
+          )
+          old_refresh = """    const [nextReport, revisions] = await Promise.all([
+              requestJson<EventCloseReport>(
+                `/event-close/events/${encodeURIComponent(target.eventId)}/report`,
+                actorId,
+                target.organisationId,
+              ),
+              requestJson<EventCloseStoredReportView[]>(
+                `/event-close/events/${encodeURIComponent(target.eventId)}/reports`,
+                actorId,
+                target.organisationId,
+              ),
+            ]);
+            setReport(nextReport);
+            setStored(revisions);
+            setError(null);
+          }
+          """
+          new_refresh = """    const [nextReport, revisions, nextConfiguration] = await Promise.all([
+              requestJson<EventCloseReport>(
+                `/event-close/events/${encodeURIComponent(target.eventId)}/report`,
+                actorId,
+                target.organisationId,
+              ),
+              requestJson<EventCloseStoredReportView[]>(
+                `/event-close/events/${encodeURIComponent(target.eventId)}/reports`,
+                actorId,
+                target.organisationId,
+              ),
+              requestJson<EventConfigurationView>(
+                `/organisations/${encodeURIComponent(target.organisationId)}/configuration`,
+                actorId,
+                target.organisationId,
+              ).catch(() => null),
+            ]);
+            setReport(nextReport);
+            setStored(revisions);
+            setConfiguration(nextConfiguration);
+            writeEventControlContext({
+              organisationId: target.organisationId,
+              organisationName: nextConfiguration?.organisation.name ?? null,
+              eventId: target.eventId,
+              eventName: nextReport.event.name,
+            });
+            setError(null);
+          }
+          """
+          text = replace_once(text, old_refresh, new_refresh, 'close label configuration')
+          text = replace_once(
+              text,
+              "      await refresh(active);\n    } catch (failure) {",
+              "      await refresh(active);\n      setPendingAction(null);\n    } catch (failure) {",
+              'clear pending close action',
+          )
+          text = replace_once(
+              text,
+              "  const attentionRequired =\n    (report?.unresolvedPayments.length ?? 0) > 0 ||\n    (report?.openTransfers.length ?? 0) > 0 ||\n    (report?.unresolvedCriticalAlerts.length ?? 0) > 0 ||\n    reconciliationUnresolved ||\n    (report?.close.sourceChangedSinceLastClose ?? false);\n\n  return (",
+              "  const attentionRequired =\n    (report?.unresolvedPayments.length ?? 0) > 0 ||\n    (report?.openTransfers.length ?? 0) > 0 ||\n    (report?.unresolvedCriticalAlerts.length ?? 0) > 0 ||\n    reconciliationUnresolved ||\n    (report?.close.sourceChangedSinceLastClose ?? false);\n\n  const inventoryLocationNames = useMemo(\n    () =>\n      new Map(\n        (configuration?.inventoryLocations ?? []).map((location) => [location.id, location.name]),\n      ),\n    [configuration],\n  );\n  const skuNames = useMemo(\n    () => new Map((configuration?.skus ?? []).map((sku) => [sku.id, sku.name])),\n    [configuration],\n  );\n\n  function inventoryLocationLabel(id: string): string {\n    return inventoryLocationNames.get(id) ?? `Location ${compactId(id)}`;\n  }\n\n  function skuLabel(id: string): string {\n    return skuNames.get(id) ?? `SKU ${compactId(id)}`;\n  }\n\n  return (",
+              'close label maps',
+          )
+          text = replace_once(
+              text,
+              "      <div className=\"ec-operations-stack\">",
+              "      <div className=\"ec-operations-stack\" aria-busy={busy}>",
+              'close busy state',
+          )
+          text = replace_once(
+              text,
+              "          <button type=\"button\" disabled={busy} onClick={() => void load()}>\n            Load close review\n          </button>",
+              "          <button type=\"button\" disabled={busy} onClick={() => void load()}>\n            {busy ? 'Working…' : report ? 'Refresh close review' : 'Load close review'}\n          </button>",
+              'close load label',
+          )
+          text = replace_once(
+              text,
+              "                          {payment.orderId} • {money(payment.currency, payment.amountMinor)}",
+              "                          Order {compactId(payment.orderId)} •{' '}\n                          {money(payment.currency, payment.amountMinor)}",
+              'compact order identifier',
+          )
+          text = replace_once(
+              text,
+              "                          {transfer.sourceLocationId} → {transfer.destinationLocationId}",
+              "                          {inventoryLocationLabel(transfer.sourceLocationId)} →{' '}\n                          {inventoryLocationLabel(transfer.destinationLocationId)}",
+              'close transfer labels',
+          )
+          text = replace_once(
+              text,
+              "                          {alert.skuId} • available {alert.availableQuantityBase}",
+              "                          {skuLabel(alert.skuId)} • available {alert.availableQuantityBase}",
+              'close SKU labels',
+          )
+          old_action_buttons = """                {report.close.state === 'OPERATIONALLY_CLOSED' ? (
+                  <button type=\"button\" disabled={busy} onClick={() => void action('reopen')}>
+                    Reopen with audit reason
+                  </button>
+                ) : (
+                  <button
+                    className=\"ec-button-primary\"
+                    type=\"button\"
+                    disabled={busy}
+                    onClick={() => void action('close')}
+                  >
+                    Record operational close
+                  </button>
+                )}
+          """
+          new_action_buttons = """                {pendingAction ? (
+                  <div className=\"ec-inline-confirm ec-inline-confirm--wide\" role=\"alert\">
+                    <div>
+                      <strong>
+                        {pendingAction === 'close'
+                          ? 'Confirm operational close'
+                          : 'Confirm audited reopen'}
+                      </strong>
+                      <small>
+                        {pendingAction === 'close'
+                          ? 'This records an immutable close revision using the current reconciliation state.'
+                          : 'This reopens operations with the audit reason entered above.'}
+                      </small>
+                    </div>
+                    <div className=\"ec-form-actions\">
+                      <button
+                        className=\"ec-button-primary\"
+                        type=\"button\"
+                        disabled={busy || !reason.trim()}
+                        onClick={() => void action(pendingAction)}
+                      >
+                        {pendingAction === 'close' ? 'Confirm close' : 'Confirm reopen'}
+                      </button>
+                      <button type=\"button\" disabled={busy} onClick={() => setPendingAction(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : report.close.state === 'OPERATIONALLY_CLOSED' ? (
+                  <button type=\"button\" disabled={busy} onClick={() => setPendingAction('reopen')}>
+                    Reopen with audit reason
+                  </button>
+                ) : (
+                  <button
+                    className=\"ec-button-primary\"
+                    type=\"button\"
+                    disabled={busy}
+                    onClick={() => setPendingAction('close')}
+                  >
+                    Record operational close
+                  </button>
+                )}
+          """
+          text = replace_once(text, old_action_buttons, new_action_buttons, 'close confirmation')
+          close_path.write_text(text)
+
+          schedule_path = Path('apps/control-web/src/app/event-schedule/event-schedule-client.tsx')
+          text = schedule_path.read_text()
+          text = replace_once(
+              text,
+              "        writeEventControlContext({\n          organisationId: nextOrganisationId,\n          organisationName: view.organisation.name,\n        });",
+              "        writeEventControlContext({\n          organisationId: nextOrganisationId,\n          organisationName: view.organisation.name,\n          eventId: null,\n          eventName: null,\n        });",
+              'clear stale schedule event context',
+          )
+          schedule_path.write_text(text)
+
+          css_path = Path('apps/control-web/src/app/interaction-polish.css')
+          css = css_path.read_text()
+          css += """
+
+.ec-inline-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ec-inline-confirm > span {
+  color: var(--ec-subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ec-inline-confirm--wide {
+  width: 100%;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #f2c5c5;
+  border-radius: 12px;
+  background: #fff7f7;
+}
+
+.ec-inline-confirm--wide > div:first-child {
+  display: grid;
+  gap: 3px;
+  max-width: 620px;
+}
+
+.ec-inline-confirm--wide small {
+  color: var(--ec-subtle);
+  line-height: 1.45;
+}
+
+@media (max-width: 620px) {
+  .ec-inline-confirm,
+  .ec-inline-confirm--wide {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ec-inline-confirm button {
+    width: 100%;
+  }
+}
+"""
+          css_path.write_text(css)
+          PY
+      - name: Format changed files
+        run: >-
+          pnpm exec prettier --write
+          apps/control-web/src/app/event-context.ts
+          apps/control-web/src/app/configuration/configuration-client.tsx
+          apps/control-web/src/app/event-close/event-close-client.tsx
+          apps/control-web/src/app/event-schedule/event-schedule-client.tsx
+          apps/control-web/src/app/interaction-polish.css
+      - name: Validate Control Web
+        run: |
+          pnpm --filter @event-commerce/control-web typecheck
+          pnpm --filter @event-commerce/control-web test
+      - name: Commit changes and remove staging workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/pr98-interaction-safety.yml
+          git add \
+            apps/control-web/src/app/event-context.ts \
+            apps/control-web/src/app/configuration/configuration-client.tsx \
+            apps/control-web/src/app/event-close/event-close-client.tsx \
+            apps/control-web/src/app/event-schedule/event-schedule-client.tsx \
+            apps/control-web/src/app/interaction-polish.css
+          git commit -m "Tighten Event Control interaction safety"
+          git push origin HEAD:agent/control-ui-interaction-safety
