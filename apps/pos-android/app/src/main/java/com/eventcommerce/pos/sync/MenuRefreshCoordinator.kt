@@ -17,7 +17,8 @@ class MenuRefreshCoordinator(
   }
 
   suspend fun refreshOnce() {
-    repository.installProvisionedMenu(transport.current())
+    val delivered = transport.current()
+    repository.installProvisionedMenu(delivered.candidate, delivered.salesLocationId)
   }
 
   suspend fun run() {
