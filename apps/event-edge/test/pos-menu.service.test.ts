@@ -85,7 +85,10 @@ describe('PosMenuService', () => {
 
   it('returns the current scoped snapshot and fails closed when absent', async () => {
     const database = {
-      query: vi.fn().mockResolvedValueOnce([row(snapshot)]).mockResolvedValueOnce([]),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([row(snapshot)])
+        .mockResolvedValueOnce([]),
     } as unknown as EdgeDatabaseService;
     const service = new PosMenuService(database);
 
