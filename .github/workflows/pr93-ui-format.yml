@@ -1,0 +1,47 @@
+name: PR93 UI format
+
+on:
+  push:
+    branches:
+      - agent/control-ui-command-centre-refresh
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/control-ui-command-centre-refresh
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Format Event Control UI
+        run: >-
+          pnpm exec prettier --write
+          apps/control-web/src/app/app-shell.tsx
+          apps/control-web/src/app/command-centre/command-centre-client.tsx
+          apps/control-web/src/app/operator-session-control.tsx
+      - name: Commit formatting only when needed
+        shell: bash
+        run: |
+          if git diff --quiet -- \
+            apps/control-web/src/app/app-shell.tsx \
+            apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/operator-session-control.tsx; then
+            echo "Formatting already clean."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            apps/control-web/src/app/app-shell.tsx \
+            apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/operator-session-control.tsx
+          git commit -m "Format Event Control UI"
+          git push origin HEAD:agent/control-ui-command-centre-refresh
