@@ -163,7 +163,15 @@ class MainActivity : ComponentActivity() {
             Column(modifier = Modifier.fillMaxSize()) {
               SyncStatusLine(syncQueue, syncState, syncProvisioning)
               TextButton(
-                onClick = { editingProvisioning = true },
+                onClick = {
+                  lifecycleScope.launch {
+                    if (repository.currentOpenOrder() == null) {
+                      editingProvisioning = true
+                    } else {
+                      menuError = "Finish or clear the current order before changing device settings."
+                    }
+                  }
+                },
                 modifier = Modifier.padding(horizontal = 8.dp),
               ) {
                 Text("Device settings")
