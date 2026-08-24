@@ -8,6 +8,7 @@ import type {
   CommandCentreInventoryAlertActionView,
   CommandCentreSnapshot,
 } from '@event-commerce/contracts';
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   COMMAND_CENTRE_POLL_INTERVAL_MS,
@@ -17,7 +18,11 @@ import {
 } from './command-centre-state';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
+const contextStorageKey = 'event-commerce.command-centre-context';
+const lifecycleSteps = ['DRAFT', 'CONFIGURED', 'READY', 'LIVE', 'CLOSING', 'RECONCILED', 'CLOSED'];
+
 type ActiveEvent = { organisationId: string; eventId: string };
+type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 
 function requestHeaders(actorId: string, organisationId: string): Record<string, string> {
   return {
@@ -49,7 +54,11 @@ function formatMinor(currency: string, amountMinor: string): string {
   const amount = Number(amountMinor) / 100;
   if (!Number.isFinite(amount)) return `${currency} ${amountMinor} minor`;
   try {
-    return new Intl.NumberFormat('en-KE', { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat('en-KE', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(amount);
   } catch {
     return `${currency} ${amount.toFixed(2)}`;
   }
@@ -75,35 +84,62 @@ function velocityList(values: CommandCentreCurrencyVelocity[]): string {
         .join(' • ');
 }
 
+function formatTime(value: string | null): string {
+  if (!value) return 'never';
+  return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function ageLabel(value: string, now: number): string {
+  const seconds = Math.max(0, Math.round((now - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
+
 function Panel({
   title,
-  description,
-  priority = false,
+  meta,
+  action,
+  className = '',
   children,
 }: {
   title: string;
-  description?: string;
-  priority?: boolean;
+  meta?: string;
+  action?: ReactNode;
+  className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className={`ec-panel${priority ? ' ec-panel--priority' : ''}`}>
+    <section className={`ec-panel ${className}`.trim()}>
       <div className="ec-panel-heading">
         <div>
           <h2>{title}</h2>
-          {description ? <p>{description}</p> : null}
+          {meta ? <p>{meta}</p> : null}
         </div>
+        {action ? <div className="ec-panel-action">{action}</div> : null}
       </div>
       {children}
     </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: ReactNode }) {
+function Metric({
+  label,
+  value,
+  sub,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  tone?: Tone;
+}) {
   return (
-    <div className="ec-kpi">
+    <div className="ec-kpi" data-tone={tone}>
       <span className="ec-kpi-label">{label}</span>
       <strong className="ec-kpi-value">{value}</strong>
+      {sub ? <span className="ec-kpi-sub">{sub}</span> : null}
     </div>
   );
 }
@@ -118,12 +154,55 @@ function StatusPill({ mode, stale }: { mode: CommandCentreRealtimeMode; stale: b
         : mode === 'CONNECTING'
           ? 'CONNECTING'
           : 'NOT CONNECTED';
-  const tone = stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning';
+  const tone: Tone = stale ? 'danger' : mode === 'LIVE' ? 'success' : mode === 'IDLE' ? 'neutral' : 'warning';
   return (
     <strong className="ec-status-pill" data-tone={tone}>
+      <span className="ec-status-dot" aria-hidden="true" />
       {label}
     </strong>
   );
+}
+
+function StatusChip({ label, tone }: { label: string; tone: Tone }) {
+  return (
+    <span className="ec-health-chip" data-tone={tone}>
+      <span className="ec-health-dot" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+function LifecycleTrack({ current }: { current: string }) {
+  const normalized = current.toUpperCase();
+  const currentIndex = lifecycleSteps.indexOf(normalized);
+  if (currentIndex < 0) return null;
+  return (
+    <div className="ec-lifecycle" aria-label={`Event lifecycle: ${current}`}>
+      {lifecycleSteps.map((step, index) => {
+        const done = index < currentIndex;
+        const active = index === currentIndex;
+        return (
+          <div className="ec-lifecycle-fragment" key={step}>
+            <div className="ec-lifecycle-step" data-done={done} data-active={active}>
+              <span className="ec-lifecycle-dot" aria-hidden="true">
+                {done ? '✓' : ''}
+              </span>
+              <span>{step.charAt(0) + step.slice(1).toLowerCase()}</span>
+            </div>
+            {index < lifecycleSteps.length - 1 ? (
+              <span className="ec-lifecycle-line" data-done={done} aria-hidden="true" />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function alertTone(alert: CommandCentreAlert): Tone {
+  if (alert.severity === 'CRITICAL') return 'danger';
+  if (alert.severity === 'URGENT' || alert.severity === 'WARNING') return 'warning';
+  return 'neutral';
 }
 
 function AlertCard({
@@ -137,35 +216,94 @@ function AlertCard({
   onAcknowledge: () => void;
   onAssign: () => void;
 }) {
+  const tone = alertTone(alert);
   return (
-    <article className="ec-alert-card" data-severity={alert.severity}>
-      <div className="ec-alert-card-head">
-        <strong>{alert.title}</strong>
-        <span
-          className="ec-status-pill"
-          data-tone={alert.severity === 'CRITICAL' ? 'danger' : 'warning'}
-        >
-          {alert.severity}
-        </span>
-      </div>
-      <p>{alert.detail}</p>
-      <div className="ec-alert-meta">
-        {alert.source} • {alert.state}
-        {alert.assignedActorId ? ` • assigned ${alert.assignedActorId}` : ''}
-      </div>
-      {alert.inventoryAlertId && alert.actionable ? (
-        <div className="ec-alert-actions">
-          {alert.state === 'OPEN' ? (
-            <button type="button" disabled={busy} onClick={onAcknowledge}>
-              Acknowledge
-            </button>
-          ) : null}
-          <button type="button" disabled={busy} onClick={onAssign}>
-            Assign to me
-          </button>
+    <article className="ec-alert-card" data-tone={tone}>
+      <span className="ec-alert-rail" aria-hidden="true" />
+      <div className="ec-alert-card-content">
+        <div className="ec-alert-card-head">
+          <span className="ec-alert-severity" data-tone={tone}>
+            {alert.severity}
+          </span>
+          <small>{alert.source}</small>
         </div>
-      ) : null}
+        <strong className="ec-alert-title">{alert.title}</strong>
+        <p>{alert.detail}</p>
+        <div className="ec-alert-meta">
+          {alert.state}
+          {alert.assignedActorId ? ' • assigned' : ''} • {formatTime(alert.openedAt)}
+        </div>
+        {alert.inventoryAlertId && alert.actionable ? (
+          <div className="ec-alert-actions">
+            {alert.state === 'OPEN' ? (
+              <button type="button" disabled={busy} onClick={onAcknowledge}>
+                Acknowledge
+              </button>
+            ) : null}
+            <button type="button" className="ec-button-primary" disabled={busy} onClick={onAssign}>
+              Assign to me
+            </button>
+          </div>
+        ) : null}
+      </div>
     </article>
+  );
+}
+
+function paymentState(snapshot: CommandCentreSnapshot): { tone: Tone; label: string; detail: string } {
+  const attempts = snapshot.payments.attempts;
+  const unavailableRails = snapshot.payments.rails.filter((rail) => rail.status !== 'AVAILABLE').length;
+  if (attempts.unknownCount > 0) {
+    return {
+      tone: 'danger',
+      label: `${attempts.unknownCount} unknown`,
+      detail: `${moneyList(attempts.unknownValue)} requires reconciliation`,
+    };
+  }
+  if (attempts.pendingCount > 0 || attempts.failedCount > 0 || unavailableRails > 0) {
+    return {
+      tone: 'warning',
+      label: `${attempts.pendingCount} pending · ${attempts.failedCount} failed`,
+      detail: unavailableRails > 0 ? `${unavailableRails} payment rail issue(s)` : 'No unknown payment state',
+    };
+  }
+  if (attempts.totalCount === 0) {
+    return { tone: 'neutral', label: 'No attempts yet', detail: 'No payment attempts recorded' };
+  }
+  return { tone: 'success', label: 'Healthy', detail: 'No pending, failed or unknown attempts' };
+}
+
+function deviceState(snapshot: CommandCentreSnapshot): {
+  tone: Tone;
+  healthy: number;
+  degraded: number;
+  stale: number;
+  issues: number;
+} {
+  const healthy = snapshot.devices.filter((device) => device.status === 'HEALTHY').length;
+  const degraded = snapshot.devices.filter((device) => device.status === 'DEGRADED').length;
+  const stale = snapshot.devices.filter((device) => device.status === 'STALE').length;
+  return {
+    tone: stale > 0 ? 'danger' : degraded > 0 ? 'warning' : snapshot.devices.length > 0 ? 'success' : 'neutral',
+    healthy,
+    degraded,
+    stale,
+    issues: degraded + stale,
+  };
+}
+
+function SystemStatusRow({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: Tone }) {
+  return (
+    <div className="ec-system-row">
+      <span className="ec-system-dot" data-tone={tone} aria-hidden="true" />
+      <span className="ec-system-copy">
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+      <span className="ec-system-value" data-tone={tone}>
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -228,6 +366,7 @@ export function CommandCentreClient() {
     try {
       await fetchSnapshot(target);
       setActive(target);
+      window.sessionStorage.setItem(contextStorageKey, JSON.stringify(target));
       setMode((current) => nextRealtimeMode(current, 'CONNECT'));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to load event command centre');
@@ -237,6 +376,18 @@ export function CommandCentreClient() {
   useEffect(() => {
     const timerId = window.setInterval(() => setNow(Date.now()), 5_000);
     return () => window.clearInterval(timerId);
+  }, []);
+
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(contextStorageKey);
+    if (!stored) return;
+    try {
+      const parsed = JSON.parse(stored) as Partial<ActiveEvent>;
+      if (typeof parsed.organisationId === 'string') setOrganisationId(parsed.organisationId);
+      if (typeof parsed.eventId === 'string') setEventId(parsed.eventId);
+    } catch {
+      window.sessionStorage.removeItem(contextStorageKey);
+    }
   }, []);
 
   useEffect(() => {
@@ -308,290 +459,419 @@ export function CommandCentreClient() {
   }
 
   const stale = mode === 'LIVE' ? false : snapshotIsStale(snapshot, now);
-  const criticalAlertCount =
-    snapshot?.alerts.filter((alert) => alert.severity === 'CRITICAL').length ?? 0;
+  const criticalAlertCount = snapshot?.alerts.filter((alert) => alert.severity === 'CRITICAL').length ?? 0;
+  const payment = snapshot ? paymentState(snapshot) : null;
+  const devices = snapshot ? deviceState(snapshot) : null;
+  const criticalRiskCount = snapshot?.inventory.risks.filter((risk) => risk.severity.toUpperCase() === 'CRITICAL').length ?? 0;
+  const inventoryTone: Tone = !snapshot
+    ? 'neutral'
+    : criticalRiskCount > 0
+      ? 'danger'
+      : snapshot.inventory.risks.length > 0
+        ? 'warning'
+        : 'success';
 
   return (
-    <main className="ec-page ec-page--wide">
-      <header className="ec-page-header">
+    <main className="ec-page ec-page--wide ec-command-centre-page">
+      <header className="ec-live-header">
         <div>
           <p className="ec-page-kicker">Live operations</p>
-          <h1 className="ec-page-title">Event command centre</h1>
-          <p className="ec-page-description">
-            Start with exceptions and data freshness. Then use sales, stock, payments and device
-            detail to decide where the operating team should act next.
+          <div className="ec-live-title-row">
+            <h1 className="ec-live-title">{snapshot?.event.name ?? 'Event command centre'}</h1>
+            <StatusPill mode={mode} stale={stale} />
+          </div>
+          <p className="ec-live-description">
+            {snapshot
+              ? `${snapshot.event.timezone} · ${new Date(snapshot.event.startsAt).toLocaleString()} — ${new Date(snapshot.event.endsAt).toLocaleString()}`
+              : 'Load an event to see exceptions, sales, inventory, payments and register health in one operating view.'}
           </p>
+          {snapshot ? (
+            <div className="ec-live-meta">
+              <span>Snapshot {ageLabel(snapshot.freshness.generatedAt, now)}</span>
+              <span aria-hidden="true">•</span>
+              <span>Last sale {formatTime(snapshot.sales.lastSaleAt)}</span>
+              <span aria-hidden="true">•</span>
+              <span className="ec-mono">{snapshot.event.eventId}</span>
+            </div>
+          ) : null}
         </div>
-        <StatusPill mode={mode} stale={stale} />
       </header>
 
       <div className="ec-operations-stack">
-        <div className="ec-context-loader">
-          <input
-            value={organisationId}
-            onChange={(event) => setOrganisationId(event.target.value)}
-            placeholder="Organisation ID"
-            aria-label="Organisation ID"
-          />
-          <input
-            value={eventId}
-            onChange={(event) => setEventId(event.target.value)}
-            placeholder="Event ID"
-            aria-label="Event ID"
-          />
-          <button type="button" onClick={() => void load()}>
-            Load live event
-          </button>
-        </div>
+        {snapshot ? (
+          <details className="ec-context-switcher">
+            <summary>Change event context</summary>
+            <form
+              className="ec-context-loader ec-context-loader--embedded"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void load();
+              }}
+            >
+              <input
+                value={organisationId}
+                onChange={(event) => setOrganisationId(event.target.value)}
+                placeholder="Organisation ID"
+                aria-label="Organisation ID"
+              />
+              <input
+                value={eventId}
+                onChange={(event) => setEventId(event.target.value)}
+                placeholder="Event ID"
+                aria-label="Event ID"
+              />
+              <button type="submit" className="ec-button-primary">
+                Load event
+              </button>
+            </form>
+          </details>
+        ) : (
+          <section className="ec-context-card">
+            <div>
+              <strong>Select event context</strong>
+              <p>Use the organisation and event IDs from Setup. The last successful selection is remembered in this tab.</p>
+            </div>
+            <form
+              className="ec-context-loader"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void load();
+              }}
+            >
+              <input
+                value={organisationId}
+                onChange={(event) => setOrganisationId(event.target.value)}
+                placeholder="Organisation ID"
+                aria-label="Organisation ID"
+              />
+              <input
+                value={eventId}
+                onChange={(event) => setEventId(event.target.value)}
+                placeholder="Event ID"
+                aria-label="Event ID"
+              />
+              <button type="submit" className="ec-button-primary">
+                Load live event
+              </button>
+            </form>
+          </section>
+        )}
 
         {error ? <div className="ec-banner ec-banner--warning">{error}</div> : null}
 
-        {snapshot ? (
-          <div className="ec-context-bar">
-            <div>
-              <strong>{snapshot.event.name}</strong> • {snapshot.event.lifecycle}
-            </div>
-            <div>
-              Snapshot generated {new Date(snapshot.freshness.generatedAt).toLocaleTimeString()}
-            </div>
-          </div>
-        ) : null}
-
         {snapshot && stale ? (
           <div className="ec-banner ec-banner--danger">
-            <strong>Do not treat this screen as current truth.</strong> Live streaming is
-            unavailable or this snapshot is old. Local POS selling can continue; investigate
-            connectivity before acting on dashboard timing alone.
-          </div>
-        ) : null}
-
-        {!snapshot ? (
-          <div className="ec-callout">
-            <strong>Choose an event to start.</strong> The live view will prioritise exceptions,
-            payment uncertainty, stock risk and delayed registers before performance detail.
+            <strong>Do not treat this screen as current truth.</strong> Live streaming is unavailable or this snapshot is old. Local POS selling can continue; investigate connectivity before acting on dashboard timing alone.
           </div>
         ) : null}
 
         {snapshot ? (
           <>
-            <Panel
-              title={`Action centre • ${snapshot.alerts.length} exception(s)`}
-              description="Resolve or assign operational exceptions before reading the rest of the dashboard."
-              priority
-            >
-              <div style={{ marginBottom: 12 }}>
-                <span
-                  className="ec-status-pill"
-                  data-tone={
-                    criticalAlertCount > 0
-                      ? 'danger'
-                      : snapshot.alerts.length > 0
-                        ? 'warning'
-                        : 'success'
-                  }
+            <LifecycleTrack current={snapshot.event.lifecycle} />
+
+            <div className="ec-health-row" aria-label="System health summary">
+              <StatusChip
+                tone={payment?.tone ?? 'neutral'}
+                label={`Payments · ${payment?.label ?? '—'}`}
+              />
+              <StatusChip
+                tone={devices?.tone ?? 'neutral'}
+                label={
+                  snapshot.devices.length === 0
+                    ? 'Sync · no devices yet'
+                    : devices?.issues === 0
+                      ? 'Sync · all devices healthy'
+                      : `Sync · ${devices?.issues ?? 0} device issue(s)`
+                }
+              />
+              <StatusChip
+                tone={inventoryTone}
+                label={
+                  snapshot.inventory.risks.length === 0
+                    ? 'Inventory · no active risk'
+                    : `Inventory · ${snapshot.inventory.risks.length} at risk`
+                }
+              />
+              <StatusChip
+                tone={criticalAlertCount > 0 ? 'danger' : snapshot.alerts.length > 0 ? 'warning' : 'success'}
+                label={snapshot.alerts.length === 0 ? 'Alerts · all clear' : `Alerts · ${snapshot.alerts.length} active`}
+              />
+              <StatusChip tone="success" label="Local-first POS protected" />
+            </div>
+
+            <section className="ec-kpi-strip" aria-label="Event operating snapshot">
+              <Metric
+                label="Gross sales"
+                value={moneyList(snapshot.sales.grossSales)}
+                sub={`Velocity ${velocityList(snapshot.sales.currentSalesVelocity)}`}
+              />
+              <Metric
+                label="Transactions"
+                value={snapshot.sales.transactionCount.toLocaleString()}
+                sub={`Average order ${averageList(snapshot.sales.averageOrderValue)}`}
+              />
+              <Metric
+                label="At-risk SKUs"
+                value={snapshot.inventory.risks.length}
+                sub={criticalRiskCount > 0 ? `${criticalRiskCount} critical` : 'No critical stock risk'}
+                tone={inventoryTone}
+              />
+              <Metric
+                label="Device issues"
+                value={devices?.issues ?? 0}
+                sub={`${devices?.degraded ?? 0} degraded · ${devices?.stale ?? 0} stale`}
+                tone={devices?.tone ?? 'neutral'}
+              />
+              <Metric
+                label="Active alerts"
+                value={snapshot.alerts.length}
+                sub={criticalAlertCount > 0 ? `${criticalAlertCount} critical` : 'No critical alerts'}
+                tone={criticalAlertCount > 0 ? 'danger' : snapshot.alerts.length > 0 ? 'warning' : 'success'}
+              />
+              <Metric
+                label="Data freshness"
+                value={stale ? 'Stale' : mode === 'LIVE' ? 'Live' : mode === 'POLLING' ? 'Polling' : 'Connecting'}
+                sub={`Snapshot ${ageLabel(snapshot.freshness.generatedAt, now)}`}
+                tone={stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning'}
+              />
+            </section>
+
+            {snapshot.alerts.length > 0 || snapshot.inventory.risks.length > 0 || (devices?.issues ?? 0) > 0 ? (
+              <div className="ec-exception-strip" data-tone={criticalAlertCount > 0 ? 'danger' : 'warning'}>
+                <span className="ec-exception-icon" aria-hidden="true">!</span>
+                <div>
+                  <strong>Attention required</strong>
+                  <span>
+                    {snapshot.alerts.length} active alert(s) · {snapshot.inventory.risks.length} inventory risk(s) · {devices?.issues ?? 0} device issue(s)
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="ec-exception-strip" data-tone="success">
+                <span className="ec-exception-icon" aria-hidden="true">✓</span>
+                <div>
+                  <strong>All clear</strong>
+                  <span>No active alerts, inventory risks or device health exceptions are projected.</span>
+                </div>
+              </div>
+            )}
+
+            <div className="ec-live-grid">
+              <div className="ec-live-main">
+                <Panel
+                  title="Sales performance"
+                  meta="Closed event orders, current velocity and location performance"
+                  action={<span className="ec-panel-meta">Last sale {formatTime(snapshot.sales.lastSaleAt)}</span>}
                 >
-                  {criticalAlertCount > 0
-                    ? `${criticalAlertCount} critical`
-                    : snapshot.alerts.length > 0
-                      ? 'Attention required'
-                      : 'No active exceptions'}
-                </span>
-              </div>
-              {snapshot.alerts.length === 0 ? (
-                <div className="ec-banner ec-banner--success">
-                  No active operational exceptions are currently projected.
-                </div>
-              ) : null}
-              <div className="ec-action-list">
-                {snapshot.alerts.map((alert) => (
-                  <AlertCard
-                    key={alert.id}
-                    alert={alert}
-                    busy={busyAlertId === alert.inventoryAlertId}
-                    onAcknowledge={() => {
-                      if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
-                    }}
-                    onAssign={() => {
-                      if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ASSIGN');
-                    }}
-                  />
-                ))}
-              </div>
-            </Panel>
-
-            <section className="ec-kpi-grid" aria-label="Event sales snapshot">
-              <Metric label="Gross sales" value={moneyList(snapshot.sales.grossSales)} />
-              <Metric label="Transactions" value={snapshot.sales.transactionCount} />
-              <Metric
-                label="Average order value"
-                value={averageList(snapshot.sales.averageOrderValue)}
-              />
-              <Metric
-                label="Current sales velocity"
-                value={velocityList(snapshot.sales.currentSalesVelocity)}
-              />
-            </section>
-
-            <section className="ec-control-grid">
-              <Panel
-                title="Location performance"
-                description="Find bars or sales points that may need staffing or operational attention."
-              >
-                {snapshot.salesLocations.length === 0 ? (
-                  <p className="ec-empty">No closed sales yet.</p>
-                ) : null}
-                <div className="ec-list">
-                  {snapshot.salesLocations.map((location) => (
-                    <div className="ec-list-row" key={location.salesLocationId}>
-                      <strong>{location.name}</strong>
-                      <div>
-                        {location.transactionCount} transactions • {moneyList(location.grossSales)}
-                      </div>
-                      <small>
-                        {velocityList(location.currentSalesVelocity)} • last sale{' '}
-                        {location.lastSaleAt
-                          ? new Date(location.lastSaleAt).toLocaleTimeString()
-                          : 'never'}
-                      </small>
+                  <div className="ec-inline-metrics">
+                    <div>
+                      <small>Current velocity</small>
+                      <strong>{velocityList(snapshot.sales.currentSalesVelocity)}</strong>
                     </div>
-                  ))}
-                </div>
-              </Panel>
-
-              <Panel
-                title="Stockout risk"
-                description="Prioritise products with low cover and safe replenishment options."
-              >
-                {snapshot.inventory.risks.length === 0 ? (
-                  <p className="ec-empty">No active inventory risks.</p>
-                ) : null}
-                <div className="ec-list">
-                  {snapshot.inventory.risks.slice(0, 12).map((risk) => (
-                    <div className="ec-list-row" key={risk.alertId}>
-                      <strong>
-                        {risk.severity} • {risk.skuName}
-                      </strong>
-                      <div>
-                        {risk.inventoryLocationName ?? 'Event-wide'} • available{' '}
-                        {risk.availableQuantityBase}
-                      </div>
-                      <small>
-                        {risk.minutesOfCover ?? 'Unknown'} min cover
-                        {risk.suggestedTransferQuantityBase
-                          ? ` • suggest ${risk.suggestedTransferQuantityBase} from ${risk.suggestedSourceLocationName ?? risk.suggestedSourceLocationId ?? 'best source'}`
-                          : ''}
-                      </small>
+                    <div>
+                      <small>Average order</small>
+                      <strong>{averageList(snapshot.sales.averageOrderValue)}</strong>
                     </div>
-                  ))}
-                </div>
-              </Panel>
-
-              <Panel
-                title="Payment health"
-                description="Unknown and pending payments need attention before anyone attempts another charge."
-              >
-                <div className="ec-kpi-grid">
-                  <Metric
-                    label="Pending"
-                    value={`${(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%`}
-                  />
-                  <Metric
-                    label="Unknown"
-                    value={`${(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%`}
-                  />
-                  <Metric
-                    label="Failed"
-                    value={`${(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%`}
-                  />
-                </div>
-                <div className="ec-list" style={{ marginTop: 12 }}>
-                  {snapshot.payments.rails.map((rail) => (
-                    <div className="ec-list-row" key={rail.providerId}>
-                      <strong>{rail.providerId}</strong> • {rail.status}
-                      {rail.detailCode ? ` • ${rail.detailCode}` : ''}
+                    <div>
+                      <small>Active sales locations</small>
+                      <strong>{snapshot.salesLocations.length}</strong>
                     </div>
-                  ))}
-                </div>
-                <h3 style={{ fontSize: 14 }}>Settled method split</h3>
-                <div className="ec-list">
-                  {snapshot.payments.settledMethods.map((method) => (
-                    <div className="ec-list-row" key={`${method.providerId}:${method.currency}`}>
-                      {method.providerId}: {method.transactionCount} •{' '}
-                      {formatMinor(method.currency, method.valueMinor)}
-                    </div>
-                  ))}
-                </div>
-              </Panel>
-
-              <Panel
-                title="Register & sync health"
-                description="A delayed dashboard does not mean a register has lost its locally committed sales."
-              >
-                {snapshot.devices.length === 0 ? (
-                  <p className="ec-empty">No event devices observed yet.</p>
-                ) : null}
-                <div className="ec-list">
-                  {snapshot.devices.map((device) => {
-                    const salesAvailable = device.transactionCount !== undefined;
-                    return (
-                      <div className="ec-list-row" key={device.deviceId}>
-                        <strong>
-                          {device.deviceId} • {device.status}
-                        </strong>
-                        <div>
-                          {device.salesLocationName ?? 'Unknown location'} • backlog{' '}
-                          {device.edgeBacklogCount}
-                        </div>
-                        {salesAvailable ? (
+                  </div>
+                  {snapshot.salesLocations.length === 0 ? (
+                    <p className="ec-empty">No closed sales yet.</p>
+                  ) : (
+                    <div className="ec-compact-list">
+                      {snapshot.salesLocations.map((location) => (
+                        <div className="ec-compact-row" key={location.salesLocationId}>
                           <div>
-                            {device.transactionCount} transactions •{' '}
-                            {moneyList(device.grossSales ?? [])} •{' '}
-                            {velocityList(device.currentSalesVelocity ?? [])}
+                            <strong>{location.name}</strong>
+                            <small>Last sale {formatTime(location.lastSaleAt)}</small>
                           </div>
-                        ) : (
-                          <div>Device sales detail temporarily unavailable.</div>
-                        )}
-                        <small>
-                          {device.syncAgeSeconds === null
-                            ? 'No heartbeat'
-                            : `${device.syncAgeSeconds}s since heartbeat`}
-                        </small>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Panel>
-            </section>
+                          <div className="ec-compact-row-value">
+                            <strong>{moneyList(location.grossSales)}</strong>
+                            <small>{location.transactionCount} txn · {velocityList(location.currentSalesVelocity)}</small>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Panel>
 
-            <section className="ec-control-grid">
-              <Panel title="Top products" description="Current sales mix from closed event orders.">
-                <div className="ec-list">
-                  {snapshot.topProducts.map((product) => (
-                    <div className="ec-list-row" key={product.skuId}>
-                      <strong>{product.name}</strong> • {product.quantitySold} sold •{' '}
-                      {moneyList(product.grossSales)}
+                <Panel
+                  title="Inventory risk"
+                  meta="Products requiring the earliest operational response"
+                  action={<Link className="ec-panel-link" href="/inventory">View inventory →</Link>}
+                >
+                  {snapshot.inventory.risks.length === 0 ? (
+                    <div className="ec-empty-state" data-tone="success">No active inventory risks.</div>
+                  ) : (
+                    <div className="ec-risk-list">
+                      {snapshot.inventory.risks.slice(0, 10).map((risk) => {
+                        const riskTone: Tone = risk.severity.toUpperCase() === 'CRITICAL' ? 'danger' : 'warning';
+                        return (
+                          <div className="ec-risk-row" key={risk.alertId}>
+                            <span className="ec-risk-severity" data-tone={riskTone}>{risk.severity}</span>
+                            <div className="ec-risk-copy">
+                              <strong>{risk.skuName}</strong>
+                              <span>{risk.inventoryLocationName ?? 'Event-wide'} · {risk.availableQuantityBase} available</span>
+                              {risk.suggestedTransferQuantityBase ? (
+                                <small>
+                                  Suggested transfer {risk.suggestedTransferQuantityBase} from {risk.suggestedSourceLocationName ?? risk.suggestedSourceLocationId ?? 'best source'}
+                                </small>
+                              ) : null}
+                            </div>
+                            <div className="ec-risk-cover" data-tone={riskTone}>
+                              <strong>{risk.minutesOfCover ?? '—'}</strong>
+                              <small>min cover</small>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
-              </Panel>
-              <Panel
-                title="Active transfers"
-                description="Stock in motion remains visible until receipt is recorded."
-              >
-                {snapshot.inventory.activeTransfers.length === 0 ? (
-                  <p className="ec-empty">No active transfers.</p>
-                ) : null}
-                <div className="ec-list">
-                  {snapshot.inventory.activeTransfers.map((transfer) => (
-                    <div className="ec-list-row" key={transfer.transferId}>
-                      <strong>{transfer.state}</strong> •{' '}
-                      {transfer.sourceLocationName ?? transfer.sourceLocationId} →{' '}
-                      {transfer.destinationLocationName ?? transfer.destinationLocationId}
+                  )}
+                </Panel>
+
+                <Panel
+                  title="Device health"
+                  meta="Register heartbeat, backlog and locally committed sales visibility"
+                  action={<Link className="ec-panel-link" href="/sync-health">View devices →</Link>}
+                >
+                  <div className="ec-device-summary">
+                    <div data-tone="success"><strong>{devices?.healthy ?? 0}</strong><span>Healthy</span></div>
+                    <div data-tone="warning"><strong>{devices?.degraded ?? 0}</strong><span>Degraded</span></div>
+                    <div data-tone="danger"><strong>{devices?.stale ?? 0}</strong><span>Stale</span></div>
+                    <div><strong>{snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0)}</strong><span>Total backlog</span></div>
+                  </div>
+                  {snapshot.devices.length === 0 ? (
+                    <p className="ec-empty">No event devices observed yet.</p>
+                  ) : (
+                    <div className="ec-compact-list">
+                      {snapshot.devices
+                        .slice()
+                        .sort((left, right) => {
+                          const order = { STALE: 0, DEGRADED: 1, HEALTHY: 2 } as const;
+                          return order[left.status] - order[right.status];
+                        })
+                        .slice(0, 12)
+                        .map((device) => (
+                          <div className="ec-compact-row" key={device.deviceId}>
+                            <div className="ec-device-name">
+                              <span className="ec-system-dot" data-tone={device.status === 'STALE' ? 'danger' : device.status === 'DEGRADED' ? 'warning' : 'success'} aria-hidden="true" />
+                              <span>
+                                <strong>{device.deviceId}</strong>
+                                <small>{device.salesLocationName ?? 'Unknown location'}</small>
+                              </span>
+                            </div>
+                            <div className="ec-compact-row-value">
+                              <strong>{device.status}</strong>
+                              <small>
+                                backlog {device.edgeBacklogCount} · {device.syncAgeSeconds === null ? 'no heartbeat' : `${device.syncAgeSeconds}s sync age`}
+                              </small>
+                            </div>
+                          </div>
+                        ))}
                     </div>
-                  ))}
+                  )}
+                </Panel>
+
+                <div className="ec-two-panel-grid">
+                  <Panel title="Top products" meta="Current closed-order sales mix">
+                    {snapshot.topProducts.length === 0 ? <p className="ec-empty">No product sales yet.</p> : null}
+                    <div className="ec-compact-list">
+                      {snapshot.topProducts.slice(0, 10).map((product) => (
+                        <div className="ec-compact-row" key={product.skuId}>
+                          <div>
+                            <strong>{product.name}</strong>
+                            <small>{product.quantitySold} sold</small>
+                          </div>
+                          <div className="ec-compact-row-value"><strong>{moneyList(product.grossSales)}</strong></div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                  <Panel title="Active transfers" meta="Stock in motion until receipt is recorded">
+                    {snapshot.inventory.activeTransfers.length === 0 ? <p className="ec-empty">No active transfers.</p> : null}
+                    <div className="ec-compact-list">
+                      {snapshot.inventory.activeTransfers.map((transfer) => (
+                        <div className="ec-transfer-row" key={transfer.transferId}>
+                          <span className="ec-status-pill" data-tone="warning">{transfer.state}</span>
+                          <strong>{transfer.sourceLocationName ?? transfer.sourceLocationId} → {transfer.destinationLocationName ?? transfer.destinationLocationId}</strong>
+                          <small>Updated {formatTime(transfer.updatedAt)}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
                 </div>
-              </Panel>
-            </section>
+              </div>
+
+              <aside className="ec-live-rail">
+                <Panel title="System status" meta={`Snapshot ${ageLabel(snapshot.freshness.generatedAt, now)}`}>
+                  <div className="ec-system-list">
+                    <SystemStatusRow label="Payments" value={payment?.label ?? '—'} detail={payment?.detail ?? 'No payment data'} tone={payment?.tone ?? 'neutral'} />
+                    <SystemStatusRow
+                      label="Sync"
+                      value={snapshot.devices.length === 0 ? 'No devices' : devices?.issues === 0 ? 'Healthy' : `${devices?.issues ?? 0} issues`}
+                      detail={`${devices?.healthy ?? 0} healthy · ${devices?.degraded ?? 0} degraded · ${devices?.stale ?? 0} stale`}
+                      tone={devices?.tone ?? 'neutral'}
+                    />
+                    <SystemStatusRow
+                      label="Inventory"
+                      value={snapshot.inventory.risks.length === 0 ? 'Healthy' : `${snapshot.inventory.risks.length} at risk`}
+                      detail={criticalRiskCount > 0 ? `${criticalRiskCount} critical risk(s)` : 'No critical stock risk'}
+                      tone={inventoryTone}
+                    />
+                    <SystemStatusRow
+                      label="Realtime"
+                      value={stale ? 'Stale' : mode === 'LIVE' ? 'Live' : mode === 'POLLING' ? 'Polling' : 'Connecting'}
+                      detail={`Generated ${ageLabel(snapshot.freshness.generatedAt, now)}`}
+                      tone={stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning'}
+                    />
+                  </div>
+                </Panel>
+
+                <Panel title="Active alerts" meta={`${snapshot.alerts.length} requiring attention`}>
+                  {snapshot.alerts.length === 0 ? (
+                    <div className="ec-empty-state" data-tone="success">No active operational exceptions.</div>
+                  ) : (
+                    <div className="ec-action-list">
+                      {snapshot.alerts.map((alert) => (
+                        <AlertCard
+                          key={alert.id}
+                          alert={alert}
+                          busy={busyAlertId === alert.inventoryAlertId}
+                          onAcknowledge={() => {
+                            if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
+                          }}
+                          onAssign={() => {
+                            if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ASSIGN');
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </Panel>
+
+                <Panel title="Payment health" meta="Do not retry unknown payments">
+                  <div className="ec-payment-health">
+                    <div><span>Pending</span><strong>{snapshot.payments.attempts.pendingCount}</strong><small>{(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%</small></div>
+                    <div data-tone={snapshot.payments.attempts.unknownCount > 0 ? 'danger' : 'neutral'}><span>Unknown</span><strong>{snapshot.payments.attempts.unknownCount}</strong><small>{(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%</small></div>
+                    <div><span>Failed</span><strong>{snapshot.payments.attempts.failedCount}</strong><small>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</small></div>
+                  </div>
+                  {snapshot.payments.attempts.unknownCount > 0 ? (
+                    <div className="ec-payment-unknown">Unknown value: <strong>{moneyList(snapshot.payments.attempts.unknownValue)}</strong></div>
+                  ) : null}
+                  <div className="ec-rail-list">
+                    {snapshot.payments.rails.map((rail) => (
+                      <div key={rail.providerId}>
+                        <span className="ec-system-dot" data-tone={rail.status === 'AVAILABLE' ? 'success' : rail.status === 'DEGRADED' ? 'warning' : 'neutral'} aria-hidden="true" />
+                        <span><strong>{rail.providerId}</strong><small>{rail.detailCode ?? rail.status}</small></span>
+                        <b>{rail.status}</b>
+                      </div>
+                    ))}
+                  </div>
+                </Panel>
+              </aside>
+            </div>
           </>
         ) : null}
       </div>
