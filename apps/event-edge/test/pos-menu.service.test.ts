@@ -37,6 +37,7 @@ function row(candidate: PosMenuSnapshot) {
 function transactionalDatabase(existing?: PosMenuSnapshot) {
   const query = vi
     .fn()
+    .mockResolvedValueOnce({ rows: [] })
     .mockResolvedValueOnce({ rows: existing ? [row(existing)] : [] })
     .mockResolvedValueOnce({ rows: [row(snapshot)] });
   const database = {
@@ -47,13 +48,23 @@ function transactionalDatabase(existing?: PosMenuSnapshot) {
 }
 
 describe('PosMenuService', () => {
+  it('serializes installs before reading the current snapshot', async () => {
+    const { database, query } = transactionalDatabase();
+    const service = new PosMenuService(database);
+
+    await service.install(snapshot);
+
+    expect(query.mock.calls[0]?.[0]).toContain('pg_advisory_xact_lock');
+    expect(query.mock.calls[0]?.[1]).toEqual(['pos-menu:event-1:bar-1']);
+  });
+
   it('rejects rollback to an older menu snapshot version', async () => {
     const newer = { ...snapshot, version: 3 };
     const { database, query } = transactionalDatabase(newer);
     const service = new PosMenuService(database);
 
     await expect(service.install(snapshot)).rejects.toBeInstanceOf(ConflictException);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it('treats the same version and checksum as idempotent', async () => {
@@ -62,7 +73,7 @@ describe('PosMenuService', () => {
     const service = new PosMenuService(database);
 
     await expect(service.install(snapshot)).resolves.toEqual(existing);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it('rejects content drift when a version is reused', async () => {
@@ -71,7 +82,7 @@ describe('PosMenuService', () => {
     const service = new PosMenuService(database);
 
     await expect(service.install(snapshot)).rejects.toBeInstanceOf(ConflictException);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
   });
 
   it('installs a strictly newer version', async () => {
@@ -80,7 +91,7 @@ describe('PosMenuService', () => {
     const service = new PosMenuService(database);
 
     await expect(service.install(snapshot)).resolves.toEqual(snapshot);
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(3);
   });
 
   it('returns the current scoped snapshot and fails closed when absent', async () => {
