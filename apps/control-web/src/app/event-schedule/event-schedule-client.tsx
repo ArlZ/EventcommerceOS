@@ -1,14 +1,14 @@
 'use client';
 
+import type { EventConfigurationView, EventRecord } from '@event-commerce/contracts';
 import type { FormEvent } from 'react';
 import { useMemo, useState } from 'react';
-import type { EventConfigurationView, EventRecord } from '@event-commerce/contracts';
 import { canEditEventSchedule, validateEventSchedule } from './event-schedule';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
 type Method = 'GET' | 'PATCH';
-type Json = Record<string, unknown>;
+type Json = object;
 
 const fieldStyle: React.CSSProperties = {
   width: '100%',
@@ -58,7 +58,8 @@ export function EventScheduleClient() {
   const [status, setStatus] = useState('Load an organisation to review its event schedule.');
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
-  const activeEvents = configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
+  const activeEvents =
+    configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
   const selectedEvent = activeEvents.find((event) => event.id === eventId) ?? null;
   const editable = selectedEvent ? canEditEventSchedule(selectedEvent.lifecycle) : false;
 
@@ -91,8 +92,14 @@ export function EventScheduleClient() {
       );
       setOrganisationId(nextOrganisationId);
       setConfiguration(view);
-      const previous = view.events.find((event) => event.id === eventId && event.lifecycle !== 'ARCHIVED');
-      const nextEvent = previous ?? view.events.find((event) => event.lifecycle === 'DRAFT') ?? view.events.find((event) => event.lifecycle !== 'ARCHIVED') ?? null;
+      const previous = view.events.find(
+        (event) => event.id === eventId && event.lifecycle !== 'ARCHIVED',
+      );
+      const nextEvent =
+        previous ??
+        view.events.find((event) => event.lifecycle === 'DRAFT') ??
+        view.events.find((event) => event.lifecycle !== 'ARCHIVED') ??
+        null;
       selectEvent(nextEvent);
       setStatus(`Loaded ${view.organisation.name}.`);
       setStatusTone('success');
@@ -165,7 +172,11 @@ export function EventScheduleClient() {
             disabled={busy}
             style={fieldStyle}
           />
-          <button type="submit" disabled={busy || !organisationId.trim()} style={{ padding: '9px 12px' }}>
+          <button
+            type="submit"
+            disabled={busy || !organisationId.trim()}
+            style={{ padding: '9px 12px' }}
+          >
             Load organisation
           </button>
         </form>
@@ -189,7 +200,8 @@ export function EventScheduleClient() {
               id="schedule-event-select"
               value={eventId}
               onChange={(event) => {
-                const next = activeEvents.find((candidate) => candidate.id === event.target.value) ?? null;
+                const next =
+                  activeEvents.find((candidate) => candidate.id === event.target.value) ?? null;
                 selectEvent(next);
               }}
               disabled={busy}
@@ -225,7 +237,8 @@ export function EventScheduleClient() {
               <p className="ec-eyebrow">Schedule</p>
               <h2>Edit trading window</h2>
               <p>
-                Event Control only permits schedule changes while the event is still DRAFT. Use ISO timestamps with an explicit offset.
+                Event Control only permits schedule changes while the event is still DRAFT. Use ISO
+                timestamps with an explicit offset.
               </p>
             </div>
             <span className="ec-status-pill" data-tone={editable ? 'warning' : 'danger'}>
@@ -235,7 +248,8 @@ export function EventScheduleClient() {
 
           {!editable ? (
             <div className="ec-banner ec-banner--warning" style={{ marginBottom: 12 }}>
-              This event is {selectedEvent.lifecycle}. Schedule editing is disabled here to avoid changing a live or closed trading window.
+              This event is {selectedEvent.lifecycle}. Schedule editing is disabled here to avoid
+              changing a live or closed trading window.
             </div>
           ) : null}
 
@@ -273,7 +287,12 @@ export function EventScheduleClient() {
                 style={fieldStyle}
               />
             </label>
-            <button className="ec-button-primary" type="submit" disabled={!editable || busy} style={{ padding: '9px 12px' }}>
+            <button
+              className="ec-button-primary"
+              type="submit"
+              disabled={!editable || busy}
+              style={{ padding: '9px 12px' }}
+            >
               Save event schedule
             </button>
           </form>
