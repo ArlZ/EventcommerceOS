@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  currencyFractionDigits,
-  priceToMinorUnits,
-} from '../src/app/configuration/pricing';
+import { currencyFractionDigits, priceToMinorUnits } from '../src/app/configuration/pricing';
 
 describe('configuration price entry', () => {
   it('converts a normal KES display price to integer minor units', () => {

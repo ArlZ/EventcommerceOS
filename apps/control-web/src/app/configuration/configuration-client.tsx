@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { priceToMinorUnits } from './pricing';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -910,11 +911,15 @@ export function ConfigurationClient() {
                   event.preventDefault();
                   const form = new FormData(event.currentTarget);
                   const salesLocationId = String(form.get('salesLocationId') ?? '');
+                  const currency = String(form.get('currency') ?? '')
+                    .trim()
+                    .toUpperCase();
+                  const displayAmount = String(form.get('amount') ?? '').trim();
                   void run(async () => {
                     await api(`/menu-items/${menuItemId}/prices`, 'PUT', actorId, organisationId, {
                       salesLocationId: salesLocationId || null,
-                      amountMinor: Number(form.get('amountMinor')),
-                      currency: form.get('currency'),
+                      amountMinor: priceToMinorUnits(displayAmount, currency),
+                      currency,
                     });
                   }, 'Price saved');
                 }}
@@ -932,22 +937,35 @@ export function ConfigurationClient() {
                     </option>
                   ))}
                 </select>
-                <Input
-                  name="amountMinor"
-                  type="number"
-                  step="1"
-                  min="0"
-                  placeholder="Price in minor units, e.g. 25000"
-                  required
-                  disabled={!menuItemId || busy}
-                />
-                <Input
-                  name="currency"
-                  defaultValue="KES"
-                  maxLength={3}
-                  required
-                  disabled={!menuItemId || busy}
-                />
+                <label>
+                  <strong>Price</strong>
+                  <Input
+                    name="amount"
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0"
+                    placeholder="250"
+                    required
+                    disabled={!menuItemId || busy}
+                  />
+                  <small className="ec-alert-meta">
+                    Enter the amount guests see. Event Control converts it to integer minor units
+                    before saving.
+                  </small>
+                </label>
+                <label>
+                  <strong>Currency</strong>
+                  <Input
+                    name="currency"
+                    defaultValue="KES"
+                    minLength={3}
+                    maxLength={3}
+                    pattern="[A-Za-z]{3}"
+                    required
+                    disabled={!menuItemId || busy}
+                  />
+                </label>
                 <select name="salesLocationId" disabled={!menuItemId || busy} style={fieldStyle}>
                   <option value="">Default menu price</option>
                   {currentEventLocations.map((item) => (
