@@ -11,16 +11,40 @@ export type HeadersRecord = Record<string, string | string[] | undefined>;
 export interface OperatorIdentity {
   sessionId: string;
   actorId: string;
+  displayName: string;
   platformAdmin: boolean;
+  expiresAt: string;
+}
+
+export interface OperatorSessionMembershipView {
+  organisationId: string;
+  organisationName: string;
+  role: OperatorOrganisationRole;
+}
+
+export interface OperatorSessionView {
+  actorId: string;
+  displayName: string;
+  platformAdmin: boolean;
+  expiresAt: string;
+  memberships: OperatorSessionMembershipView[];
 }
 
 interface SessionRow extends QueryResultRow {
   session_id: string;
   actor_id: string;
+  display_name: string;
   platform_role: 'PLATFORM_ADMIN' | null;
+  expires_at: Date;
 }
 
 interface MembershipRow extends QueryResultRow {
+  role: OperatorOrganisationRole;
+}
+
+interface SessionMembershipRow extends QueryResultRow {
+  organisation_id: string;
+  organisation_name: string;
   role: OperatorOrganisationRole;
 }
 
@@ -79,7 +103,9 @@ export class OperatorAuthService {
          AND identity.status='ACTIVE'
        RETURNING session.id::text AS session_id,
                  identity.id::text AS actor_id,
-                 identity.platform_role`,
+                 identity.display_name,
+                 identity.platform_role,
+                 session.expires_at`,
       [digest(token)],
     );
     const row = rows[0];
@@ -87,7 +113,35 @@ export class OperatorAuthService {
     return {
       sessionId: row.session_id,
       actorId: row.actor_id,
+      displayName: row.display_name,
       platformAdmin: row.platform_role === 'PLATFORM_ADMIN',
+      expiresAt: row.expires_at.toISOString(),
+    };
+  }
+
+  async sessionView(headers: HeadersRecord): Promise<OperatorSessionView> {
+    const identity = await this.authenticate(headers);
+    const memberships = await this.database.query<SessionMembershipRow>(
+      `SELECT membership.organisation_id::text AS organisation_id,
+              organisation.name AS organisation_name,
+              membership.role
+       FROM operator_memberships membership
+       JOIN organisations organisation ON organisation.id=membership.organisation_id
+       WHERE membership.actor_id=$1
+         AND membership.status='ACTIVE'
+       ORDER BY lower(organisation.name), membership.organisation_id`,
+      [identity.actorId],
+    );
+    return {
+      actorId: identity.actorId,
+      displayName: identity.displayName,
+      platformAdmin: identity.platformAdmin,
+      expiresAt: identity.expiresAt,
+      memberships: memberships.map((membership) => ({
+        organisationId: membership.organisation_id,
+        organisationName: membership.organisation_name,
+        role: membership.role,
+      })),
     };
   }
 
