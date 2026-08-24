@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
           localDeviceId = deviceId
           knownEndpoint = syncProvisioning.endpoint().orEmpty()
           provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
+          repository.retireUnusedDevelopmentMenu()
           menuVersion = repository.activeProductionMenu()?.version
           loading = false
         }
