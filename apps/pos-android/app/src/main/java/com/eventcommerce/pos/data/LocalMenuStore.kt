@@ -12,17 +12,27 @@ class LocalMenuStore(
   private val faultInjector: TransactionFaultInjector,
 ) {
   private val dao = db.menu()
+  private val metadata = db.localMetadata()
 
   suspend fun active(): CachedMenu? = dao.activeVersion()?.let { snapshot(it) }
 
   suspend fun version(version: Long): CachedMenu? = dao.version(version)?.let { snapshot(it) }
 
-  suspend fun install(candidate: MenuCandidate): CachedMenu {
+  suspend fun assignedSalesLocationId(): String? =
+    metadata.find(SALES_LOCATION_METADATA_KEY)?.value?.takeIf { it.isNotBlank() }
+
+  suspend fun install(candidate: MenuCandidate, salesLocationId: String? = null): CachedMenu {
     MenuIntegrity.validate(candidate)
+    val normalizedSalesLocationId = salesLocationId?.trim()?.also {
+      require(it.isNotBlank()) { "sales location assignment must not be blank" }
+    }
     val current = dao.activeVersion()
     if (current != null && candidate.version == current.version) {
       require(candidate.eventId == current.eventId) { "menu version collides with another event" }
       require(candidate.checksum == current.checksum) { "menu version already exists with different content" }
+      if (normalizedSalesLocationId != null) {
+        metadata.put(LocalMetadataEntity(SALES_LOCATION_METADATA_KEY, normalizedSalesLocationId))
+      }
       return snapshot(current)
     }
     require(current == null || candidate.eventId == current.eventId) {
@@ -46,6 +56,9 @@ class LocalMenuStore(
         ),
       )
       dao.insertItems(candidate.items.map { it.entity(candidate.version) })
+      if (normalizedSalesLocationId != null) {
+        metadata.put(LocalMetadataEntity(SALES_LOCATION_METADATA_KEY, normalizedSalesLocationId))
+      }
       faultInjector.beforeCommit("installMenu")
     }
     return snapshot(requireNotNull(dao.activeVersion()))
@@ -84,4 +97,8 @@ class LocalMenuStore(
     favourite = favourite,
     sortOrder = sortOrder,
   )
+
+  companion object {
+    const val SALES_LOCATION_METADATA_KEY = "assigned_sales_location_id"
+  }
 }
