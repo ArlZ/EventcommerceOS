@@ -33,8 +33,20 @@ jobs:
           end_marker = "\n          PY\n\n          pnpm exec prettier"
           start = workflow.index(start_marker) + len(start_marker)
           end = workflow.index(end_marker, start)
-          lines = workflow[start:end].splitlines()
-          script = '\n'.join(line[10:] if line.startswith('          ') else line for line in lines)
+          raw_lines = workflow[start:end].splitlines()
+          lines = []
+          in_triple = False
+          for line in raw_lines:
+              if in_triple:
+                  lines.append(line)
+                  if line.count('"""') % 2 == 1:
+                      in_triple = False
+                  continue
+              normalized = line[10:] if line.startswith('          ') else line
+              lines.append(normalized)
+              if normalized.count('"""') % 2 == 1:
+                  in_triple = True
+          script = '\n'.join(lines)
           exec(compile(script, 'named-context-first', 'exec'))
           PY
 
