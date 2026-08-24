@@ -1,0 +1,37 @@
+name: Clean named context CSS diff
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/named-context-first
+      - name: Restore existing attribute-selector quote style
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path('apps/control-web/src/app/operations.css')
+          text = path.read_text()
+          text = re.sub(r"\[(data-[a-z-]+)='([^']+)'\]", r'[\1="\2"]', text)
+          path.write_text(text)
+          PY
+
+          git rm .github/workflows/clean-named-context-css.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/control-web/src/app/operations.css
+          git commit -m 'Keep named context CSS diff focused'
+          git push origin HEAD:agent/named-context-first
