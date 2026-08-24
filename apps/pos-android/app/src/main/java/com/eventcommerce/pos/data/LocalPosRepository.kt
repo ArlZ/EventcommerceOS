@@ -1,5 +1,6 @@
 package com.eventcommerce.pos.data
 
+import androidx.room.withTransaction
 import com.eventcommerce.pos.domain.CachedMenu
 import com.eventcommerce.pos.domain.LocalOrder
 import com.eventcommerce.pos.domain.MenuCandidate
@@ -9,7 +10,7 @@ import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.util.UUID
 
 class LocalPosRepository(
-  db: AppDatabase,
+  private val db: AppDatabase,
   clock: () -> Long = { System.currentTimeMillis() },
   idFactory: () -> String = { UUID.randomUUID().toString() },
   faultInjector: TransactionFaultInjector = TransactionFaultInjector { _ -> },
@@ -27,6 +28,15 @@ class LocalPosRepository(
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
   suspend fun activeProductionMenu(): CachedMenu? = activeMenu()?.takeUnless(::isBuiltInDevelopmentMenu)
+
+  suspend fun retireUnusedDevelopmentMenu(): Boolean = db.withTransaction {
+    val active = menus.active() ?: return@withTransaction false
+    if (!isBuiltInDevelopmentMenu(active)) return@withTransaction false
+    if (db.orders().orderCountForMenuVersion(active.version) > 0) return@withTransaction false
+    db.menu().deleteItems(active.version)
+    db.menu().deleteVersion(active.version)
+    true
+  }
 
   suspend fun menuForSale(): CachedMenu? {
     val open = orders.current()
