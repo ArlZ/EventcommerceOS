@@ -42,6 +42,7 @@
   color: inherit;
 }
 
+/* Destructive operational actions require an explicit second choice. */
 .ec-inline-confirm {
   display: flex;
   flex-wrap: wrap;
