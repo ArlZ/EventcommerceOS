@@ -67,13 +67,24 @@ jobs:
             sleep 1
           done
           docker cp edge-caddy-tls-ci:/data/caddy/pki/authorities/local/root.crt /tmp/event-edge-root.crt
-          echo | openssl s_client \
-            -connect 127.0.0.1:18443 \
-            -CAfile /tmp/event-edge-root.crt \
-            -verify_ip 192.0.2.10 \
-            -verify_return_error \
-            -noservername >/tmp/edge-caddy-s_client.txt 2>&1
-          grep -q 'Verify return code: 0 (ok)' /tmp/edge-caddy-s_client.txt
+          verified=false
+          for attempt in $(seq 1 30); do
+            if echo | openssl s_client \
+              -connect 127.0.0.1:18443 \
+              -CAfile /tmp/event-edge-root.crt \
+              -verify_ip 192.0.2.10 \
+              -verify_return_error \
+              -noservername >/tmp/edge-caddy-s_client.txt 2>&1 && \
+              grep -q 'Verify return code: 0 (ok)' /tmp/edge-caddy-s_client.txt; then
+              verified=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$verified" != true ]; then
+            cat /tmp/edge-caddy-s_client.txt
+            exit 1
+          fi
       - name: Validate venue Compose configuration
         env:
           RELEASE_COMMIT: 1111111111111111111111111111111111111111
