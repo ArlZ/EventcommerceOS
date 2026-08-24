@@ -1,0 +1,330 @@
+.ec-workflow-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--ec-border);
+  border-radius: var(--ec-radius-lg);
+  background: var(--ec-border);
+  box-shadow: var(--ec-shadow-sm);
+}
+
+.ec-workflow-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 82px;
+  background: var(--ec-surface);
+  padding: 15px 16px;
+}
+
+.ec-workflow-index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--ec-dark);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ec-workflow-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ec-workflow-copy strong {
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.ec-workflow-copy small {
+  color: var(--ec-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ec-page > .ec-workflow-rail {
+  margin-bottom: 18px;
+}
+
+.ec-page > .ec-callout + .ec-workflow-rail,
+.ec-page > .ec-workflow-rail + .ec-callout {
+  margin-top: 12px;
+}
+
+/* Give task pages the same compact control-room rhythm as the live dashboard. */
+.ec-page:not(.ec-page--wide) .ec-page-header {
+  margin-bottom: 18px;
+}
+
+.ec-page:not(.ec-page--wide) .ec-page-title {
+  font-size: clamp(27px, 3.2vw, 36px);
+}
+
+.ec-context-loader {
+  position: relative;
+  border-color: #d9dee8;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.ec-context-loader::before {
+  content: "Context";
+  position: absolute;
+  top: -8px;
+  left: 14px;
+  padding: 0 6px;
+  background: var(--ec-canvas);
+  color: var(--ec-subtle);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ec-context-loader input,
+.ec-context-loader select {
+  min-height: 40px;
+}
+
+.ec-context-bar {
+  min-height: 48px;
+  border-radius: 10px;
+}
+
+.ec-operations-stack > .ec-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.ec-operations-stack > .ec-kpi-grid .ec-kpi {
+  min-height: 86px;
+  display: grid;
+  align-content: center;
+}
+
+.ec-operations-stack > .ec-kpi-grid .ec-kpi-value {
+  font-size: clamp(22px, 2.4vw, 30px);
+}
+
+/* Setup becomes a guided sequence instead of a wall of forms. */
+.ec-operations-stack > .ec-panel {
+  position: relative;
+}
+
+.ec-operations-stack > .ec-panel > .ec-panel-heading .ec-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin: 0 0 7px;
+  border-radius: 999px;
+  background: var(--ec-brand-soft);
+  padding: 3px 8px;
+  color: var(--ec-brand);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.ec-operations-stack > .ec-panel h3 {
+  margin: 0 0 10px;
+  color: var(--ec-dark-muted);
+  font-size: 13px;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+}
+
+.ec-operations-stack > .ec-panel form label,
+.ec-operations-stack > .ec-panel > div > label {
+  color: var(--ec-dark-muted);
+  font-size: 12px;
+}
+
+.ec-operations-stack > .ec-panel form {
+  min-width: 0;
+}
+
+.ec-operations-stack > .ec-panel form input,
+.ec-operations-stack > .ec-panel form select {
+  background: #fff;
+}
+
+.ec-operations-stack > .ec-panel form input:disabled,
+.ec-operations-stack > .ec-panel form select:disabled {
+  background: #f2f4f7;
+  color: var(--ec-subtle);
+}
+
+.ec-operations-stack > .ec-panel .ec-list-row {
+  transition: background 120ms ease;
+}
+
+.ec-operations-stack > .ec-panel .ec-list-row:hover {
+  background: #fafbfc;
+}
+
+/* Inventory: exception-first, dense and scannable. */
+.ec-alert-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.ec-alert-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #f79009;
+}
+
+.ec-alert-card[data-severity="CRITICAL"]::before,
+.ec-alert-card[data-tone="danger"]::before {
+  background: var(--ec-danger);
+}
+
+.ec-alert-card .ec-kpi-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ec-alert-card .ec-kpi {
+  border: 0;
+  background: rgb(255 255 255 / 0.72);
+  padding: 11px 12px;
+}
+
+.ec-alert-card .ec-kpi-value {
+  font-size: 19px;
+}
+
+/* Devices: cards read like status consoles, not generic content cards. */
+.ec-control-grid > .ec-panel .ec-metric-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--ec-border);
+  border-radius: 10px;
+  background: var(--ec-border);
+}
+
+.ec-control-grid > .ec-panel .ec-metric-pair {
+  min-width: 0;
+  background: var(--ec-surface-soft);
+  padding: 12px;
+}
+
+.ec-control-grid > .ec-panel .ec-metric-pair strong {
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+/* Schedule: make the mutable trading window feel deliberate. */
+.ec-panel--priority form label {
+  display: grid;
+  gap: 6px;
+}
+
+.ec-panel--priority form label strong {
+  font-size: 12px;
+}
+
+.ec-panel--priority form input {
+  min-height: 46px;
+}
+
+.ec-panel--priority .ec-button-primary {
+  min-height: 46px;
+}
+
+/* Close & reconcile: turn review into a clear decision surface. */
+.ec-close-summary .ec-kpi {
+  min-height: 92px;
+}
+
+.ec-close-attention-grid {
+  gap: 12px;
+}
+
+.ec-attention-card {
+  min-height: 128px;
+  box-shadow: inset 0 3px 0 transparent;
+}
+
+.ec-attention-card[data-attention="true"] {
+  box-shadow: inset 0 3px 0 var(--ec-danger);
+}
+
+.ec-close-actions {
+  border: 1px solid var(--ec-border);
+  border-radius: 12px;
+  background: var(--ec-surface-soft);
+  padding: 12px;
+}
+
+.ec-close-actions .ec-button-primary {
+  min-width: 190px;
+}
+
+.ec-table-wrap {
+  border: 1px solid var(--ec-border);
+  border-radius: 10px;
+  background: var(--ec-surface);
+}
+
+.ec-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+}
+
+.ec-table tbody tr:hover td {
+  background: #fbfcfe;
+}
+
+.ec-revision-row {
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom-color: var(--ec-border);
+  padding-inline: 10px;
+}
+
+.ec-revision-row:hover {
+  border-color: var(--ec-border);
+  border-radius: 10px;
+  background: var(--ec-surface-soft);
+}
+
+/* Small screens preserve task order and touch targets. */
+@media (max-width: 900px) {
+  .ec-workflow-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ec-control-grid > .ec-panel .ec-metric-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .ec-workflow-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .ec-workflow-step {
+    min-height: auto;
+  }
+
+  .ec-alert-card .ec-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ec-close-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .ec-close-actions .ec-button-primary {
+    min-width: 0;
+  }
+}
