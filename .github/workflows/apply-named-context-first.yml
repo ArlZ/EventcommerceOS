@@ -1,0 +1,437 @@
+name: Apply named context first UX
+
+on:
+  push:
+    branches:
+      - agent/named-context-first
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/named-context-first
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Apply named context first changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"Missing expected snippet: {label}")
+              return text.replace(old, new, 1)
+
+          # Live: keep event identity human-readable in the primary header.
+          path = Path('apps/control-web/src/app/command-centre/command-centre-client.tsx')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "              <span aria-hidden=\"true\">•</span>\n              <span className=\"ec-mono\">{snapshot.event.eventId}</span>\n",
+              "",
+              'live raw event id meta',
+          )
+          path.write_text(text)
+
+          # Inventory: raw event ID only appears when switching context; refresh stays one click.
+          path = Path('apps/control-web/src/app/inventory/inventory-operations-client.tsx')
+          text = path.read_text()
+          old = """      <div className=\"ec-context-loader\" style={{ gridTemplateColumns: '1fr auto' }}>
+        <input
+          value={eventId}
+          onChange={(event) => {
+            setEventId(event.target.value);
+            setEventName('');
+          }}
+          placeholder=\"Event ID\"
+          aria-label=\"Event ID\"
+        />
+        <button type=\"button\" onClick={() => void refresh()} disabled={loading}>
+          {loading ? 'Refreshing…' : operations ? 'Refresh inventory' : 'Load inventory'}
+        </button>
+      </div>
+"""
+          new = """      {operations ? (
+        <details className=\"ec-context-switcher\">
+          <summary>Change event context</summary>
+          <div
+            className=\"ec-context-loader ec-context-loader--embedded\"
+            style={{ gridTemplateColumns: '1fr auto' }}
+          >
+            <input
+              value={eventId}
+              onChange={(event) => {
+                setEventId(event.target.value);
+                setEventName('');
+              }}
+              placeholder=\"Event ID\"
+              aria-label=\"Event ID\"
+            />
+            <button type=\"button\" onClick={() => void refresh()} disabled={loading}>
+              {loading ? 'Loading…' : 'Load event'}
+            </button>
+          </div>
+        </details>
+      ) : (
+        <div className=\"ec-context-loader\" style={{ gridTemplateColumns: '1fr auto' }}>
+          <input
+            value={eventId}
+            onChange={(event) => {
+              setEventId(event.target.value);
+              setEventName('');
+            }}
+            placeholder=\"Event ID\"
+            aria-label=\"Event ID\"
+          />
+          <button type=\"button\" onClick={() => void refresh()} disabled={loading}>
+            {loading ? 'Loading…' : 'Load inventory'}
+          </button>
+        </div>
+      )}
+"""
+          text = replace_once(text, old, new, 'inventory context loader')
+          old = """            <span className=\"ec-status-pill\" data-tone={inventoryTone}>
+              {criticalAlerts.length > 0
+                ? `${criticalAlerts.length} critical risk${criticalAlerts.length === 1 ? '' : 's'}`
+                : activeAlerts.length > 0
+                  ? `${activeAlerts.length} active risk${activeAlerts.length === 1 ? '' : 's'}`
+                  : 'Stock healthy'}
+            </span>
+"""
+          new = """            <div className=\"ec-context-bar-actions\">
+              <button type=\"button\" onClick={() => void refresh()} disabled={loading}>
+                {loading ? 'Refreshing…' : 'Refresh inventory'}
+              </button>
+              <span className=\"ec-status-pill\" data-tone={inventoryTone}>
+                {criticalAlerts.length > 0
+                  ? `${criticalAlerts.length} critical risk${criticalAlerts.length === 1 ? '' : 's'}`
+                  : activeAlerts.length > 0
+                    ? `${activeAlerts.length} active risk${activeAlerts.length === 1 ? '' : 's'}`
+                    : 'Stock healthy'}
+              </span>
+            </div>
+"""
+          text = replace_once(text, old, new, 'inventory named context actions')
+          path.write_text(text)
+
+          # Devices: organisation ID is a switch/troubleshooting control; compact register label is enough.
+          path = Path('apps/control-web/src/app/sync-health/sync-health-client.tsx')
+          text = path.read_text()
+          old = """      <div className=\"ec-context-loader\" style={{ gridTemplateColumns: '1fr auto' }}>
+        <input
+          value={organisationId}
+          onChange={(event) => setOrganisationId(event.target.value)}
+          placeholder=\"Organisation ID\"
+          aria-label=\"Organisation ID\"
+        />
+        <button type=\"button\" onClick={loadOrganisation} disabled={loading}>
+          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh now' : 'Load sync health'}
+        </button>
+      </div>
+"""
+          new = """      {activeOrganisationId ? (
+        <details className=\"ec-context-switcher\">
+          <summary>Change organisation</summary>
+          <div
+            className=\"ec-context-loader ec-context-loader--embedded\"
+            style={{ gridTemplateColumns: '1fr auto' }}
+          >
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder=\"Organisation ID\"
+              aria-label=\"Organisation ID\"
+            />
+            <button type=\"button\" onClick={loadOrganisation} disabled={loading}>
+              {loading ? 'Loading…' : 'Load organisation'}
+            </button>
+          </div>
+        </details>
+      ) : (
+        <div className=\"ec-context-loader\" style={{ gridTemplateColumns: '1fr auto' }}>
+          <input
+            value={organisationId}
+            onChange={(event) => setOrganisationId(event.target.value)}
+            placeholder=\"Organisation ID\"
+            aria-label=\"Organisation ID\"
+          />
+          <button type=\"button\" onClick={loadOrganisation} disabled={loading}>
+            {loading ? 'Loading…' : 'Load sync health'}
+          </button>
+        </div>
+      )}
+"""
+          text = replace_once(text, old, new, 'sync health context loader')
+          old = """        {activeOrganisationId ? (
+          <span className=\"ec-status-pill\" data-tone={attentionDevices > 0 ? 'warning' : 'success'}>
+            {attentionDevices > 0
+              ? `${attentionDevices} register${attentionDevices === 1 ? '' : 's'} need attention`
+              : devices.length > 0
+                ? 'All reporting'
+                : 'Awaiting telemetry'}
+          </span>
+        ) : null}
+"""
+          new = """        {activeOrganisationId ? (
+          <div className=\"ec-context-bar-actions\">
+            <button type=\"button\" onClick={() => void refresh()} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh now'}
+            </button>
+            <span
+              className=\"ec-status-pill\"
+              data-tone={attentionDevices > 0 ? 'warning' : 'success'}
+            >
+              {attentionDevices > 0
+                ? `${attentionDevices} register${attentionDevices === 1 ? '' : 's'} need attention`
+                : devices.length > 0
+                  ? 'All reporting'
+                  : 'Awaiting telemetry'}
+            </span>
+          </div>
+        ) : null}
+"""
+          text = replace_once(text, old, new, 'sync health named context actions')
+          text = replace_once(
+              text,
+              "                  <code className=\"ec-entity-id\" title={device.deviceId}>\n                    {device.deviceId}\n                  </code>\n",
+              "",
+              'full register uuid display',
+          )
+          path.write_text(text)
+
+          # Close: loaded view leads with event and organisation names; raw IDs sit behind context switching.
+          path = Path('apps/control-web/src/app/event-close/event-close-client.tsx')
+          text = path.read_text()
+          old = """        <div className=\"ec-context-loader\">
+          <input
+            aria-label=\"Organisation ID\"
+            placeholder=\"Organisation ID\"
+            value={organisationId}
+            onChange={(event) => setOrganisationId(event.target.value)}
+          />
+          <input
+            aria-label=\"Event ID\"
+            placeholder=\"Event ID\"
+            value={eventId}
+            onChange={(event) => setEventId(event.target.value)}
+          />
+          <button type=\"button\" disabled={busy} onClick={() => void load()}>
+            {busy ? 'Working…' : report ? 'Refresh close review' : 'Load close review'}
+          </button>
+        </div>
+"""
+          new = """        {report ? (
+          <>
+            <div className=\"ec-context-bar\">
+              <div>
+                <strong>{report.event.name}</strong>
+                {configuration?.organisation.name ? ` • ${configuration.organisation.name}` : ''}
+              </div>
+              <div className=\"ec-context-bar-actions\">
+                <button type=\"button\" disabled={busy} onClick={() => void load()}>
+                  {busy ? 'Refreshing…' : 'Refresh close review'}
+                </button>
+              </div>
+            </div>
+            <details className=\"ec-context-switcher\">
+              <summary>Change event context</summary>
+              <div className=\"ec-context-loader ec-context-loader--embedded\">
+                <input
+                  aria-label=\"Organisation ID\"
+                  placeholder=\"Organisation ID\"
+                  value={organisationId}
+                  onChange={(event) => setOrganisationId(event.target.value)}
+                />
+                <input
+                  aria-label=\"Event ID\"
+                  placeholder=\"Event ID\"
+                  value={eventId}
+                  onChange={(event) => setEventId(event.target.value)}
+                />
+                <button type=\"button\" disabled={busy} onClick={() => void load()}>
+                  {busy ? 'Loading…' : 'Load event'}
+                </button>
+              </div>
+            </details>
+          </>
+        ) : (
+          <div className=\"ec-context-loader\">
+            <input
+              aria-label=\"Organisation ID\"
+              placeholder=\"Organisation ID\"
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+            />
+            <input
+              aria-label=\"Event ID\"
+              placeholder=\"Event ID\"
+              value={eventId}
+              onChange={(event) => setEventId(event.target.value)}
+            />
+            <button type=\"button\" disabled={busy} onClick={() => void load()}>
+              {busy ? 'Loading…' : 'Load close review'}
+            </button>
+          </div>
+        )}
+"""
+          text = replace_once(text, old, new, 'close context loader')
+          text = replace_once(
+              text,
+              "            <strong>Load the event before closing.</strong> The organisation and event last used\n            elsewhere in Event Control are carried into this screen for the current browser tab. The\n            review starts with unresolved payment, inventory and operational signals, then moves\n",
+              "            <strong>Load the event before closing.</strong> If Event Control already knows the event,\n            this review loads it automatically. Otherwise use the IDs above once; the review starts\n            with unresolved payment, inventory and operational signals, then moves\n",
+              'close empty guidance',
+          )
+          path.write_text(text)
+
+          # Schedule: hide the organisation ID panel after named configuration is loaded.
+          path = Path('apps/control-web/src/app/event-schedule/event-schedule-client.tsx')
+          text = path.read_text()
+          old = """      <section className=\"ec-panel\">
+        <div className=\"ec-panel-heading\">
+          <div>
+            <p className=\"ec-eyebrow\">Organisation</p>
+            <h2>Load event schedules</h2>
+            <p>
+              The organisation selected elsewhere in Event Control loads automatically. Use the
+              setup ID below only when you need to switch organisation or retry a failed load.
+            </p>
+          </div>
+        </div>
+        <form
+          style={formStyle}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void loadOrganisation();
+          }}
+        >
+          <input
+            value={organisationId}
+            onChange={(event) => setOrganisationId(event.target.value)}
+            placeholder=\"Organisation ID\"
+            aria-label=\"Organisation ID\"
+            required
+            disabled={busy}
+            style={fieldStyle}
+          />
+          <button
+            type=\"submit\"
+            disabled={busy || !organisationId.trim()}
+            style={{ padding: '9px 12px' }}
+          >
+            Load organisation
+          </button>
+        </form>
+      </section>
+"""
+          new = """      {configuration ? (
+        <details className=\"ec-context-switcher\">
+          <summary>Change organisation</summary>
+          <form
+            className=\"ec-context-loader ec-context-loader--embedded\"
+            style={{ gridTemplateColumns: '1fr auto' }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadOrganisation();
+            }}
+          >
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder=\"Organisation ID\"
+              aria-label=\"Organisation ID\"
+              required
+              disabled={busy}
+              style={fieldStyle}
+            />
+            <button
+              type=\"submit\"
+              disabled={busy || !organisationId.trim()}
+              style={{ padding: '9px 12px' }}
+            >
+              Load organisation
+            </button>
+          </form>
+        </details>
+      ) : (
+        <section className=\"ec-panel\">
+          <div className=\"ec-panel-heading\">
+            <div>
+              <p className=\"ec-eyebrow\">Organisation</p>
+              <h2>Load event schedules</h2>
+              <p>
+                The organisation selected elsewhere in Event Control loads automatically. Use the
+                setup ID below only when you need to switch organisation or retry a failed load.
+              </p>
+            </div>
+          </div>
+          <form
+            style={formStyle}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadOrganisation();
+            }}
+          >
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder=\"Organisation ID\"
+              aria-label=\"Organisation ID\"
+              required
+              disabled={busy}
+              style={fieldStyle}
+            />
+            <button
+              type=\"submit\"
+              disabled={busy || !organisationId.trim()}
+              style={{ padding: '9px 12px' }}
+            >
+              Load organisation
+            </button>
+          </form>
+        </section>
+      )}
+"""
+          text = replace_once(text, old, new, 'schedule context panel')
+          path.write_text(text)
+
+          # Shared small action cluster for context bars.
+          path = Path('apps/control-web/src/app/operations.css')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              ".ec-context-bar strong {\n  color: var(--ec-ink);\n}\n",
+              ".ec-context-bar strong {\n  color: var(--ec-ink);\n}\n\n.ec-context-bar-actions {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  flex-wrap: wrap;\n  justify-content: flex-end;\n}\n\n.ec-context-bar-actions button {\n  flex: 0 0 auto;\n  padding: 7px 11px;\n}\n",
+              'context bar action styles',
+          )
+          path.write_text(text)
+          PY
+
+          pnpm exec prettier --write \
+            apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/inventory/inventory-operations-client.tsx \
+            apps/control-web/src/app/sync-health/sync-health-client.tsx \
+            apps/control-web/src/app/event-close/event-close-client.tsx \
+            apps/control-web/src/app/event-schedule/event-schedule-client.tsx \
+            apps/control-web/src/app/operations.css
+
+          git rm .github/workflows/apply-named-context-first.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/inventory/inventory-operations-client.tsx \
+            apps/control-web/src/app/sync-health/sync-health-client.tsx \
+            apps/control-web/src/app/event-close/event-close-client.tsx \
+            apps/control-web/src/app/event-schedule/event-schedule-client.tsx \
+            apps/control-web/src/app/operations.css
+          git commit -m 'Prefer named Event Control context'
+          git push origin HEAD:agent/named-context-first
