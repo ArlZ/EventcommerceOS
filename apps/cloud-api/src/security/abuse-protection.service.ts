@@ -4,6 +4,7 @@ export type AbusePolicyName =
   | 'EDGE_SYNC'
   | 'EDGE_PAYMENT'
   | 'PROVIDER_CALLBACK'
+  | 'OPERATOR_LOGIN'
   | 'OPERATOR_READ'
   | 'OPERATOR_MUTATION'
   | 'PUBLIC';
@@ -32,6 +33,7 @@ const DEFAULTS: Record<AbusePolicyName, Omit<AbusePolicy, 'name'>> = {
   EDGE_SYNC: { requestsPerMinute: 1_200, burst: 120, maxInFlight: 64 },
   EDGE_PAYMENT: { requestsPerMinute: 3_000, burst: 300, maxInFlight: 128 },
   PROVIDER_CALLBACK: { requestsPerMinute: 1_200, burst: 200, maxInFlight: 128 },
+  OPERATOR_LOGIN: { requestsPerMinute: 30, burst: 10, maxInFlight: 16 },
   OPERATOR_READ: { requestsPerMinute: 600, burst: 60, maxInFlight: 128 },
   OPERATOR_MUTATION: { requestsPerMinute: 120, burst: 30, maxInFlight: 32 },
   PUBLIC: { requestsPerMinute: 120, burst: 30, maxInFlight: 64 },
