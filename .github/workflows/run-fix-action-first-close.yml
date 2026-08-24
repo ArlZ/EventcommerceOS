@@ -1,0 +1,35 @@
+name: Run closed-state UX correction
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/action-first-close
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: python .github/fix-action-first-close-state.py
+      - run: pnpm exec prettier --write apps/control-web/src/app/event-close/event-close-client.tsx
+      - name: Commit closed-state correction
+        shell: bash
+        run: |
+          git rm .github/fix-action-first-close-state.py .github/workflows/run-fix-action-first-close.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/control-web/src/app/event-close/event-close-client.tsx
+          git commit -m 'Keep close actions state-aware'
+          git push origin HEAD:agent/action-first-close
