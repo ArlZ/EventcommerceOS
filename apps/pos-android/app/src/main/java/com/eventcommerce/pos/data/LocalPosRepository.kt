@@ -26,14 +26,7 @@ class LocalPosRepository(
 
   suspend fun installProvisionedMenu(candidate: MenuCandidate): CachedMenu {
     val current = activeMenu()
-    val development = developmentMenuCandidate()
-    if (
-      current != null &&
-        current.eventId == development.eventId &&
-        current.menuId == development.menuId &&
-        current.version == development.version &&
-        current.checksum == development.checksum
-    ) {
+    if (current != null && isDevelopmentMenu(current)) {
       require(orders.current() == null) {
         "cannot replace the development menu while an order is open"
       }
@@ -43,6 +36,8 @@ class LocalPosRepository(
   }
 
   suspend fun activeMenu(): CachedMenu? = menus.active()
+
+  suspend fun activeProvisionedMenu(): CachedMenu? = activeMenu()?.takeUnless(::isDevelopmentMenu)
 
   suspend fun menuForSale(): CachedMenu? {
     val open = orders.current()
@@ -100,6 +95,14 @@ class LocalPosRepository(
     outbox.events().count { it.aggregateId == orderId && it.eventType == eventType }
 
   suspend fun allOutboxEvents(): List<OutboxEventEntity> = outbox.events()
+
+  private fun isDevelopmentMenu(menu: CachedMenu): Boolean {
+    val development = developmentMenuCandidate()
+    return menu.eventId == development.eventId &&
+      menu.menuId == development.menuId &&
+      menu.version == development.version &&
+      menu.checksum == development.checksum
+  }
 
   companion object {
     fun developmentMenuCandidate(): MenuCandidate {
