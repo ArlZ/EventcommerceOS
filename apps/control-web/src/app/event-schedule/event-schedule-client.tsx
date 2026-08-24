@@ -84,6 +84,7 @@ export function EventScheduleClient() {
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [contextHydrated, setContextHydrated] = useState(false);
   const [status, setStatus] = useState('Load an organisation to review its event schedule.');
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
@@ -92,9 +93,15 @@ export function EventScheduleClient() {
     if (context.organisationId) setOrganisationId(context.organisationId);
     if (context.eventId) setEventId(context.eventId);
     if (context.organisationName) {
-      setStatus(`Ready to load ${context.organisationName} schedules.`);
+      setStatus(`Loading ${context.organisationName} schedules…`);
     }
+    setContextHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextHydrated || !organisationId.trim()) return;
+    void loadOrganisation(organisationId);
+  }, [contextHydrated]);
 
   const activeEvents =
     configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
@@ -239,8 +246,8 @@ export function EventScheduleClient() {
             <p className="ec-eyebrow">Organisation</p>
             <h2>Load event schedules</h2>
             <p>
-              Use the same organisation setup ID used in Event Control. The last organisation used
-              elsewhere in Event Control is carried into this screen for the current browser tab.
+              The organisation selected elsewhere in Event Control loads automatically. Use the
+              setup ID below only when you need to switch organisation or retry a failed load.
             </p>
           </div>
         </div>

@@ -177,6 +177,7 @@ export function ConfigurationClient() {
   const [menuItemId, setMenuItemId] = useState('');
   const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [status, setStatus] = useState('Start by creating or loading the event organisation.');
+  const [contextHydrated, setContextHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
@@ -184,7 +185,13 @@ export function ConfigurationClient() {
     const context = readEventControlContext();
     if (context.organisationId) setOrganisationId(context.organisationId);
     if (context.eventId) setEventId(context.eventId);
+    setContextHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextHydrated || !organisationId.trim()) return;
+    void refresh(organisationId);
+  }, [contextHydrated]);
 
   async function refresh(id = organisationId): Promise<void> {
     if (!id) return;
@@ -380,9 +387,9 @@ export function ConfigurationClient() {
             <div>
               <h2>Open an organisation</h2>
               <p>
-                Create a new pilot operator or load an existing organisation by its setup ID. The
-                last organisation used elsewhere in Event Control is carried into this screen for
-                the current browser tab.
+                Create a new pilot operator or load an existing organisation by its setup ID. When
+                Event Control already has an organisation selected, its setup loads automatically;
+                use the ID field below only to switch or retry.
               </p>
             </div>
           </div>
