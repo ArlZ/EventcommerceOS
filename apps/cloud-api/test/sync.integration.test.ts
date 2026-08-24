@@ -191,7 +191,7 @@ describeIntegration('edge to cloud synchronization', () => {
     expect(response.body.conflictEventInstanceIds).toEqual([otherDevice.eventInstanceId]);
   });
 
-  it('attributes device health and backlog to the authenticated Edge and organisation', async () => {
+  it('attributes post-delivery device health and backlog to the authenticated Edge and organisation', async () => {
     const first = event('cloud-device-health', 1, 'health-order', 'OPEN');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
@@ -206,9 +206,10 @@ describeIntegration('edge to cloud synchronization', () => {
       last_sequence_seen: string;
       edge_accepted_through_sequence: string;
       edge_backlog_count: number;
+      last_cloud_delivery_at: Date | null;
     }>(
       `SELECT device_id,edge_id,organisation_id::text,last_sequence_seen::text,
-              edge_accepted_through_sequence::text,edge_backlog_count
+              edge_accepted_through_sequence::text,edge_backlog_count,last_cloud_delivery_at
        FROM sync_device_state WHERE device_id=$1`,
       ['cloud-device-health'],
     );
@@ -218,7 +219,8 @@ describeIntegration('edge to cloud synchronization', () => {
       organisation_id: DEFAULT_SYNC_ORGANISATION_ID,
       last_sequence_seen: '1',
       edge_accepted_through_sequence: '1',
-      edge_backlog_count: 7,
+      edge_backlog_count: 6,
+      last_cloud_delivery_at: expect.any(Date),
     });
   });
 });
