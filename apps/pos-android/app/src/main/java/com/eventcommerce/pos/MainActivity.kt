@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -23,6 +24,8 @@ import com.eventcommerce.pos.data.DeviceSyncStateStore
 import com.eventcommerce.pos.data.LocalDeviceState
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.data.SyncQueueStore
+import com.eventcommerce.pos.menu.HttpsEdgeMenuTransport
+import com.eventcommerce.pos.menu.MenuRefreshCoordinator
 import com.eventcommerce.pos.payments.PaymentCoordinator
 import com.eventcommerce.pos.payments.ProvisionedEdgePaymentTransport
 import com.eventcommerce.pos.security.KeystorePosDeviceCredentialStore
@@ -54,12 +57,21 @@ class MainActivity : ComponentActivity() {
         var knownEndpoint by remember { mutableStateOf("") }
         var editingProvisioning by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(true) }
+        var menuVersion by remember { mutableStateOf<Long?>(null) }
+        var legacyDevelopmentOrderBlocked by remember { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
           val deviceId = deviceState.id()
           localDeviceId = deviceId
           knownEndpoint = syncProvisioning.endpoint().orEmpty()
           provisioned = syncProvisioning.current()?.takeIf { it.deviceId == deviceId }
+          repository.retireUnusedDevelopmentMenu()
+          legacyDevelopmentOrderBlocked = repository.hasOpenDevelopmentOrder()
+          menuVersion = if (legacyDevelopmentOrderBlocked) {
+            null
+          } else {
+            repository.activeProductionMenu()?.version
+          }
           loading = false
         }
 
@@ -78,11 +90,32 @@ class MainActivity : ComponentActivity() {
               syncProvisioning.provision(endpoint, deviceId, token)
               knownEndpoint = endpoint
               provisioned = syncProvisioning.current()
+              legacyDevelopmentOrderBlocked = repository.hasOpenDevelopmentOrder()
+              menuVersion = null
               editingProvisioning = false
             }
           }
           else -> {
             val activeProvisioning = provisioned!!
+            LaunchedEffect(
+              activeProvisioning.endpoint,
+              activeProvisioning.deviceId,
+              activeProvisioning.token,
+            ) {
+              if (menuVersion != null && !legacyDevelopmentOrderBlocked) {
+                menuVersion = repository.activeProductionMenu()?.version
+              }
+              MenuRefreshCoordinator(
+                repository,
+                HttpsEdgeMenuTransport(
+                  activeProvisioning.endpoint,
+                  activeProvisioning.deviceId,
+                  activeProvisioning.token,
+                ),
+              ).run { installedVersion ->
+                if (!legacyDevelopmentOrderBlocked) menuVersion = installedVersion
+              }
+            }
             LaunchedEffect(
               activeProvisioning.endpoint,
               activeProvisioning.deviceId,
@@ -108,11 +141,23 @@ class MainActivity : ComponentActivity() {
               ) {
                 Text("Device settings")
               }
-              PosScreen(
-                repository = repository,
-                payments = payments,
-                modifier = Modifier.weight(1f),
-              )
+              when {
+                legacyDevelopmentOrderBlocked -> Text(
+                  "Production sales are blocked because this register contains an unfinished legacy development order. Preserve the register data and complete an explicit recovery/reset before using it live.",
+                  modifier = Modifier.padding(24.dp),
+                )
+                menuVersion == null -> Text(
+                  "Waiting for this register's event menu. Keep Event Edge connected; no sales can start until a validated menu is available.",
+                  modifier = Modifier.padding(24.dp),
+                )
+                else -> key(menuVersion) {
+                  PosScreen(
+                    repository = repository,
+                    payments = payments,
+                    modifier = Modifier.weight(1f),
+                  )
+                }
+              }
             }
           }
         }

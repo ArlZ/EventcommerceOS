@@ -40,4 +40,7 @@ interface OrderDao {
 
   @Query("SELECT COUNT(*) FROM pos_orders WHERE state = 'CLOSED'")
   suspend fun closedOrderCount(): Int
+
+  @Query("SELECT COUNT(*) FROM pos_orders WHERE menuVersion = :menuVersion")
+  suspend fun orderCountForMenuVersion(menuVersion: Long): Int
 }

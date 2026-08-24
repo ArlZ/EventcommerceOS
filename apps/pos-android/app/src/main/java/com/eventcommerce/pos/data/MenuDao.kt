@@ -27,4 +27,10 @@ interface MenuDao {
 
   @Insert(onConflict = OnConflictStrategy.ABORT)
   suspend fun insertItems(values: List<MenuItemEntity>)
+
+  @Query("DELETE FROM menu_items WHERE menuVersion = :version")
+  suspend fun deleteItems(version: Long)
+
+  @Query("DELETE FROM menu_versions WHERE version = :version")
+  suspend fun deleteVersion(version: Long)
 }
