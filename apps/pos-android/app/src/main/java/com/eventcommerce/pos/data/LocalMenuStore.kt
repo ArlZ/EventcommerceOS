@@ -28,26 +28,49 @@ class LocalMenuStore(
 
     db.withTransaction {
       dao.deactivateActive()
-      dao.insertVersion(
-        MenuVersionEntity(
-          version = candidate.version,
-          eventId = candidate.eventId,
-          menuId = candidate.menuId,
-          activatedAtEpochMs = candidate.activatedAtEpochMs,
-          sourceActor = candidate.sourceActor,
-          currency = candidate.currency,
-          checksum = candidate.checksum,
-          isActive = true,
-          installedAtEpochMs = clock(),
-        ),
-      )
-      dao.insertItems(candidate.items.map { it.entity(candidate.version) })
+      insert(candidate)
       faultInjector.beforeCommit("installMenu")
     }
     return snapshot(requireNotNull(dao.activeVersion()))
   }
 
+  suspend fun replaceDevelopmentMenu(
+    expectedVersion: Long,
+    expectedChecksum: String,
+    candidate: MenuCandidate,
+  ): CachedMenu {
+    MenuIntegrity.validate(candidate)
+    db.withTransaction {
+      val current = requireNotNull(dao.activeVersion()) { "development menu is no longer active" }
+      require(current.version == expectedVersion && current.checksum == expectedChecksum) {
+        "active menu changed before development menu replacement"
+      }
+      dao.deleteItems(current.version)
+      dao.deleteVersion(current.version)
+      insert(candidate)
+      faultInjector.beforeCommit("replaceDevelopmentMenu")
+    }
+    return snapshot(requireNotNull(dao.activeVersion()))
+  }
+
   suspend fun item(version: Long, itemId: String): MenuItemEntity? = dao.item(version, itemId)
+
+  private suspend fun insert(candidate: MenuCandidate) {
+    dao.insertVersion(
+      MenuVersionEntity(
+        version = candidate.version,
+        eventId = candidate.eventId,
+        menuId = candidate.menuId,
+        activatedAtEpochMs = candidate.activatedAtEpochMs,
+        sourceActor = candidate.sourceActor,
+        currency = candidate.currency,
+        checksum = candidate.checksum,
+        isActive = true,
+        installedAtEpochMs = clock(),
+      ),
+    )
+    dao.insertItems(candidate.items.map { it.entity(candidate.version) })
+  }
 
   private suspend fun snapshot(entity: MenuVersionEntity): CachedMenu = CachedMenu(
     eventId = entity.eventId,
