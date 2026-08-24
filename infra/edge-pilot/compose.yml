@@ -83,6 +83,7 @@ services:
     volumes:
       - ./bootstrap.mjs:/pilot/bootstrap.mjs:ro
       - ./rehearsal.mjs:/pilot/rehearsal.mjs:ro
+      - ./verify-lan-https.mjs:/pilot/verify-lan-https.mjs:ro
     networks:
       - edge-internal
       - edge-lan
