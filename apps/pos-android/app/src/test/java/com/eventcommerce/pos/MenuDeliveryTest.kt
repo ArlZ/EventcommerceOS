@@ -1,6 +1,7 @@
 package com.eventcommerce.pos
 
 import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.domain.MenuCandidate
@@ -15,7 +16,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import androidx.test.core.app.ApplicationProvider
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -42,7 +42,7 @@ class MenuDeliveryTest {
   }
 
   @Test
-  fun `edge snapshot JSON validates into the existing menu candidate model`() {
+  fun `edge snapshot JSON validates menu and preserves authenticated sales location`() {
     val json = """
       {
         "eventId":"dev-event-offline",
@@ -62,10 +62,11 @@ class MenuDeliveryTest {
       }
     """.trimIndent()
 
-    val parsed = MenuSnapshotJson.candidate(json)
-    assertEquals("dev-event-offline", parsed.eventId)
-    assertEquals(4, parsed.items.size)
-    assertEquals("01776b48", parsed.checksum)
+    val delivered = MenuSnapshotJson.snapshot(json)
+    assertEquals("sales-1", delivered.salesLocationId)
+    assertEquals("dev-event-offline", delivered.candidate.eventId)
+    assertEquals(4, delivered.candidate.items.size)
+    assertEquals("01776b48", delivered.candidate.checksum)
   }
 
   @Test
@@ -73,11 +74,22 @@ class MenuDeliveryTest {
     repository.ensureDevelopmentMenu()
     val live = liveMenu(eventId = "event-live", version = 1)
 
-    val installed = repository.installProvisionedMenu(live)
+    val installed = repository.installProvisionedMenu(live, "main-bar")
 
     assertEquals("event-live", installed.eventId)
     assertEquals(1, installed.version)
     assertEquals("event-live", repository.activeMenu()?.eventId)
+    assertEquals("main-bar", repository.assignedSalesLocationId())
+  }
+
+  @Test
+  fun `new live orders use the authenticated Edge sales location`() = runBlocking {
+    val live = repository.installProvisionedMenu(liveMenu("event-live", 1), "bar-west")
+
+    val order = repository.addItem(live.items.first().itemId)
+
+    assertEquals("event-live", order.eventId)
+    assertEquals("bar-west", order.salesLocationId)
   }
 
   @Test
@@ -87,16 +99,16 @@ class MenuDeliveryTest {
     repository.recordCashPayment(order.id)
 
     assertThrows(IllegalArgumentException::class.java) {
-      runBlocking { repository.installProvisionedMenu(liveMenu("event-live", 1)) }
+      runBlocking { repository.installProvisionedMenu(liveMenu("event-live", 1), "main-bar") }
     }
   }
 
   @Test
   fun `another real event cannot reuse the register menu store without explicit reset`() = runBlocking {
-    repository.installProvisionedMenu(liveMenu("event-one", 1))
+    repository.installProvisionedMenu(liveMenu("event-one", 1), "bar-one")
 
     assertThrows(IllegalStateException::class.java) {
-      runBlocking { repository.installProvisionedMenu(liveMenu("event-two", 2)) }
+      runBlocking { repository.installProvisionedMenu(liveMenu("event-two", 2), "bar-two") }
     }
   }
 
