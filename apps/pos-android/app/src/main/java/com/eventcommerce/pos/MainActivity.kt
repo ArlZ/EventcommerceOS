@@ -29,6 +29,8 @@ import com.eventcommerce.pos.security.KeystorePosDeviceCredentialStore
 import com.eventcommerce.pos.sync.DeviceSyncCoordinator
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
+import com.eventcommerce.pos.sync.HttpsPosMenuEdgeTransport
+import com.eventcommerce.pos.sync.PosMenuSyncCoordinator
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -54,6 +56,8 @@ class MainActivity : ComponentActivity() {
         var knownEndpoint by remember { mutableStateOf("") }
         var editingProvisioning by remember { mutableStateOf(false) }
         var loading by remember { mutableStateOf(true) }
+        var menuReady by remember { mutableStateOf(false) }
+        var menuError by remember { mutableStateOf<String?>(null) }
 
         LaunchedEffect(Unit) {
           val deviceId = deviceState.id()
@@ -88,18 +92,40 @@ class MainActivity : ComponentActivity() {
               activeProvisioning.deviceId,
               activeProvisioning.token,
             ) {
-              DeviceSyncCoordinator(
-                DeviceSyncEngine(
-                  database,
-                  HttpsDeviceEdgeTransport(
+              menuReady = repository.activeProvisionedMenu() != null
+              menuError = null
+
+              launch {
+                DeviceSyncCoordinator(
+                  DeviceSyncEngine(
+                    database,
+                    HttpsDeviceEdgeTransport(
+                      activeProvisioning.endpoint,
+                      activeProvisioning.deviceId,
+                      activeProvisioning.token,
+                    ),
+                    syncState,
+                  ),
+                ).run()
+              }
+
+              runCatching {
+                PosMenuSyncCoordinator(
+                  repository,
+                  HttpsPosMenuEdgeTransport(
                     activeProvisioning.endpoint,
                     activeProvisioning.deviceId,
                     activeProvisioning.token,
                   ),
-                  syncState,
-                ),
-              ).run()
+                ).refresh()
+              }.onSuccess {
+                menuReady = true
+              }.onFailure { failure ->
+                menuReady = repository.activeProvisionedMenu() != null
+                menuError = failure.message ?: "Unable to load this register's Event Edge menu"
+              }
             }
+
             Column(modifier = Modifier.fillMaxSize()) {
               SyncStatusLine(syncQueue, syncState, syncProvisioning)
               TextButton(
@@ -108,11 +134,22 @@ class MainActivity : ComponentActivity() {
               ) {
                 Text("Device settings")
               }
-              PosScreen(
-                repository = repository,
-                payments = payments,
-                modifier = Modifier.weight(1f),
-              )
+              if (menuReady) {
+                PosScreen(
+                  repository = repository,
+                  payments = payments,
+                  modifier = Modifier.weight(1f),
+                )
+              } else {
+                Column(modifier = Modifier.padding(24.dp)) {
+                  Text("Menu unavailable")
+                  Text(
+                    "This provisioned register will not sell from the built-in development menu. " +
+                      "Connect it to Event Edge to receive the assigned menu.",
+                  )
+                  menuError?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+                }
+              }
             }
           }
         }
