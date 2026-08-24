@@ -31,6 +31,7 @@ import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
 import com.eventcommerce.pos.sync.HttpsPosMenuEdgeTransport
 import com.eventcommerce.pos.sync.PosMenuSyncCoordinator
+import com.eventcommerce.pos.sync.posMenuProvisioningBinding
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -92,7 +93,12 @@ class MainActivity : ComponentActivity() {
               activeProvisioning.deviceId,
               activeProvisioning.token,
             ) {
-              menuReady = repository.activeProvisionedMenu() != null
+              val menuBinding = posMenuProvisioningBinding(
+                activeProvisioning.endpoint,
+                activeProvisioning.deviceId,
+                activeProvisioning.token,
+              )
+              menuReady = repository.activeProvisionedMenu(menuBinding) != null
               menuError = null
 
               launch {
@@ -117,11 +123,12 @@ class MainActivity : ComponentActivity() {
                     activeProvisioning.deviceId,
                     activeProvisioning.token,
                   ),
+                  menuBinding,
                 ).refresh()
               }.onSuccess {
                 menuReady = true
               }.onFailure { failure ->
-                menuReady = repository.activeProvisionedMenu() != null
+                menuReady = repository.activeProvisionedMenu(menuBinding) != null
                 menuError = failure.message ?: "Unable to load this register's Event Edge menu"
               }
             }
