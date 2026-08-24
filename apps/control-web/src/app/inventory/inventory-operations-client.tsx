@@ -238,7 +238,10 @@ export function InventoryOperationsClient() {
                   <h2>Transfers in motion</h2>
                   <p>Follow stock until receipt is recorded at the destination.</p>
                 </div>
-                <span className="ec-status-pill" data-tone={activeTransfers.length > 0 ? 'warning' : 'success'}>
+                <span
+                  className="ec-status-pill"
+                  data-tone={activeTransfers.length > 0 ? 'warning' : 'success'}
+                >
                   {activeTransfers.length > 0 ? `${activeTransfers.length} in progress` : 'Clear'}
                 </span>
               </div>

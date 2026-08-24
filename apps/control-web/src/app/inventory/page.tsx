@@ -3,8 +3,14 @@ import { InventoryOperationsClient } from './inventory-operations-client';
 
 const workflow = [
   { label: 'Spot risk', detail: 'Start with critical and low-cover stock positions.' },
-  { label: 'Move safely', detail: 'Use replenishment guidance without bypassing transfer controls.' },
-  { label: 'Verify receipt', detail: 'Keep stock in motion visible until destination receipt is recorded.' },
+  {
+    label: 'Move safely',
+    detail: 'Use replenishment guidance without bypassing transfer controls.',
+  },
+  {
+    label: 'Verify receipt',
+    detail: 'Keep stock in motion visible until destination receipt is recorded.',
+  },
 ];
 
 export default function InventoryPage() {

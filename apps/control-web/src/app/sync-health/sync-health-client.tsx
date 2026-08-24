@@ -104,14 +104,12 @@ export function SyncHealthClient() {
     () => devices.filter((device) => !device.lastCloudDeliveryAt).length,
     [devices],
   );
-  const attentionDevices = useMemo(
-    () => devices.filter(deviceNeedsAttention).length,
-    [devices],
-  );
+  const attentionDevices = useMemo(() => devices.filter(deviceNeedsAttention).length, [devices]);
   const orderedDevices = useMemo(
     () =>
       [...devices].sort((left, right) => {
-        const attentionDelta = Number(deviceNeedsAttention(right)) - Number(deviceNeedsAttention(left));
+        const attentionDelta =
+          Number(deviceNeedsAttention(right)) - Number(deviceNeedsAttention(left));
         if (attentionDelta !== 0) return attentionDelta;
         return Date.parse(left.lastSeenAt) - Date.parse(right.lastSeenAt);
       }),

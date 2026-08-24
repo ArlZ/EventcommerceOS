@@ -1,8 +1,4 @@
-export function WorkflowRail({
-  steps,
-}: {
-  steps: Array<{ label: string; detail: string }>;
-}) {
+export function WorkflowRail({ steps }: { steps: Array<{ label: string; detail: string }> }) {
   return (
     <section className="ec-workflow-rail" aria-label="Operational workflow">
       {steps.map((step, index) => (

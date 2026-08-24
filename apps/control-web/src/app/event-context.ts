@@ -12,7 +12,9 @@ export function readEventControlContext(): EventControlContext {
   try {
     const parsed = JSON.parse(stored) as Partial<EventControlContext>;
     return {
-      ...(typeof parsed.organisationId === 'string' ? { organisationId: parsed.organisationId } : {}),
+      ...(typeof parsed.organisationId === 'string'
+        ? { organisationId: parsed.organisationId }
+        : {}),
       ...(typeof parsed.eventId === 'string' ? { eventId: parsed.eventId } : {}),
     };
   } catch {
