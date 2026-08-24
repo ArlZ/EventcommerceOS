@@ -42,6 +42,85 @@
   color: inherit;
 }
 
+.ec-session-dot[data-state='active'] {
+  background: var(--ec-success);
+  box-shadow: 0 0 0 3px rgb(14 159 110 / 0.13);
+}
+
+.ec-session-dot[data-state='checking'] {
+  background: var(--ec-brand);
+  box-shadow: 0 0 0 3px rgb(45 76 181 / 0.12);
+}
+
+.ec-session-dot[data-state='unverified'] {
+  background: var(--ec-warning);
+  box-shadow: 0 0 0 3px rgb(204 141 25 / 0.12);
+}
+
+.ec-session-verification {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 14px 0;
+  color: var(--ec-muted);
+  font-size: 11.5px;
+}
+
+.ec-session-scopes {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ec-session-scope {
+  display: flex;
+  width: 100%;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-color: var(--ec-border);
+  background: var(--ec-surface-soft);
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.ec-session-scope[data-active='true'] {
+  border-color: #b9c7ee;
+  background: #f3f6ff;
+}
+
+.ec-session-scope > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ec-session-scope strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ec-session-scope small,
+.ec-session-scope > span:last-child,
+.ec-session-note {
+  color: var(--ec-subtle);
+  font-size: 10.5px;
+}
+
+.ec-session-scope > span:last-child {
+  flex: 0 0 auto;
+  font-weight: 750;
+}
+
+.ec-session-note {
+  margin-top: 7px;
+  line-height: 1.4;
+}
+
 @media (max-width: 620px) {
   .ec-context-bar {
     align-items: flex-start;
@@ -59,5 +138,10 @@
 
   .ec-panel-heading {
     align-items: flex-start;
+  }
+
+  .ec-session-verification {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
