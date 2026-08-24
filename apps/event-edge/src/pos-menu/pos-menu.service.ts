@@ -56,7 +56,10 @@ export class PosMenuService {
     return row.payload;
   }
 
-  private async installOne(client: PoolClient, snapshot: PosMenuSnapshot): Promise<PosMenuSnapshot> {
+  private async installOne(
+    client: PoolClient,
+    snapshot: PosMenuSnapshot,
+  ): Promise<PosMenuSnapshot> {
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
       `pos-menu:${snapshot.eventId}:${snapshot.salesLocationId}`,
     ]);
@@ -76,7 +79,9 @@ export class PosMenuService {
       }
       if (candidateVersion === existingVersion) {
         if (existing.checksum !== snapshot.checksum) {
-          throw new ConflictException('menu snapshot version already exists with different content');
+          throw new ConflictException(
+            'menu snapshot version already exists with different content',
+          );
         }
         return existing.payload;
       }

@@ -120,15 +120,17 @@ describe('PosMenuService', () => {
       }
       throw new Error(`unexpected query: ${text}`);
     });
-    const transaction = vi.fn(async <T>(operation: (client: { query: typeof query }) => Promise<T>) =>
-      operation({ query }),
+    const transaction = vi.fn(
+      async <T>(operation: (client: { query: typeof query }) => Promise<T>) => operation({ query }),
     );
     const database = { transaction } as unknown as EdgeDatabaseService;
     const service = new PosMenuService(database);
 
     await expect(service.installBatch([second, snapshot])).resolves.toEqual([snapshot, second]);
     expect(transaction).toHaveBeenCalledTimes(1);
-    expect(query.mock.calls.filter(([text]) => String(text).includes('INSERT INTO'))).toHaveLength(2);
+    expect(query.mock.calls.filter(([text]) => String(text).includes('INSERT INTO'))).toHaveLength(
+      2,
+    );
   });
 
   it('returns the current scoped snapshot and fails closed when absent', async () => {

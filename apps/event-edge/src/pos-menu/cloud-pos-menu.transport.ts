@@ -16,7 +16,8 @@ export class CloudPosMenuTransport {
       },
       signal: AbortSignal.timeout(5_000),
     });
-    if (!response.ok) throw new Error(`cloud POS menu publication returned HTTP ${response.status}`);
+    if (!response.ok)
+      throw new Error(`cloud POS menu publication returned HTTP ${response.status}`);
     const body: unknown = await response.json();
     if (!Array.isArray(body) || body.length === 0) {
       throw new Error('cloud POS menu publication response must contain at least one snapshot');
@@ -31,7 +32,9 @@ export class CloudPosMenuTransport {
   }
 
   endpoint(eventId: string): string {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(eventId)) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(eventId)
+    ) {
       throw new Error('eventId must be a UUID');
     }
     const syncUrl = process.env.CLOUD_SYNC_URL ?? 'http://localhost:3001/sync/edge-events';

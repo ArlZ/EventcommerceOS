@@ -121,7 +121,9 @@ export class PosMenuPublicationService {
         [eventId, event.organisation_id],
       );
       if (locations.rowCount === 0) {
-        throw new BadRequestException('event must have at least one active sales location to publish');
+        throw new BadRequestException(
+          'event must have at least one active sales location to publish',
+        );
       }
 
       const batchId = randomUUID();
@@ -259,7 +261,9 @@ export class PosMenuPublicationService {
       [salesLocationId, menuId, organisationId],
     );
     if (itemResult.rowCount === 0) {
-      throw new BadRequestException(`menu ${menuId} must contain at least one active sellable item`);
+      throw new BadRequestException(
+        `menu ${menuId} must contain at least one active sellable item`,
+      );
     }
     const missingPrice = itemResult.rows.find(
       (item) => item.amount_minor === null || item.currency === null,
