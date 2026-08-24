@@ -12,10 +12,11 @@ function validToken(value: string): boolean {
 export function OperatorSessionControl() {
   const [token, setToken] = useState('');
   const [saved, setSaved] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [invalid, setInvalid] = useState(false);
 
   useLayoutEffect(() => {
     const existing = window.sessionStorage.getItem(STORAGE_KEY) ?? '';
-    setToken(existing);
     setSaved(validToken(existing));
 
     const originalFetch = window.fetch.bind(window);
@@ -48,44 +49,115 @@ export function OperatorSessionControl() {
   function save(): void {
     const normalized = token.trim();
     if (!validToken(normalized)) {
+      setInvalid(true);
       setSaved(false);
       return;
     }
     window.sessionStorage.setItem(STORAGE_KEY, normalized);
-    setToken(normalized);
+    setToken('');
+    setInvalid(false);
     setSaved(true);
+    setDialogOpen(false);
   }
 
   function clear(): void {
     window.sessionStorage.removeItem(STORAGE_KEY);
     setToken('');
+    setInvalid(false);
     setSaved(false);
   }
 
   return (
-    <aside className="ec-session" aria-label="Operator access">
-      <strong>Operator access</strong>
-      <input
-        type="password"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label="Operator access token"
-        placeholder="Paste operator access token"
-        value={token}
-        onChange={(event) => {
-          setToken(event.target.value);
-          setSaved(false);
-        }}
-      />
-      <button type="button" onClick={save} disabled={!validToken(token.trim())}>
-        Start session
-      </button>
-      <button type="button" onClick={clear} disabled={!token && !saved}>
-        End session
-      </button>
-      <span className="ec-session-state" data-active={saved}>
-        {saved ? 'Session active in this tab' : 'Session required for protected actions'}
-      </span>
-    </aside>
+    <>
+      <div className="ec-session-mini" aria-label="Operator access">
+        <span className="ec-session-dot" data-active={saved} aria-hidden="true" />
+        <span className="ec-session-copy">
+          <small>Session</small>
+          <strong>{saved ? 'Secure' : 'Inactive'}</strong>
+        </span>
+        {saved ? (
+          <button type="button" className="ec-session-button" onClick={clear}>
+            End
+          </button>
+        ) : (
+          <button type="button" className="ec-session-button" onClick={() => setDialogOpen(true)}>
+            Start
+          </button>
+        )}
+      </div>
+
+      {dialogOpen ? (
+        <div
+          className="ec-session-overlay"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDialogOpen(false);
+          }}
+        >
+          <section
+            className="ec-session-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="operator-session-title"
+          >
+            <div className="ec-session-dialog-head">
+              <div>
+                <p>Protected actions</p>
+                <h2 id="operator-session-title">Start secure session</h2>
+              </div>
+              <button
+                type="button"
+                className="ec-icon-button"
+                onClick={() => setDialogOpen(false)}
+                aria-label="Close session dialog"
+              >
+                ×
+              </button>
+            </div>
+            <p className="ec-session-dialog-copy">
+              Paste the operator access token issued for this event. The token stays in this browser
+              tab and is attached only to Cloud API requests.
+            </p>
+            <label className="ec-field-label" htmlFor="operator-access-token">
+              Operator access token
+            </label>
+            <input
+              id="operator-access-token"
+              type="password"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="ecom_op_…"
+              value={token}
+              onChange={(event) => {
+                setToken(event.target.value);
+                setInvalid(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && validToken(token.trim())) save();
+                if (event.key === 'Escape') setDialogOpen(false);
+              }}
+              aria-invalid={invalid}
+            />
+            {invalid ? (
+              <div className="ec-field-error">That operator token is not valid.</div>
+            ) : null}
+            <div className="ec-session-dialog-actions">
+              <button type="button" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="ec-button-primary"
+                onClick={save}
+                disabled={!validToken(token.trim())}
+              >
+                Authenticate
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </>
   );
 }
