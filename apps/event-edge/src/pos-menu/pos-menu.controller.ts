@@ -4,6 +4,7 @@ import {
   Get,
   Headers,
   Inject,
+  Param,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import {
   type EdgeLocalAdminHeaders,
 } from '../security/edge-local-admin-auth.service';
 import { DeviceEdgeAuthService } from '../security/device-edge-auth.service';
+import { CloudPosMenuTransport } from './cloud-pos-menu.transport';
 import { PosMenuService } from './pos-menu.service';
 import type { PosMenuSnapshot } from './pos-menu.types';
 import { parsePosMenuSnapshot } from './pos-menu.validation';
@@ -25,6 +27,7 @@ export class PosMenuController {
     private readonly localAdmin: EdgeLocalAdminAuthService,
     @Inject(DeviceEdgeAuthService) private readonly deviceAuth: DeviceEdgeAuthService,
     @Inject(PosMenuService) private readonly menus: PosMenuService,
+    @Inject(CloudPosMenuTransport) private readonly cloudMenus: CloudPosMenuTransport,
   ) {}
 
   @Post('snapshot')
@@ -34,6 +37,16 @@ export class PosMenuController {
   ): Promise<PosMenuSnapshot> {
     this.localAdmin.authorize(headers);
     return this.menus.install(parsePosMenuSnapshot(body));
+  }
+
+  @Post('pull/:eventId')
+  async pull(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('eventId') eventId: string,
+  ): Promise<PosMenuSnapshot[]> {
+    this.localAdmin.authorize(headers);
+    const snapshots = await this.cloudMenus.latest(eventId);
+    return this.menus.installBatch(snapshots);
   }
 
   @Get('current')
