@@ -3,6 +3,7 @@ import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from './operator-auth.service';
 
 interface HttpRequest {
+  method?: string;
   headers: HeadersRecord;
   path?: string;
   url?: string;
@@ -47,6 +48,10 @@ export class OperatorIdentityGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     if (context.getType() !== 'http') return true;
     const request = context.switchToHttp().getRequest<HttpRequest>();
+
+    // Browser CORS preflight does not carry the actual custom request marker or cookies.
+    // Let Nest's CORS middleware answer it; the real request is checked below.
+    if ((request.method ?? '').toUpperCase() === 'OPTIONS') return true;
 
     // Caller-supplied actor/role headers are never trusted. They are removed on every request,
     // including machine/provider routes, before any controller can inspect them.
