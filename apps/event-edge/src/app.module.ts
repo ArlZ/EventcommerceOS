@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EdgeDatabaseModule } from './database/database.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { EdgePaymentsModule } from './payments/payments.module';
+import { PosMenuModule } from './pos-menu/pos-menu.module';
 import { EdgeAbuseProtectionModule } from './security/edge-abuse-protection.module';
 import { SyncModule } from './sync/sync.module';
 import { HealthModule } from './system/health.module';
@@ -13,6 +14,7 @@ import { HealthModule } from './system/health.module';
     HealthModule,
     InventoryModule,
     EdgePaymentsModule,
+    PosMenuModule,
     SyncModule,
   ],
 })
