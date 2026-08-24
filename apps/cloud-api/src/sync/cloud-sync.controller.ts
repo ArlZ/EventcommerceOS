@@ -18,6 +18,27 @@ function firstHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function withPostDeliveryStatus(batch: ReturnType<typeof parseEdgeBatch>) {
+  const deliveredByDevice = new Map<string, number>();
+  for (const event of batch.events) {
+    deliveredByDevice.set(event.deviceId, (deliveredByDevice.get(event.deviceId) ?? 0) + 1);
+  }
+
+  const deliveredAt = new Date().toISOString();
+  return {
+    ...batch,
+    deviceStatuses: batch.deviceStatuses.map((status) => {
+      const delivered = deliveredByDevice.get(status.deviceId) ?? 0;
+      if (delivered === 0) return status;
+      return {
+        ...status,
+        edgeBacklogCount: Math.max(0, status.edgeBacklogCount - delivered),
+        lastCloudDeliveryAt: deliveredAt,
+      };
+    }),
+  };
+}
+
 @Controller('sync')
 export class CloudSyncController {
   constructor(
@@ -46,6 +67,6 @@ export class CloudSyncController {
     const identity = await this.edgeAuth.authenticate(headers);
     const batch = parseEdgeBatch(body);
     await this.edgeAuth.authorizeSyncBatch(identity, batch);
-    return this.sync.ingest(batch, identity);
+    return this.sync.ingest(withPostDeliveryStatus(batch), identity);
   }
 }
