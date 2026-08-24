@@ -21,7 +21,13 @@ export class CloudPosMenuTransport {
     if (!Array.isArray(body) || body.length === 0) {
       throw new Error('cloud POS menu publication response must contain at least one snapshot');
     }
-    return body.map((value) => parsePosMenuSnapshot(value));
+    return body.map((value) => {
+      const snapshot = parsePosMenuSnapshot(value);
+      if (snapshot.eventId !== eventId) {
+        throw new Error('cloud POS menu publication response escaped the requested event scope');
+      }
+      return snapshot;
+    });
   }
 
   endpoint(eventId: string): string {
