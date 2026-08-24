@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from './operator-auth.service';
 
@@ -6,6 +6,10 @@ interface HttpRequest {
   headers: HeadersRecord;
   path?: string;
   url?: string;
+}
+
+function first(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function requestPath(request: HttpRequest): string {
@@ -21,6 +25,21 @@ function isPublicOperatorAuthPath(path: string): boolean {
   );
 }
 
+function hasOperatorCookie(headers: HeadersRecord): boolean {
+  const raw = first(headers.cookie);
+  return Boolean(raw?.split(';').some((part) => part.trim().startsWith('ec_operator_session=ecom_op_')));
+}
+
+function hasOperatorBearer(headers: HeadersRecord): boolean {
+  return first(headers.authorization)?.startsWith('Bearer ecom_op_') ?? false;
+}
+
+function requireBrowserRequest(headers: HeadersRecord): void {
+  if (first(headers['x-event-control-request'])?.trim() !== 'browser') {
+    throw new ForbiddenException('Event Control browser request marker required');
+  }
+}
+
 @Injectable()
 export class OperatorIdentityGuard implements CanActivate {
   constructor(@Inject(OperatorAuthService) private readonly operators: OperatorAuthService) {}
@@ -34,9 +53,17 @@ export class OperatorIdentityGuard implements CanActivate {
     delete request.headers['x-actor-id'];
     delete request.headers['x-role'];
 
-    // A stale browser session must never prevent the operator from reaching the login or logout
-    // endpoints that can replace/clear it. Those endpoints perform their own proof checks.
-    if (isPublicOperatorAuthPath(requestPath(request))) return true;
+    const path = requestPath(request);
+    if (isPublicOperatorAuthPath(path)) {
+      requireBrowserRequest(request.headers);
+      return true;
+    }
+
+    // Cookie sessions are browser-only. A custom request header forces a CORS preflight and blocks
+    // ordinary cross-site form submissions; bearer sessions remain available for CLI operations.
+    if (hasOperatorCookie(request.headers) && !hasOperatorBearer(request.headers)) {
+      requireBrowserRequest(request.headers);
+    }
 
     if (!this.operators.isOperatorAuthorization(request.headers)) return true;
 
