@@ -31,15 +31,30 @@ const navigation: NavigationGroup[] = [
         description: 'Live command centre',
       },
       { href: '/inventory', label: 'Inventory', icon: 'box', description: 'Stock and transfers' },
-      { href: '/sync-health', label: 'Devices', icon: 'device', description: 'Register sync health' },
+      {
+        href: '/sync-health',
+        label: 'Devices',
+        icon: 'device',
+        description: 'Register sync health',
+      },
     ],
   },
   {
     label: 'Event',
     items: [
       { href: '/configuration', label: 'Setup', icon: 'setup', description: 'Event configuration' },
-      { href: '/event-schedule', label: 'Schedule', icon: 'calendar', description: 'Dates and lifecycle' },
-      { href: '/event-close', label: 'Close & reconcile', icon: 'close', description: 'Event close controls' },
+      {
+        href: '/event-schedule',
+        label: 'Schedule',
+        icon: 'calendar',
+        description: 'Dates and lifecycle',
+      },
+      {
+        href: '/event-close',
+        label: 'Close & reconcile',
+        icon: 'close',
+        description: 'Event close controls',
+      },
     ],
   },
 ];
@@ -242,7 +257,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             if (event.target === event.currentTarget) setCommandOpen(false);
           }}
         >
-          <section className="ec-command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+          <section
+            className="ec-command-palette"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Command palette"
+          >
             <div className="ec-command-input-wrap">
               <Icon name="search" />
               <input

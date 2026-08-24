@@ -94,18 +94,29 @@ export function OperatorSessionControl() {
             if (event.target === event.currentTarget) setDialogOpen(false);
           }}
         >
-          <section className="ec-session-dialog" role="dialog" aria-modal="true" aria-labelledby="operator-session-title">
+          <section
+            className="ec-session-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="operator-session-title"
+          >
             <div className="ec-session-dialog-head">
               <div>
                 <p>Protected actions</p>
                 <h2 id="operator-session-title">Start secure session</h2>
               </div>
-              <button type="button" className="ec-icon-button" onClick={() => setDialogOpen(false)} aria-label="Close session dialog">
+              <button
+                type="button"
+                className="ec-icon-button"
+                onClick={() => setDialogOpen(false)}
+                aria-label="Close session dialog"
+              >
                 ×
               </button>
             </div>
             <p className="ec-session-dialog-copy">
-              Paste the operator access token issued for this event. The token stays in this browser tab and is attached only to Cloud API requests.
+              Paste the operator access token issued for this event. The token stays in this browser
+              tab and is attached only to Cloud API requests.
             </p>
             <label className="ec-field-label" htmlFor="operator-access-token">
               Operator access token
@@ -128,12 +139,19 @@ export function OperatorSessionControl() {
               }}
               aria-invalid={invalid}
             />
-            {invalid ? <div className="ec-field-error">That operator token is not valid.</div> : null}
+            {invalid ? (
+              <div className="ec-field-error">That operator token is not valid.</div>
+            ) : null}
             <div className="ec-session-dialog-actions">
               <button type="button" onClick={() => setDialogOpen(false)}>
                 Cancel
               </button>
-              <button type="button" className="ec-button-primary" onClick={save} disabled={!validToken(token.trim())}>
+              <button
+                type="button"
+                className="ec-button-primary"
+                onClick={save}
+                disabled={!validToken(token.trim())}
+              >
                 Authenticate
               </button>
             </div>

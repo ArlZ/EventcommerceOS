@@ -154,7 +154,13 @@ function StatusPill({ mode, stale }: { mode: CommandCentreRealtimeMode; stale: b
         : mode === 'CONNECTING'
           ? 'CONNECTING'
           : 'NOT CONNECTED';
-  const tone: Tone = stale ? 'danger' : mode === 'LIVE' ? 'success' : mode === 'IDLE' ? 'neutral' : 'warning';
+  const tone: Tone = stale
+    ? 'danger'
+    : mode === 'LIVE'
+      ? 'success'
+      : mode === 'IDLE'
+        ? 'neutral'
+        : 'warning';
   return (
     <strong className="ec-status-pill" data-tone={tone}>
       <span className="ec-status-dot" aria-hidden="true" />
@@ -250,9 +256,15 @@ function AlertCard({
   );
 }
 
-function paymentState(snapshot: CommandCentreSnapshot): { tone: Tone; label: string; detail: string } {
+function paymentState(snapshot: CommandCentreSnapshot): {
+  tone: Tone;
+  label: string;
+  detail: string;
+} {
   const attempts = snapshot.payments.attempts;
-  const unavailableRails = snapshot.payments.rails.filter((rail) => rail.status !== 'AVAILABLE').length;
+  const unavailableRails = snapshot.payments.rails.filter(
+    (rail) => rail.status !== 'AVAILABLE',
+  ).length;
   if (attempts.unknownCount > 0) {
     return {
       tone: 'danger',
@@ -264,7 +276,10 @@ function paymentState(snapshot: CommandCentreSnapshot): { tone: Tone; label: str
     return {
       tone: 'warning',
       label: `${attempts.pendingCount} pending · ${attempts.failedCount} failed`,
-      detail: unavailableRails > 0 ? `${unavailableRails} payment rail issue(s)` : 'No unknown payment state',
+      detail:
+        unavailableRails > 0
+          ? `${unavailableRails} payment rail issue(s)`
+          : 'No unknown payment state',
     };
   }
   if (attempts.totalCount === 0) {
@@ -284,7 +299,14 @@ function deviceState(snapshot: CommandCentreSnapshot): {
   const degraded = snapshot.devices.filter((device) => device.status === 'DEGRADED').length;
   const stale = snapshot.devices.filter((device) => device.status === 'STALE').length;
   return {
-    tone: stale > 0 ? 'danger' : degraded > 0 ? 'warning' : snapshot.devices.length > 0 ? 'success' : 'neutral',
+    tone:
+      stale > 0
+        ? 'danger'
+        : degraded > 0
+          ? 'warning'
+          : snapshot.devices.length > 0
+            ? 'success'
+            : 'neutral',
     healthy,
     degraded,
     stale,
@@ -292,7 +314,17 @@ function deviceState(snapshot: CommandCentreSnapshot): {
   };
 }
 
-function SystemStatusRow({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: Tone }) {
+function SystemStatusRow({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: Tone;
+}) {
   return (
     <div className="ec-system-row">
       <span className="ec-system-dot" data-tone={tone} aria-hidden="true" />
@@ -459,10 +491,13 @@ export function CommandCentreClient() {
   }
 
   const stale = mode === 'LIVE' ? false : snapshotIsStale(snapshot, now);
-  const criticalAlertCount = snapshot?.alerts.filter((alert) => alert.severity === 'CRITICAL').length ?? 0;
+  const criticalAlertCount =
+    snapshot?.alerts.filter((alert) => alert.severity === 'CRITICAL').length ?? 0;
   const payment = snapshot ? paymentState(snapshot) : null;
   const devices = snapshot ? deviceState(snapshot) : null;
-  const criticalRiskCount = snapshot?.inventory.risks.filter((risk) => risk.severity.toUpperCase() === 'CRITICAL').length ?? 0;
+  const criticalRiskCount =
+    snapshot?.inventory.risks.filter((risk) => risk.severity.toUpperCase() === 'CRITICAL').length ??
+    0;
   const inventoryTone: Tone = !snapshot
     ? 'neutral'
     : criticalRiskCount > 0
@@ -529,7 +564,10 @@ export function CommandCentreClient() {
           <section className="ec-context-card">
             <div>
               <strong>Select event context</strong>
-              <p>Use the organisation and event IDs from Setup. The last successful selection is remembered in this tab.</p>
+              <p>
+                Use the organisation and event IDs from Setup. The last successful selection is
+                remembered in this tab.
+              </p>
             </div>
             <form
               className="ec-context-loader"
@@ -561,7 +599,9 @@ export function CommandCentreClient() {
 
         {snapshot && stale ? (
           <div className="ec-banner ec-banner--danger">
-            <strong>Do not treat this screen as current truth.</strong> Live streaming is unavailable or this snapshot is old. Local POS selling can continue; investigate connectivity before acting on dashboard timing alone.
+            <strong>Do not treat this screen as current truth.</strong> Live streaming is
+            unavailable or this snapshot is old. Local POS selling can continue; investigate
+            connectivity before acting on dashboard timing alone.
           </div>
         ) : null}
 
@@ -593,8 +633,18 @@ export function CommandCentreClient() {
                 }
               />
               <StatusChip
-                tone={criticalAlertCount > 0 ? 'danger' : snapshot.alerts.length > 0 ? 'warning' : 'success'}
-                label={snapshot.alerts.length === 0 ? 'Alerts · all clear' : `Alerts · ${snapshot.alerts.length} active`}
+                tone={
+                  criticalAlertCount > 0
+                    ? 'danger'
+                    : snapshot.alerts.length > 0
+                      ? 'warning'
+                      : 'success'
+                }
+                label={
+                  snapshot.alerts.length === 0
+                    ? 'Alerts · all clear'
+                    : `Alerts · ${snapshot.alerts.length} active`
+                }
               />
               <StatusChip tone="success" label="Local-first POS protected" />
             </div>
@@ -613,7 +663,9 @@ export function CommandCentreClient() {
               <Metric
                 label="At-risk SKUs"
                 value={snapshot.inventory.risks.length}
-                sub={criticalRiskCount > 0 ? `${criticalRiskCount} critical` : 'No critical stock risk'}
+                sub={
+                  criticalRiskCount > 0 ? `${criticalRiskCount} critical` : 'No critical stock risk'
+                }
                 tone={inventoryTone}
               />
               <Metric
@@ -625,33 +677,61 @@ export function CommandCentreClient() {
               <Metric
                 label="Active alerts"
                 value={snapshot.alerts.length}
-                sub={criticalAlertCount > 0 ? `${criticalAlertCount} critical` : 'No critical alerts'}
-                tone={criticalAlertCount > 0 ? 'danger' : snapshot.alerts.length > 0 ? 'warning' : 'success'}
+                sub={
+                  criticalAlertCount > 0 ? `${criticalAlertCount} critical` : 'No critical alerts'
+                }
+                tone={
+                  criticalAlertCount > 0
+                    ? 'danger'
+                    : snapshot.alerts.length > 0
+                      ? 'warning'
+                      : 'success'
+                }
               />
               <Metric
                 label="Data freshness"
-                value={stale ? 'Stale' : mode === 'LIVE' ? 'Live' : mode === 'POLLING' ? 'Polling' : 'Connecting'}
+                value={
+                  stale
+                    ? 'Stale'
+                    : mode === 'LIVE'
+                      ? 'Live'
+                      : mode === 'POLLING'
+                        ? 'Polling'
+                        : 'Connecting'
+                }
                 sub={`Snapshot ${ageLabel(snapshot.freshness.generatedAt, now)}`}
                 tone={stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning'}
               />
             </section>
 
-            {snapshot.alerts.length > 0 || snapshot.inventory.risks.length > 0 || (devices?.issues ?? 0) > 0 ? (
-              <div className="ec-exception-strip" data-tone={criticalAlertCount > 0 ? 'danger' : 'warning'}>
-                <span className="ec-exception-icon" aria-hidden="true">!</span>
+            {snapshot.alerts.length > 0 ||
+            snapshot.inventory.risks.length > 0 ||
+            (devices?.issues ?? 0) > 0 ? (
+              <div
+                className="ec-exception-strip"
+                data-tone={criticalAlertCount > 0 ? 'danger' : 'warning'}
+              >
+                <span className="ec-exception-icon" aria-hidden="true">
+                  !
+                </span>
                 <div>
                   <strong>Attention required</strong>
                   <span>
-                    {snapshot.alerts.length} active alert(s) · {snapshot.inventory.risks.length} inventory risk(s) · {devices?.issues ?? 0} device issue(s)
+                    {snapshot.alerts.length} active alert(s) · {snapshot.inventory.risks.length}{' '}
+                    inventory risk(s) · {devices?.issues ?? 0} device issue(s)
                   </span>
                 </div>
               </div>
             ) : (
               <div className="ec-exception-strip" data-tone="success">
-                <span className="ec-exception-icon" aria-hidden="true">✓</span>
+                <span className="ec-exception-icon" aria-hidden="true">
+                  ✓
+                </span>
                 <div>
                   <strong>All clear</strong>
-                  <span>No active alerts, inventory risks or device health exceptions are projected.</span>
+                  <span>
+                    No active alerts, inventory risks or device health exceptions are projected.
+                  </span>
                 </div>
               </div>
             )}
@@ -661,7 +741,11 @@ export function CommandCentreClient() {
                 <Panel
                   title="Sales performance"
                   meta="Closed event orders, current velocity and location performance"
-                  action={<span className="ec-panel-meta">Last sale {formatTime(snapshot.sales.lastSaleAt)}</span>}
+                  action={
+                    <span className="ec-panel-meta">
+                      Last sale {formatTime(snapshot.sales.lastSaleAt)}
+                    </span>
+                  }
                 >
                   <div className="ec-inline-metrics">
                     <div>
@@ -689,7 +773,10 @@ export function CommandCentreClient() {
                           </div>
                           <div className="ec-compact-row-value">
                             <strong>{moneyList(location.grossSales)}</strong>
-                            <small>{location.transactionCount} txn · {velocityList(location.currentSalesVelocity)}</small>
+                            <small>
+                              {location.transactionCount} txn ·{' '}
+                              {velocityList(location.currentSalesVelocity)}
+                            </small>
                           </div>
                         </div>
                       ))}
@@ -700,23 +787,38 @@ export function CommandCentreClient() {
                 <Panel
                   title="Inventory risk"
                   meta="Products requiring the earliest operational response"
-                  action={<Link className="ec-panel-link" href="/inventory">View inventory →</Link>}
+                  action={
+                    <Link className="ec-panel-link" href="/inventory">
+                      View inventory →
+                    </Link>
+                  }
                 >
                   {snapshot.inventory.risks.length === 0 ? (
-                    <div className="ec-empty-state" data-tone="success">No active inventory risks.</div>
+                    <div className="ec-empty-state" data-tone="success">
+                      No active inventory risks.
+                    </div>
                   ) : (
                     <div className="ec-risk-list">
                       {snapshot.inventory.risks.slice(0, 10).map((risk) => {
-                        const riskTone: Tone = risk.severity.toUpperCase() === 'CRITICAL' ? 'danger' : 'warning';
+                        const riskTone: Tone =
+                          risk.severity.toUpperCase() === 'CRITICAL' ? 'danger' : 'warning';
                         return (
                           <div className="ec-risk-row" key={risk.alertId}>
-                            <span className="ec-risk-severity" data-tone={riskTone}>{risk.severity}</span>
+                            <span className="ec-risk-severity" data-tone={riskTone}>
+                              {risk.severity}
+                            </span>
                             <div className="ec-risk-copy">
                               <strong>{risk.skuName}</strong>
-                              <span>{risk.inventoryLocationName ?? 'Event-wide'} · {risk.availableQuantityBase} available</span>
+                              <span>
+                                {risk.inventoryLocationName ?? 'Event-wide'} ·{' '}
+                                {risk.availableQuantityBase} available
+                              </span>
                               {risk.suggestedTransferQuantityBase ? (
                                 <small>
-                                  Suggested transfer {risk.suggestedTransferQuantityBase} from {risk.suggestedSourceLocationName ?? risk.suggestedSourceLocationId ?? 'best source'}
+                                  Suggested transfer {risk.suggestedTransferQuantityBase} from{' '}
+                                  {risk.suggestedSourceLocationName ??
+                                    risk.suggestedSourceLocationId ??
+                                    'best source'}
                                 </small>
                               ) : null}
                             </div>
@@ -734,13 +836,31 @@ export function CommandCentreClient() {
                 <Panel
                   title="Device health"
                   meta="Register heartbeat, backlog and locally committed sales visibility"
-                  action={<Link className="ec-panel-link" href="/sync-health">View devices →</Link>}
+                  action={
+                    <Link className="ec-panel-link" href="/sync-health">
+                      View devices →
+                    </Link>
+                  }
                 >
                   <div className="ec-device-summary">
-                    <div data-tone="success"><strong>{devices?.healthy ?? 0}</strong><span>Healthy</span></div>
-                    <div data-tone="warning"><strong>{devices?.degraded ?? 0}</strong><span>Degraded</span></div>
-                    <div data-tone="danger"><strong>{devices?.stale ?? 0}</strong><span>Stale</span></div>
-                    <div><strong>{snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0)}</strong><span>Total backlog</span></div>
+                    <div data-tone="success">
+                      <strong>{devices?.healthy ?? 0}</strong>
+                      <span>Healthy</span>
+                    </div>
+                    <div data-tone="warning">
+                      <strong>{devices?.degraded ?? 0}</strong>
+                      <span>Degraded</span>
+                    </div>
+                    <div data-tone="danger">
+                      <strong>{devices?.stale ?? 0}</strong>
+                      <span>Stale</span>
+                    </div>
+                    <div>
+                      <strong>
+                        {snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0)}
+                      </strong>
+                      <span>Total backlog</span>
+                    </div>
                   </div>
                   {snapshot.devices.length === 0 ? (
                     <p className="ec-empty">No event devices observed yet.</p>
@@ -756,7 +876,17 @@ export function CommandCentreClient() {
                         .map((device) => (
                           <div className="ec-compact-row" key={device.deviceId}>
                             <div className="ec-device-name">
-                              <span className="ec-system-dot" data-tone={device.status === 'STALE' ? 'danger' : device.status === 'DEGRADED' ? 'warning' : 'success'} aria-hidden="true" />
+                              <span
+                                className="ec-system-dot"
+                                data-tone={
+                                  device.status === 'STALE'
+                                    ? 'danger'
+                                    : device.status === 'DEGRADED'
+                                      ? 'warning'
+                                      : 'success'
+                                }
+                                aria-hidden="true"
+                              />
                               <span>
                                 <strong>{device.deviceId}</strong>
                                 <small>{device.salesLocationName ?? 'Unknown location'}</small>
@@ -765,7 +895,10 @@ export function CommandCentreClient() {
                             <div className="ec-compact-row-value">
                               <strong>{device.status}</strong>
                               <small>
-                                backlog {device.edgeBacklogCount} · {device.syncAgeSeconds === null ? 'no heartbeat' : `${device.syncAgeSeconds}s sync age`}
+                                backlog {device.edgeBacklogCount} ·{' '}
+                                {device.syncAgeSeconds === null
+                                  ? 'no heartbeat'
+                                  : `${device.syncAgeSeconds}s sync age`}
                               </small>
                             </div>
                           </div>
@@ -776,7 +909,9 @@ export function CommandCentreClient() {
 
                 <div className="ec-two-panel-grid">
                   <Panel title="Top products" meta="Current closed-order sales mix">
-                    {snapshot.topProducts.length === 0 ? <p className="ec-empty">No product sales yet.</p> : null}
+                    {snapshot.topProducts.length === 0 ? (
+                      <p className="ec-empty">No product sales yet.</p>
+                    ) : null}
                     <div className="ec-compact-list">
                       {snapshot.topProducts.slice(0, 10).map((product) => (
                         <div className="ec-compact-row" key={product.skuId}>
@@ -784,18 +919,27 @@ export function CommandCentreClient() {
                             <strong>{product.name}</strong>
                             <small>{product.quantitySold} sold</small>
                           </div>
-                          <div className="ec-compact-row-value"><strong>{moneyList(product.grossSales)}</strong></div>
+                          <div className="ec-compact-row-value">
+                            <strong>{moneyList(product.grossSales)}</strong>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </Panel>
                   <Panel title="Active transfers" meta="Stock in motion until receipt is recorded">
-                    {snapshot.inventory.activeTransfers.length === 0 ? <p className="ec-empty">No active transfers.</p> : null}
+                    {snapshot.inventory.activeTransfers.length === 0 ? (
+                      <p className="ec-empty">No active transfers.</p>
+                    ) : null}
                     <div className="ec-compact-list">
                       {snapshot.inventory.activeTransfers.map((transfer) => (
                         <div className="ec-transfer-row" key={transfer.transferId}>
-                          <span className="ec-status-pill" data-tone="warning">{transfer.state}</span>
-                          <strong>{transfer.sourceLocationName ?? transfer.sourceLocationId} → {transfer.destinationLocationName ?? transfer.destinationLocationId}</strong>
+                          <span className="ec-status-pill" data-tone="warning">
+                            {transfer.state}
+                          </span>
+                          <strong>
+                            {transfer.sourceLocationName ?? transfer.sourceLocationId} →{' '}
+                            {transfer.destinationLocationName ?? transfer.destinationLocationId}
+                          </strong>
                           <small>Updated {formatTime(transfer.updatedAt)}</small>
                         </div>
                       ))}
@@ -805,24 +949,54 @@ export function CommandCentreClient() {
               </div>
 
               <aside className="ec-live-rail">
-                <Panel title="System status" meta={`Snapshot ${ageLabel(snapshot.freshness.generatedAt, now)}`}>
+                <Panel
+                  title="System status"
+                  meta={`Snapshot ${ageLabel(snapshot.freshness.generatedAt, now)}`}
+                >
                   <div className="ec-system-list">
-                    <SystemStatusRow label="Payments" value={payment?.label ?? '—'} detail={payment?.detail ?? 'No payment data'} tone={payment?.tone ?? 'neutral'} />
+                    <SystemStatusRow
+                      label="Payments"
+                      value={payment?.label ?? '—'}
+                      detail={payment?.detail ?? 'No payment data'}
+                      tone={payment?.tone ?? 'neutral'}
+                    />
                     <SystemStatusRow
                       label="Sync"
-                      value={snapshot.devices.length === 0 ? 'No devices' : devices?.issues === 0 ? 'Healthy' : `${devices?.issues ?? 0} issues`}
+                      value={
+                        snapshot.devices.length === 0
+                          ? 'No devices'
+                          : devices?.issues === 0
+                            ? 'Healthy'
+                            : `${devices?.issues ?? 0} issues`
+                      }
                       detail={`${devices?.healthy ?? 0} healthy · ${devices?.degraded ?? 0} degraded · ${devices?.stale ?? 0} stale`}
                       tone={devices?.tone ?? 'neutral'}
                     />
                     <SystemStatusRow
                       label="Inventory"
-                      value={snapshot.inventory.risks.length === 0 ? 'Healthy' : `${snapshot.inventory.risks.length} at risk`}
-                      detail={criticalRiskCount > 0 ? `${criticalRiskCount} critical risk(s)` : 'No critical stock risk'}
+                      value={
+                        snapshot.inventory.risks.length === 0
+                          ? 'Healthy'
+                          : `${snapshot.inventory.risks.length} at risk`
+                      }
+                      detail={
+                        criticalRiskCount > 0
+                          ? `${criticalRiskCount} critical risk(s)`
+                          : 'No critical stock risk'
+                      }
                       tone={inventoryTone}
                     />
                     <SystemStatusRow
                       label="Realtime"
-                      value={stale ? 'Stale' : mode === 'LIVE' ? 'Live' : mode === 'POLLING' ? 'Polling' : 'Connecting'}
+                      value={
+                        stale
+                          ? 'Stale'
+                          : mode === 'LIVE'
+                            ? 'Live'
+                            : mode === 'POLLING'
+                              ? 'Polling'
+                              : 'Connecting'
+                      }
                       detail={`Generated ${ageLabel(snapshot.freshness.generatedAt, now)}`}
                       tone={stale ? 'danger' : mode === 'LIVE' ? 'success' : 'warning'}
                     />
@@ -831,7 +1005,9 @@ export function CommandCentreClient() {
 
                 <Panel title="Active alerts" meta={`${snapshot.alerts.length} requiring attention`}>
                   {snapshot.alerts.length === 0 ? (
-                    <div className="ec-empty-state" data-tone="success">No active operational exceptions.</div>
+                    <div className="ec-empty-state" data-tone="success">
+                      No active operational exceptions.
+                    </div>
                   ) : (
                     <div className="ec-action-list">
                       {snapshot.alerts.map((alert) => (
@@ -840,7 +1016,8 @@ export function CommandCentreClient() {
                           alert={alert}
                           busy={busyAlertId === alert.inventoryAlertId}
                           onAcknowledge={() => {
-                            if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
+                            if (alert.inventoryAlertId)
+                              void act(alert.inventoryAlertId, 'ACKNOWLEDGE');
                           }}
                           onAssign={() => {
                             if (alert.inventoryAlertId) void act(alert.inventoryAlertId, 'ASSIGN');
@@ -853,18 +1030,48 @@ export function CommandCentreClient() {
 
                 <Panel title="Payment health" meta="Do not retry unknown payments">
                   <div className="ec-payment-health">
-                    <div><span>Pending</span><strong>{snapshot.payments.attempts.pendingCount}</strong><small>{(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%</small></div>
-                    <div data-tone={snapshot.payments.attempts.unknownCount > 0 ? 'danger' : 'neutral'}><span>Unknown</span><strong>{snapshot.payments.attempts.unknownCount}</strong><small>{(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%</small></div>
-                    <div><span>Failed</span><strong>{snapshot.payments.attempts.failedCount}</strong><small>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</small></div>
+                    <div>
+                      <span>Pending</span>
+                      <strong>{snapshot.payments.attempts.pendingCount}</strong>
+                      <small>{(snapshot.payments.attempts.pendingRate * 100).toFixed(1)}%</small>
+                    </div>
+                    <div
+                      data-tone={snapshot.payments.attempts.unknownCount > 0 ? 'danger' : 'neutral'}
+                    >
+                      <span>Unknown</span>
+                      <strong>{snapshot.payments.attempts.unknownCount}</strong>
+                      <small>{(snapshot.payments.attempts.unknownRate * 100).toFixed(1)}%</small>
+                    </div>
+                    <div>
+                      <span>Failed</span>
+                      <strong>{snapshot.payments.attempts.failedCount}</strong>
+                      <small>{(snapshot.payments.attempts.failureRate * 100).toFixed(1)}%</small>
+                    </div>
                   </div>
                   {snapshot.payments.attempts.unknownCount > 0 ? (
-                    <div className="ec-payment-unknown">Unknown value: <strong>{moneyList(snapshot.payments.attempts.unknownValue)}</strong></div>
+                    <div className="ec-payment-unknown">
+                      Unknown value:{' '}
+                      <strong>{moneyList(snapshot.payments.attempts.unknownValue)}</strong>
+                    </div>
                   ) : null}
                   <div className="ec-rail-list">
                     {snapshot.payments.rails.map((rail) => (
                       <div key={rail.providerId}>
-                        <span className="ec-system-dot" data-tone={rail.status === 'AVAILABLE' ? 'success' : rail.status === 'DEGRADED' ? 'warning' : 'neutral'} aria-hidden="true" />
-                        <span><strong>{rail.providerId}</strong><small>{rail.detailCode ?? rail.status}</small></span>
+                        <span
+                          className="ec-system-dot"
+                          data-tone={
+                            rail.status === 'AVAILABLE'
+                              ? 'success'
+                              : rail.status === 'DEGRADED'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                          aria-hidden="true"
+                        />
+                        <span>
+                          <strong>{rail.providerId}</strong>
+                          <small>{rail.detailCode ?? rail.status}</small>
+                        </span>
                         <b>{rail.status}</b>
                       </div>
                     ))}
