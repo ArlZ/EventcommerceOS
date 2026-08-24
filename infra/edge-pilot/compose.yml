@@ -1,0 +1,94 @@
+name: event-commerce-edge-pilot
+
+services:
+  edge-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: event_commerce_edge
+      POSTGRES_USER: event_commerce
+      POSTGRES_PASSWORD: ${EDGE_POSTGRES_PASSWORD:?EDGE_POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U event_commerce -d event_commerce_edge']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - edge-postgres-data:/var/lib/postgresql/data
+    networks:
+      - edge-internal
+
+  edge-migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: event-edge
+      args:
+        NEXT_PUBLIC_CLOUD_API_URL: ${CLOUD_API_URL:?CLOUD_API_URL is required}
+        RELEASE_COMMIT: ${RELEASE_COMMIT:?RELEASE_COMMIT is required}
+    command: ['node', 'scripts/migrate.mjs']
+    environment:
+      NODE_ENV: production
+      EDGE_DATABASE_URL: postgresql://event_commerce:${EDGE_POSTGRES_PASSWORD}@edge-postgres:5432/event_commerce_edge
+      RELEASE_COMMIT: ${RELEASE_COMMIT}
+    depends_on:
+      edge-postgres:
+        condition: service_healthy
+    restart: 'no'
+    networks:
+      - edge-internal
+
+  event-edge:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: event-edge
+      args:
+        NEXT_PUBLIC_CLOUD_API_URL: ${CLOUD_API_URL}
+        RELEASE_COMMIT: ${RELEASE_COMMIT}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      NODE_ENV: production
+      PORT: '3002'
+      RELEASE_COMMIT: ${RELEASE_COMMIT}
+      EDGE_DATABASE_URL: postgresql://event_commerce:${EDGE_POSTGRES_PASSWORD}@edge-postgres:5432/event_commerce_edge
+      EDGE_DATABASE_CONNECTION_TIMEOUT_MS: '3000'
+      CLOUD_API_URL: ${CLOUD_API_URL}
+      EDGE_ID: ${EDGE_ID:?EDGE_ID is required}
+      EDGE_CLOUD_SYNC_TOKEN: ${EDGE_CLOUD_SYNC_TOKEN:?EDGE_CLOUD_SYNC_TOKEN is required}
+      EDGE_LOCAL_ADMIN_TOKEN: ${EDGE_LOCAL_ADMIN_TOKEN:?EDGE_LOCAL_ADMIN_TOKEN is required}
+      PILOT_EVENT_ID: ${PILOT_EVENT_ID}
+      PILOT_EVENT_END_AT: ${PILOT_EVENT_END_AT}
+      PILOT_SALES_LOCATION_ID: ${PILOT_SALES_LOCATION_ID}
+      PILOT_INVENTORY_LOCATION_ID: ${PILOT_INVENTORY_LOCATION_ID}
+      PILOT_SKU_ID: ${PILOT_SKU_ID}
+      PILOT_OPERATOR_ACTOR_ID: ${PILOT_OPERATOR_ACTOR_ID}
+      PILOT_OPENING_STOCK_BASE: ${PILOT_OPENING_STOCK_BASE}
+      PILOT_OPENING_STOCK_OCCURRED_AT: ${PILOT_OPENING_STOCK_OCCURRED_AT}
+      PILOT_INVENTORY_LOCATION_NAME: ${PILOT_INVENTORY_LOCATION_NAME:-Pilot Store}
+      PILOT_SKU_NAME: ${PILOT_SKU_NAME:-500 ml Bottle}
+      PILOT_SKU_CATEGORY: ${PILOT_SKU_CATEGORY:-Beverage}
+      PILOT_SKU_BASE_UNIT: ${PILOT_SKU_BASE_UNIT:-bottle}
+    depends_on:
+      edge-postgres:
+        condition: service_healthy
+      edge-migrate:
+        condition: service_completed_successfully
+    ports:
+      - '${EDGE_BIND_ADDRESS:-0.0.0.0}:${EDGE_PORT:-3002}:3002'
+    volumes:
+      - ./bootstrap.mjs:/pilot/bootstrap.mjs:ro
+    networks:
+      - edge-internal
+      - edge-lan
+
+volumes:
+  edge-postgres-data:
+
+networks:
+  edge-internal:
+    internal: true
+  edge-lan:

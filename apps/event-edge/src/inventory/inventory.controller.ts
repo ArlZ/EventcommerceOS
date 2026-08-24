@@ -1,4 +1,8 @@
-import { Inject, Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Param, Post } from '@nestjs/common';
+import {
+  EdgeLocalAdminAuthService,
+  type EdgeLocalAdminHeaders,
+} from '../security/edge-local-admin-auth.service';
 import { InventoryAlertService } from './inventory-alert.service';
 import { InventoryConfigurationService } from './inventory-configuration.service';
 import { InventoryCountService } from './inventory-count.service';
@@ -20,6 +24,7 @@ import {
 @Controller('inventory')
 export class InventoryController {
   constructor(
+    @Inject(EdgeLocalAdminAuthService) private readonly localAdmin: EdgeLocalAdminAuthService,
     @Inject(InventoryConfigurationService)
     private readonly configuration: InventoryConfigurationService,
     @Inject(InventoryLedgerService) private readonly ledger: InventoryLedgerService,
@@ -31,13 +36,21 @@ export class InventoryController {
   ) {}
 
   @Post('configuration/snapshot')
-  async installConfiguration(@Body() body: unknown): Promise<{ status: 'installed' }> {
+  async installConfiguration(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Body() body: unknown,
+  ): Promise<{ status: 'installed' }> {
+    this.localAdmin.authorize(headers);
     await this.configuration.install(parseInventoryConfiguration(body));
     return { status: 'installed' };
   }
 
   @Post('movements')
-  async postMovement(@Body() body: unknown): Promise<Record<string, unknown>> {
+  async postMovement(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Body() body: unknown,
+  ): Promise<Record<string, unknown>> {
+    this.localAdmin.authorize(headers);
     const input = parseManualMovement(body);
     const row = await this.ledger.postManual(input);
     await this.evaluateBestEffort(input.eventId);
@@ -53,84 +66,133 @@ export class InventoryController {
   }
 
   @Get('events/:eventId/stock')
-  stock(@Param('eventId') eventId: string) {
+  stock(@Headers() headers: EdgeLocalAdminHeaders, @Param('eventId') eventId: string) {
+    this.localAdmin.authorize(headers);
     return this.ledger.projection(eventId);
   }
 
   @Post('transfers')
-  createTransfer(@Body() body: unknown) {
+  createTransfer(@Headers() headers: EdgeLocalAdminHeaders, @Body() body: unknown) {
+    this.localAdmin.authorize(headers);
     return this.transfers.create(parseCreateTransfer(body));
   }
 
   @Post('transfers/:transferId/assign')
-  assignTransfer(@Param('transferId') transferId: string, @Body() body: unknown) {
+  assignTransfer(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('transferId') transferId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     return this.transfers.assign(transferId, parseTransferTransition(body));
   }
 
   @Post('transfers/:transferId/picking')
-  startPicking(@Param('transferId') transferId: string, @Body() body: unknown) {
+  startPicking(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('transferId') transferId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     return this.transfers.startPicking(transferId, parseTransferTransition(body));
   }
 
   @Post('transfers/:transferId/dispatch')
-  async dispatchTransfer(@Param('transferId') transferId: string, @Body() body: unknown) {
+  async dispatchTransfer(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('transferId') transferId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     const result = await this.transfers.dispatch(transferId, parseTransferDispatch(body));
     await this.evaluateBestEffort(result.eventId);
     return result;
   }
 
   @Post('transfers/:transferId/receive')
-  async receiveTransfer(@Param('transferId') transferId: string, @Body() body: unknown) {
+  async receiveTransfer(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('transferId') transferId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     const result = await this.transfers.receive(transferId, parseTransferReceipt(body));
     await this.evaluateBestEffort(result.eventId);
     return result;
   }
 
   @Post('transfers/:transferId/cancel')
-  cancelTransfer(@Param('transferId') transferId: string, @Body() body: unknown) {
+  cancelTransfer(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('transferId') transferId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     return this.transfers.cancel(transferId, parseTransferTransition(body));
   }
 
   @Get('events/:eventId/transfers')
-  listTransfers(@Param('eventId') eventId: string) {
+  listTransfers(@Headers() headers: EdgeLocalAdminHeaders, @Param('eventId') eventId: string) {
+    this.localAdmin.authorize(headers);
     return this.transfers.list(eventId);
   }
 
   @Post('counts')
-  createCount(@Body() body: unknown) {
+  createCount(@Headers() headers: EdgeLocalAdminHeaders, @Body() body: unknown) {
+    this.localAdmin.authorize(headers);
     return this.counts.create(parseCreateStockCount(body));
   }
 
   @Post('counts/:countId/close')
-  async closeCount(@Param('countId') countId: string, @Body() body: unknown) {
+  async closeCount(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('countId') countId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     const result = await this.counts.close(countId, parseCloseStockCount(body));
     await this.evaluateBestEffort(result.eventId);
     return result;
   }
 
   @Post('events/:eventId/evaluate-alerts')
-  async evaluateAlerts(@Param('eventId') eventId: string): Promise<{ status: 'evaluated' }> {
+  async evaluateAlerts(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('eventId') eventId: string,
+  ): Promise<{ status: 'evaluated' }> {
+    this.localAdmin.authorize(headers);
     await this.alerts.evaluateEvent(eventId);
     return { status: 'evaluated' };
   }
 
   @Get('events/:eventId/alerts')
-  listAlerts(@Param('eventId') eventId: string) {
+  listAlerts(@Headers() headers: EdgeLocalAdminHeaders, @Param('eventId') eventId: string) {
+    this.localAdmin.authorize(headers);
     return this.alerts.list(eventId);
   }
 
   @Post('alerts/:alertId/transition')
-  transitionAlert(@Param('alertId') alertId: string, @Body() body: unknown) {
+  transitionAlert(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('alertId') alertId: string,
+    @Body() body: unknown,
+  ) {
+    this.localAdmin.authorize(headers);
     return this.alerts.transition(alertId, parseAlertTransition(body));
   }
 
   @Post('events/:eventId/run-escalations')
-  async runEscalations(@Param('eventId') eventId: string): Promise<{ escalated: number }> {
+  async runEscalations(
+    @Headers() headers: EdgeLocalAdminHeaders,
+    @Param('eventId') eventId: string,
+  ): Promise<{ escalated: number }> {
+    this.localAdmin.authorize(headers);
     return { escalated: await this.alerts.runEscalations(eventId) };
   }
 
   @Post('notifications/drain')
-  drainNotifications() {
+  drainNotifications(@Headers() headers: EdgeLocalAdminHeaders) {
+    this.localAdmin.authorize(headers);
     return this.notifications.drainOnce();
   }
 
