@@ -34,21 +34,21 @@ class LocalMenuStore(
     return snapshot(requireNotNull(dao.activeVersion()))
   }
 
-  suspend fun replaceDevelopmentMenu(
+  suspend fun replaceMenuSet(
     expectedVersion: Long,
     expectedChecksum: String,
     candidate: MenuCandidate,
   ): CachedMenu {
     MenuIntegrity.validate(candidate)
     db.withTransaction {
-      val current = requireNotNull(dao.activeVersion()) { "development menu is no longer active" }
+      val current = requireNotNull(dao.activeVersion()) { "active menu is no longer available" }
       require(current.version == expectedVersion && current.checksum == expectedChecksum) {
-        "active menu changed before development menu replacement"
+        "active menu changed before provisioning replacement"
       }
-      dao.deleteItems(current.version)
-      dao.deleteVersion(current.version)
+      dao.deleteAllItems()
+      dao.deleteAllVersions()
       insert(candidate)
-      faultInjector.beforeCommit("replaceDevelopmentMenu")
+      faultInjector.beforeCommit("replaceMenuSet")
     }
     return snapshot(requireNotNull(dao.activeVersion()))
   }
