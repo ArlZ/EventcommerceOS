@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
-import { readEventControlContext } from '../event-context';
+import {
+  eventControlContextChangedEvent,
+  readEventControlContext,
+} from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -22,11 +25,14 @@ export function PosMenuPublicationControl() {
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
-  useEffect(() => {
+  const syncContext = useCallback(() => {
     const context = readEventControlContext();
     setOrganisationId(context.organisationId ?? '');
     setEventId(context.eventId ?? '');
     setEventName(context.eventName ?? '');
+    setLifecycle(null);
+    setConfirming(false);
+    setMessage('');
     if (!context.organisationId || !context.eventId) return;
 
     void fetch(`${apiBase}/organisations/${context.organisationId}/configuration`, {
@@ -43,6 +49,12 @@ export function PosMenuPublicationControl() {
       })
       .catch(() => setLifecycle(null));
   }, []);
+
+  useEffect(() => {
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
+  }, [syncContext]);
 
   async function publish(): Promise<void> {
     if (!organisationId || !eventId || lifecycle !== 'DRAFT') return;
@@ -64,7 +76,9 @@ export function PosMenuPublicationControl() {
         .map((publication) => `v${publication.version} for ${publication.salesLocationId}`)
         .join(', ');
       setTone('success');
-      setMessage(`Published ${publications.length} location snapshot${publications.length === 1 ? '' : 's'}${summary ? `: ${summary}` : '.'}`);
+      setMessage(
+        `Published ${publications.length} location snapshot${publications.length === 1 ? '' : 's'}${summary ? `: ${summary}` : '.'}`,
+      );
       setConfirming(false);
     } catch (error) {
       setTone('danger');
@@ -104,7 +118,12 @@ export function PosMenuPublicationControl() {
             Publish the current configuration for <strong>{eventName || 'this event'}</strong>? This
             creates a new immutable version for every active sales location.
           </span>
-          <button className="ec-button-primary" type="button" disabled={busy} onClick={() => void publish()}>
+          <button
+            className="ec-button-primary"
+            type="button"
+            disabled={busy}
+            onClick={() => void publish()}
+          >
             {busy ? 'Publishing…' : 'Confirm publication'}
           </button>
           <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
@@ -113,7 +132,12 @@ export function PosMenuPublicationControl() {
         </div>
       ) : (
         <div className="ec-alert-actions">
-          <button className="ec-button-primary" type="button" disabled={busy} onClick={() => setConfirming(true)}>
+          <button
+            className="ec-button-primary"
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+          >
             Publish POS menus
           </button>
         </div>
