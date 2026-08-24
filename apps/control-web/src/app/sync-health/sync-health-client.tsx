@@ -67,7 +67,10 @@ export function SyncHealthClient() {
 
   useEffect(() => {
     const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.organisationId) {
+      setOrganisationId(context.organisationId);
+      setActiveOrganisationId(context.organisationId);
+    }
     if (context.organisationName) setOrganisationName(context.organisationName);
   }, []);
 
@@ -96,9 +99,14 @@ export function SyncHealthClient() {
       setError('Enter an organisation ID.');
       return;
     }
+    const currentContext = readEventControlContext();
+    const sameOrganisation = currentContext.organisationId === nextOrganisationId;
+    if (!sameOrganisation) setOrganisationName('');
     writeEventControlContext({
       organisationId: nextOrganisationId,
-      ...(organisationName ? { organisationName } : {}),
+      organisationName: sameOrganisation ? (currentContext.organisationName ?? null) : null,
+      eventId: sameOrganisation ? (currentContext.eventId ?? null) : null,
+      eventName: sameOrganisation ? (currentContext.eventName ?? null) : null,
     });
     if (nextOrganisationId === activeOrganisationId) {
       void refresh();
@@ -152,7 +160,7 @@ export function SyncHealthClient() {
           aria-label="Organisation ID"
         />
         <button type="button" onClick={loadOrganisation} disabled={loading}>
-          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh devices' : 'Load sync health'}
+          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh now' : 'Load sync health'}
         </button>
       </div>
 
