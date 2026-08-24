@@ -92,7 +92,6 @@ describeIntegration('operator sync device health', () => {
         edgeAcceptedThroughSequence: 17,
         edgeBacklogCount: 1,
         lastCloudDeliveryAt: '2026-08-21T04:59:50.000Z',
-        organisationId,
       },
     ]);
   });
@@ -111,7 +110,14 @@ describeIntegration('operator sync device health', () => {
       .expect(200);
 
     expect(response.body).toEqual([
-      expect.objectContaining({ deviceId: 'register-other', organisationId: otherOrganisationId }),
+      {
+        deviceId: 'register-other',
+        lastSeenAt: '2026-08-21T05:01:00.000Z',
+        lastSequenceSeen: 9,
+        edgeAcceptedThroughSequence: 9,
+        edgeBacklogCount: 0,
+        lastCloudDeliveryAt: '2026-08-21T05:00:55.000Z',
+      },
     ]);
   });
 });
