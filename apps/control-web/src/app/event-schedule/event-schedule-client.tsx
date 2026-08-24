@@ -2,7 +2,8 @@
 
 import type { EventConfigurationView, EventRecord } from '@event-commerce/contracts';
 import type { FormEvent } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 import { canEditEventSchedule, validateEventSchedule } from './event-schedule';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -46,6 +47,34 @@ function eventLabel(event: EventRecord): string {
   return `${event.name} • ${event.lifecycle}`;
 }
 
+function formatScheduleTime(value: string, timezone: string): string {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return 'Enter a valid timestamp';
+  try {
+    return new Intl.DateTimeFormat('en-KE', {
+      timeZone: timezone,
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(new Date(parsed));
+  } catch {
+    return new Date(parsed).toLocaleString();
+  }
+}
+
+function durationLabel(startsAt: string, endsAt: string): string {
+  const start = Date.parse(startsAt);
+  const end = Date.parse(endsAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return '—';
+  const minutes = Math.round((end - start) / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`;
+}
+
 export function EventScheduleClient() {
   const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
@@ -57,6 +86,12 @@ export function EventScheduleClient() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Load an organisation to review its event schedule.');
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
+
+  useEffect(() => {
+    const context = readEventControlContext();
+    if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.eventId) setEventId(context.eventId);
+  }, []);
 
   const activeEvents =
     configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
@@ -75,6 +110,7 @@ export function EventScheduleClient() {
     setTimezone(event.timezone);
     setStartsAt(event.startsAt);
     setEndsAt(event.endsAt);
+    writeEventControlContext({ organisationId, eventId: event.id });
   }
 
   async function loadOrganisation(id = organisationId): Promise<void> {
@@ -100,7 +136,16 @@ export function EventScheduleClient() {
         view.events.find((event) => event.lifecycle === 'DRAFT') ??
         view.events.find((event) => event.lifecycle !== 'ARCHIVED') ??
         null;
-      selectEvent(nextEvent);
+      if (nextEvent) {
+        setEventId(nextEvent.id);
+        setTimezone(nextEvent.timezone);
+        setStartsAt(nextEvent.startsAt);
+        setEndsAt(nextEvent.endsAt);
+        writeEventControlContext({ organisationId: nextOrganisationId, eventId: nextEvent.id });
+      } else {
+        selectEvent(null);
+        writeEventControlContext({ organisationId: nextOrganisationId });
+      }
       setStatus(`Loaded ${view.organisation.name}.`);
       setStatusTone('success');
     } catch (error) {
@@ -153,7 +198,10 @@ export function EventScheduleClient() {
           <div>
             <p className="ec-eyebrow">Organisation</p>
             <h2>Load event schedules</h2>
-            <p>Use the same organisation setup ID used in Event Control.</p>
+            <p>
+              Use the same organisation setup ID used in Event Control. The last organisation used
+              in Live is carried into this screen for the current browser tab.
+            </p>
           </div>
         </div>
         <form
@@ -190,6 +238,11 @@ export function EventScheduleClient() {
               <h2>{configuration.organisation.name}</h2>
               <p>Select the event whose trading window needs to be reviewed.</p>
             </div>
+            {selectedEvent ? (
+              <span className="ec-status-pill" data-tone={editable ? 'warning' : 'success'}>
+                {selectedEvent.lifecycle}
+              </span>
+            ) : null}
           </div>
 
           <div style={formStyle}>
@@ -217,14 +270,20 @@ export function EventScheduleClient() {
           </div>
 
           {selectedEvent ? (
-            <div className="ec-list" style={{ marginTop: 12 }}>
-              <div className="ec-list-row">
-                <strong>{selectedEvent.name}</strong>
-                <div className="ec-alert-meta">Lifecycle: {selectedEvent.lifecycle}</div>
-                <div className="ec-alert-meta">Timezone: {selectedEvent.timezone}</div>
-                <div className="ec-alert-meta">Starts: {selectedEvent.startsAt}</div>
-                <div className="ec-alert-meta">Ends: {selectedEvent.endsAt}</div>
-              </div>
+            <div className="ec-kpi-grid" style={{ marginTop: 12 }}>
+              <ScheduleMetric label="Timezone" value={selectedEvent.timezone} />
+              <ScheduleMetric
+                label="Current start"
+                value={formatScheduleTime(selectedEvent.startsAt, selectedEvent.timezone)}
+              />
+              <ScheduleMetric
+                label="Current end"
+                value={formatScheduleTime(selectedEvent.endsAt, selectedEvent.timezone)}
+              />
+              <ScheduleMetric
+                label="Trading duration"
+                value={durationLabel(selectedEvent.startsAt, selectedEvent.endsAt)}
+              />
             </div>
           ) : null}
         </section>
@@ -252,6 +311,12 @@ export function EventScheduleClient() {
               changing a live or closed trading window.
             </div>
           ) : null}
+
+          <div className="ec-kpi-grid" style={{ marginBottom: 12 }}>
+            <ScheduleMetric label="Proposed start" value={formatScheduleTime(startsAt, timezone)} />
+            <ScheduleMetric label="Proposed end" value={formatScheduleTime(endsAt, timezone)} />
+            <ScheduleMetric label="Duration" value={durationLabel(startsAt, endsAt)} />
+          </div>
 
           <form style={formStyle} onSubmit={(event) => void saveSchedule(event)}>
             <label>
@@ -298,6 +363,17 @@ export function EventScheduleClient() {
           </form>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function ScheduleMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ec-kpi">
+      <span className="ec-kpi-label">{label}</span>
+      <strong className="ec-kpi-value" style={{ fontSize: 16 }}>
+        {value}
+      </strong>
     </div>
   );
 }
