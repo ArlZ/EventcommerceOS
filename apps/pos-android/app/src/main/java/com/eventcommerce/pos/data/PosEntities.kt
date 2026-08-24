@@ -8,6 +8,7 @@ import androidx.room.PrimaryKey
 data class MenuVersionEntity(
   @PrimaryKey val version: Long,
   val eventId: String,
+  val salesLocationId: String,
   val menuId: String,
   val activatedAtEpochMs: Long,
   val sourceActor: String,
