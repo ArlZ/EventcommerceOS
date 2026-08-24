@@ -57,6 +57,7 @@ services:
       EDGE_DATABASE_URL: postgresql://event_commerce:${EDGE_POSTGRES_PASSWORD}@edge-postgres:5432/event_commerce_edge
       EDGE_DATABASE_CONNECTION_TIMEOUT_MS: '3000'
       CLOUD_API_URL: ${CLOUD_API_URL}
+      CLOUD_SYNC_URL: ${CLOUD_API_URL}/sync/edge-events
       EDGE_ID: ${EDGE_ID:?EDGE_ID is required}
       EDGE_CLOUD_SYNC_TOKEN: ${EDGE_CLOUD_SYNC_TOKEN:?EDGE_CLOUD_SYNC_TOKEN is required}
       EDGE_LOCAL_ADMIN_TOKEN: ${EDGE_LOCAL_ADMIN_TOKEN:?EDGE_LOCAL_ADMIN_TOKEN is required}
