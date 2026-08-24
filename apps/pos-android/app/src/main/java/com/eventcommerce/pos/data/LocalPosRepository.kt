@@ -24,6 +24,21 @@ class LocalPosRepository(
 
   suspend fun installMenu(candidate: MenuCandidate): CachedMenu = menus.install(candidate)
 
+  suspend fun installProvisionedMenu(candidate: MenuCandidate): CachedMenu {
+    val active = activeMenu()
+    if (active != null && active.eventId != candidate.eventId) {
+      if (active.eventId == DEVELOPMENT_EVENT_ID) {
+        require(currentOpenOrder() == null && closedOrderCount() == 0) {
+          "development menu has order history; reset this register before provisioning a real event"
+        }
+        menus.clearAll()
+      } else {
+        error("register already contains menu history for another event; reset before reprovisioning")
+      }
+    }
+    return menus.install(candidate)
+  }
+
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
   suspend fun menuForSale(): CachedMenu? {
@@ -84,9 +99,11 @@ class LocalPosRepository(
   suspend fun allOutboxEvents(): List<OutboxEventEntity> = outbox.events()
 
   companion object {
+    const val DEVELOPMENT_EVENT_ID = "dev-event-offline"
+
     fun developmentMenuCandidate(): MenuCandidate {
       val unsigned = MenuCandidate(
-        eventId = "dev-event-offline",
+        eventId = DEVELOPMENT_EVENT_ID,
         menuId = "dev-menu-v1",
         version = 1,
         activatedAtEpochMs = 1_700_000_000_000,
