@@ -1,0 +1,230 @@
+name: Apply Event Control context continuity
+
+on:
+  push:
+    branches:
+      - agent/auto-load-event-context
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/auto-load-event-context
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Apply context continuity changes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f"Missing expected snippet: {label}")
+              return text.replace(old, new, 1)
+
+          # Live command centre: use shared context helper, preserve names, and auto-load remembered context.
+          path = Path('apps/control-web/src/app/command-centre/command-centre-client.tsx')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "} from './command-centre-state';\n\nconst apiBase",
+              "} from './command-centre-state';\nimport { readEventControlContext, writeEventControlContext } from '../event-context';\n\nconst apiBase",
+              'command centre shared context import',
+          )
+          text = replace_once(
+              text,
+              "const contextStorageKey = 'event-commerce.command-centre-context';\n",
+              "",
+              'remove direct context storage key',
+          )
+          text = replace_once(
+              text,
+              "  const [error, setError] = useState<string | null>(null);\n  const [busyAlertId, setBusyAlertId] = useState<string | null>(null);",
+              "  const [error, setError] = useState<string | null>(null);\n  const [contextHydrated, setContextHydrated] = useState(false);\n  const [loadingContext, setLoadingContext] = useState(false);\n  const [busyAlertId, setBusyAlertId] = useState<string | null>(null);",
+              'command centre context loading state',
+          )
+          text = replace_once(
+              text,
+              "      setSnapshot(next);\n      setError(null);",
+              "      setSnapshot(next);\n      const currentContext = readEventControlContext();\n      writeEventControlContext({\n        organisationId: target.organisationId,\n        organisationName:\n          currentContext.organisationId === target.organisationId\n            ? currentContext.organisationName ?? null\n            : null,\n        eventId: target.eventId,\n        eventName: next.event.name,\n      });\n      setError(null);",
+              'command centre preserve readable context',
+          )
+          old_load = """  async function load(): Promise<void> {
+            const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
+            if (!target.organisationId || !target.eventId) {
+              setError('Enter both organisation ID and event ID.');
+              return;
+            }
+            try {
+              await fetchSnapshot(target);
+              setActive(target);
+              window.sessionStorage.setItem(contextStorageKey, JSON.stringify(target));
+              setMode((current) => nextRealtimeMode(current, 'CONNECT'));
+            } catch (failure) {
+              setError(failure instanceof Error ? failure.message : 'Unable to load event command centre');
+            }
+          }
+          """
+          new_load = """  async function load(): Promise<void> {
+            const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
+            if (!target.organisationId || !target.eventId) {
+              setError('Enter both organisation ID and event ID.');
+              return;
+            }
+            setLoadingContext(true);
+            try {
+              await fetchSnapshot(target);
+              setActive(target);
+              setMode((current) => nextRealtimeMode(current, 'CONNECT'));
+            } catch (failure) {
+              setError(failure instanceof Error ? failure.message : 'Unable to load event command centre');
+            } finally {
+              setLoadingContext(false);
+            }
+          }
+          """
+          text = replace_once(text, old_load, new_load, 'command centre load state')
+          old_storage_effect = """  useEffect(() => {
+            const stored = window.sessionStorage.getItem(contextStorageKey);
+            if (!stored) return;
+            try {
+              const parsed = JSON.parse(stored) as Partial<ActiveEvent>;
+              if (typeof parsed.organisationId === 'string') setOrganisationId(parsed.organisationId);
+              if (typeof parsed.eventId === 'string') setEventId(parsed.eventId);
+            } catch {
+              window.sessionStorage.removeItem(contextStorageKey);
+            }
+          }, []);
+          """
+          new_storage_effect = """  useEffect(() => {
+            const context = readEventControlContext();
+            if (context.organisationId) setOrganisationId(context.organisationId);
+            if (context.eventId) setEventId(context.eventId);
+            setContextHydrated(true);
+          }, []);
+
+          useEffect(() => {
+            if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
+            void load();
+          }, [contextHydrated]);
+          """
+          text = replace_once(text, old_storage_effect, new_storage_effect, 'command centre automatic context load')
+          text = replace_once(
+              text,
+              "      <div className=\"ec-operations-stack\">",
+              "      <div\n        className=\"ec-operations-stack\"\n        aria-busy={loadingContext || busyAlertId !== null}\n      >",
+              'command centre busy state',
+          )
+          text = replace_once(
+              text,
+              "              <button type=\"submit\" className=\"ec-button-primary\">\n                Load event\n              </button>",
+              "              <button type=\"submit\" className=\"ec-button-primary\" disabled={loadingContext}>\n                {loadingContext ? 'Loading…' : 'Load event'}\n              </button>",
+              'command centre switch load button',
+          )
+          text = replace_once(
+              text,
+              "              <p>\n                Use the organisation and event IDs from Setup. The last successful selection is\n                remembered in this tab.\n              </p>",
+              "              <p>\n                The event selected elsewhere in Event Control loads automatically. Enter different\n                IDs here only when you need to switch context or retry a failed load.\n              </p>",
+              'command centre context guidance',
+          )
+          text = replace_once(
+              text,
+              "              <button type=\"submit\" className=\"ec-button-primary\">\n                Load live event\n              </button>",
+              "              <button type=\"submit\" className=\"ec-button-primary\" disabled={loadingContext}>\n                {loadingContext ? 'Loading live event…' : 'Load live event'}\n              </button>",
+              'command centre initial load button',
+          )
+          path.write_text(text)
+
+          # Inventory: auto-load remembered event after state hydration.
+          path = Path('apps/control-web/src/app/inventory/inventory-operations-client.tsx')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "  const [loading, setLoading] = useState(false);\n  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);",
+              "  const [loading, setLoading] = useState(false);\n  const [contextHydrated, setContextHydrated] = useState(false);\n  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);",
+              'inventory hydration state',
+          )
+          text = replace_once(
+              text,
+              "    if (context.eventId) setEventId(context.eventId);\n    if (context.eventName) setEventName(context.eventName);\n  }, []);\n\n  async function refresh()",
+              "    if (context.eventId) setEventId(context.eventId);\n    if (context.eventName) setEventName(context.eventName);\n    setContextHydrated(true);\n  }, []);\n\n  useEffect(() => {\n    if (!contextHydrated || !eventId.trim()) return;\n    void refresh();\n  }, [contextHydrated]);\n\n  async function refresh()",
+              'inventory automatic context load',
+          )
+          text = replace_once(
+              text,
+              "          onChange={(event) => setEventId(event.target.value)}",
+              "          onChange={(event) => {\n            setEventId(event.target.value);\n            setEventName('');\n          }}",
+              'inventory manual switch clears stale event label',
+          )
+          path.write_text(text)
+
+          # Devices: immediately activate remembered organisation and clear stale names/events on manual org switch.
+          path = Path('apps/control-web/src/app/sync-health/sync-health-client.tsx')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "    if (context.organisationId) setOrganisationId(context.organisationId);\n    if (context.organisationName) setOrganisationName(context.organisationName);",
+              "    if (context.organisationId) {\n      setOrganisationId(context.organisationId);\n      setActiveOrganisationId(context.organisationId);\n    }\n    if (context.organisationName) setOrganisationName(context.organisationName);",
+              'sync health automatic context load',
+          )
+          old_sync_write = """    writeEventControlContext({
+              organisationId: nextOrganisationId,
+              ...(organisationName ? { organisationName } : {}),
+            });
+          """
+          new_sync_write = """    const currentContext = readEventControlContext();
+            const sameOrganisation = currentContext.organisationId === nextOrganisationId;
+            if (!sameOrganisation) setOrganisationName('');
+            writeEventControlContext({
+              organisationId: nextOrganisationId,
+              organisationName: sameOrganisation ? currentContext.organisationName ?? null : null,
+              eventId: sameOrganisation ? currentContext.eventId ?? null : null,
+              eventName: sameOrganisation ? currentContext.eventName ?? null : null,
+            });
+          """
+          text = replace_once(text, old_sync_write, new_sync_write, 'sync health safe organisation switch')
+          path.write_text(text)
+
+          # Close: auto-load remembered event, but do not trigger any close/reopen mutation.
+          path = Path('apps/control-web/src/app/event-close/event-close-client.tsx')
+          text = path.read_text()
+          text = replace_once(
+              text,
+              "  const [pendingAction, setPendingAction] = useState<'close' | 'reopen' | null>(null);\n  const [busy, setBusy] = useState(false);",
+              "  const [pendingAction, setPendingAction] = useState<'close' | 'reopen' | null>(null);\n  const [contextHydrated, setContextHydrated] = useState(false);\n  const [busy, setBusy] = useState(false);",
+              'close hydration state',
+          )
+          text = replace_once(
+              text,
+              "    if (context.organisationId) setOrganisationId(context.organisationId);\n    if (context.eventId) setEventId(context.eventId);\n  }, []);\n\n  async function refresh",
+              "    if (context.organisationId) setOrganisationId(context.organisationId);\n    if (context.eventId) setEventId(context.eventId);\n    setContextHydrated(true);\n  }, []);\n\n  useEffect(() => {\n    if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;\n    void load();\n  }, [contextHydrated]);\n\n  async function refresh",
+              'close automatic context load',
+          )
+          path.write_text(text)
+          PY
+
+          pnpm exec prettier --write \
+            apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/inventory/inventory-operations-client.tsx \
+            apps/control-web/src/app/sync-health/sync-health-client.tsx \
+            apps/control-web/src/app/event-close/event-close-client.tsx
+
+          git rm .github/workflows/apply-context-continuity.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/control-web/src/app/command-centre/command-centre-client.tsx \
+            apps/control-web/src/app/inventory/inventory-operations-client.tsx \
+            apps/control-web/src/app/sync-health/sync-health-client.tsx \
+            apps/control-web/src/app/event-close/event-close-client.tsx
+          git commit -m 'Auto-load shared Event Control context'
+          git push origin HEAD:agent/auto-load-event-context
