@@ -12,19 +12,18 @@ class MenuRefreshCoordinator(
     require(intervalMs >= 1_000) { "menu refresh interval must be at least one second" }
   }
 
-  suspend fun refreshOnce(): Boolean {
+  suspend fun refreshOnce(): Long {
     val remote = transport.current()
     val local = repository.activeMenu()
-    if (local != null && remote.version == local.version && remote.checksum == local.checksum) {
-      return false
+    if (local == null || remote.version != local.version || remote.checksum != local.checksum) {
+      repository.installMenu(remote)
     }
-    repository.installMenu(remote)
-    return true
+    return remote.version
   }
 
-  suspend fun run() {
+  suspend fun run(onMenuVersion: (Long) -> Unit = {}) {
     while (true) {
-      runCatching { refreshOnce() }
+      runCatching { refreshOnce() }.onSuccess(onMenuVersion)
       delay(intervalMs)
     }
   }
