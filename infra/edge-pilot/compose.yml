@@ -81,6 +81,7 @@ services:
       - '${EDGE_BIND_ADDRESS:-0.0.0.0}:${EDGE_PORT:-3002}:3002'
     volumes:
       - ./bootstrap.mjs:/pilot/bootstrap.mjs:ro
+      - ./rehearsal.mjs:/pilot/rehearsal.mjs:ro
     networks:
       - edge-internal
       - edge-lan
