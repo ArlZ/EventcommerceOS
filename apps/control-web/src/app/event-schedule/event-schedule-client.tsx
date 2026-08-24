@@ -107,14 +107,6 @@ export function EventScheduleClient() {
         endsAt !== selectedEvent.endsAt),
   );
 
-  function rememberContext(event: EventRecord | null, organisationName?: string): void {
-    writeEventControlContext({
-      organisationId,
-      ...(organisationName ? { organisationName } : {}),
-      ...(event ? { eventId: event.id, eventName: event.name } : {}),
-    });
-  }
-
   function selectEvent(event: EventRecord | null): void {
     if (!event) {
       setEventId('');
@@ -129,7 +121,9 @@ export function EventScheduleClient() {
     setEndsAt(event.endsAt);
     writeEventControlContext({
       organisationId,
-      organisationName: configuration?.organisation.name,
+      ...(configuration?.organisation.name
+        ? { organisationName: configuration.organisation.name }
+        : {}),
       eventId: event.id,
       eventName: event.name,
     });
