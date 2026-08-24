@@ -28,11 +28,13 @@ class LocalPosRepository(
   suspend fun installProvisionedMenu(candidate: MenuCandidate, provisioningBinding: String): CachedMenu {
     require(PROVISIONING_BINDING.matches(provisioningBinding)) { "invalid POS menu provisioning binding" }
     val current = activeMenu()
-    val installed = if (current != null && isDevelopmentMenu(current)) {
+    val storedBinding = metadata.find(MENU_PROVISIONING_BINDING_KEY)?.value
+    val provisioningChanged = storedBinding != provisioningBinding
+    val installed = if (current != null && (isDevelopmentMenu(current) || provisioningChanged)) {
       require(orders.current() == null) {
-        "cannot replace the development menu while an order is open"
+        "cannot replace the menu provisioning while an order is open"
       }
-      menus.replaceDevelopmentMenu(current.version, current.checksum, candidate)
+      menus.replaceMenuSet(current.version, current.checksum, candidate)
     } else {
       menus.install(candidate)
     }
