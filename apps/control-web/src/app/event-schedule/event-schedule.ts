@@ -21,7 +21,8 @@ export function validateEventSchedule(input: EventScheduleInput): EventScheduleI
   const endsAtMs = Date.parse(endsAt);
   if (Number.isNaN(startsAtMs))
     throw new Error('Start time must be a valid ISO timestamp');
-  if (Number.isNaN(endsAtMs)) throw new Error('End time must be a valid ISO timestamp');
+  if (Number.isNaN(endsAtMs))
+    throw new Error('End time must be a valid ISO timestamp');
   if (endsAtMs <= startsAtMs) throw new Error('End time must be after start time');
 
   return { timezone, startsAt, endsAt };
