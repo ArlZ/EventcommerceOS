@@ -77,7 +77,9 @@ function parseItem(value: unknown, index: number): PosMenuItemSnapshot {
     category: text(row.category, `items[${index}].category`),
     priceMinor: safeInteger(row.priceMinor, `items[${index}].priceMinor`, 0),
     favourite:
-      row.favourite === undefined ? false : boolean(row.favourite, `items[${index}].favourite`),
+      row.favourite === undefined
+        ? false
+        : boolean(row.favourite, `items[${index}].favourite`),
     sortOrder:
       row.sortOrder === undefined
         ? 0
