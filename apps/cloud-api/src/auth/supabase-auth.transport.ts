@@ -36,9 +36,7 @@ function baseUrl(environment: NodeJS.ProcessEnv = process.env): string {
 }
 
 function publishableKey(environment: NodeJS.ProcessEnv = process.env): string {
-  const value = (
-    environment.SUPABASE_PUBLISHABLE_KEY ?? environment.SUPABASE_ANON_KEY
-  )?.trim();
+  const value = (environment.SUPABASE_PUBLISHABLE_KEY ?? environment.SUPABASE_ANON_KEY)?.trim();
   if (!value || value.length < 20) {
     throw new ServiceUnavailableException('Operator identity provider key is not configured');
   }
@@ -47,7 +45,9 @@ function publishableKey(environment: NodeJS.ProcessEnv = process.env): string {
 
 function authProof(value: unknown): SupabaseAuthProof {
   if (typeof value !== 'object' || value === null) {
-    throw new UnauthorizedException('Identity provider returned an invalid authentication response');
+    throw new UnauthorizedException(
+      'Identity provider returned an invalid authentication response',
+    );
   }
   const response = value as SupabaseAuthResponse;
   const userId = response.user?.id;
@@ -142,7 +142,10 @@ export class SupabaseAuthTransport {
 
     if (response.ok) return payload;
     if (response.status === 429) {
-      throw new HttpException('Too many authentication attempts; retry later', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Too many authentication attempts; retry later',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     if (response.status >= 500) {
       throw new ServiceUnavailableException('Operator identity provider is unavailable');

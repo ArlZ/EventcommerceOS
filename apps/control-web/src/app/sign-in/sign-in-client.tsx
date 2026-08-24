@@ -80,8 +80,10 @@ function BackIcon() {
 function friendlyError(error: unknown, phase: 'password' | 'verify' | 'resend'): string {
   if (!(error instanceof AuthRequestError)) return 'Event Control could not complete the request.';
   if (error.status === 429) return 'Too many attempts. Wait a moment and try again.';
-  if (error.status >= 500) return 'Sign-in services are temporarily unavailable. Try again shortly.';
-  if (phase === 'password') return 'Incorrect email or password. Check your credentials and try again.';
+  if (error.status >= 500)
+    return 'Sign-in services are temporarily unavailable. Try again shortly.';
+  if (phase === 'password')
+    return 'Incorrect email or password. Check your credentials and try again.';
   if (phase === 'verify') return 'That verification code is incorrect or has expired.';
   return error.message || 'The verification code could not be resent.';
 }
@@ -162,9 +164,12 @@ export function SignInClient() {
       return;
     }
     const next = [...digits];
-    numeric.slice(0, 6 - index).split('').forEach((digit, offset) => {
-      next[index + offset] = digit;
-    });
+    numeric
+      .slice(0, 6 - index)
+      .split('')
+      .forEach((digit, offset) => {
+        next[index + offset] = digit;
+      });
     setDigits(next);
     setCodeError(false);
     const target = Math.min(index + numeric.length, 5);
@@ -207,9 +212,12 @@ export function SignInClient() {
     setBusy(true);
     setError(null);
     try {
-      const result = await authRequest<{ resendAfterSeconds: number }>('/operator-auth/login/resend', {
-        method: 'POST',
-      });
+      const result = await authRequest<{ resendAfterSeconds: number }>(
+        '/operator-auth/login/resend',
+        {
+          method: 'POST',
+        },
+      );
       setSeconds(result.resendAfterSeconds);
     } catch (failure) {
       setError(friendlyError(failure, 'resend'));
@@ -249,21 +257,41 @@ export function SignInClient() {
           <div className={styles.preview} aria-label="Illustrative Event Control status">
             <div className={styles.previewHead}>
               <span className={styles.previewTitle}>NAIROBI EXPO 2026</span>
-              <span className={styles.live}><span className={styles.liveDot} />LIVE</span>
+              <span className={styles.live}>
+                <span className={styles.liveDot} />
+                LIVE
+              </span>
             </div>
             <div className={styles.statGrid}>
-              <div><div className={styles.statLabel}>Sales today</div><div className={styles.statValue}>KES 4.82M</div></div>
-              <div><div className={styles.statLabel}>Sync health</div><div className={`${styles.statValue} ${styles.healthy}`}>99.8%</div></div>
+              <div>
+                <div className={styles.statLabel}>Sales today</div>
+                <div className={styles.statValue}>KES 4.82M</div>
+              </div>
+              <div>
+                <div className={styles.statLabel}>Sync health</div>
+                <div className={`${styles.statValue} ${styles.healthy}`}>99.8%</div>
+              </div>
             </div>
             <div className={styles.chips}>
-              <span className={styles.chip}><span className={`${styles.chipDot} ${styles.greenDot}`} />Payments healthy</span>
-              <span className={styles.chip}><span className={`${styles.chipDot} ${styles.amberDot}`} />Inventory · 12 at risk</span>
-              <span className={styles.chip}><span className={`${styles.chipDot} ${styles.redDot}`} />Devices · 3 offline</span>
+              <span className={styles.chip}>
+                <span className={`${styles.chipDot} ${styles.greenDot}`} />
+                Payments healthy
+              </span>
+              <span className={styles.chip}>
+                <span className={`${styles.chipDot} ${styles.amberDot}`} />
+                Inventory · 12 at risk
+              </span>
+              <span className={styles.chip}>
+                <span className={`${styles.chipDot} ${styles.redDot}`} />
+                Devices · 3 offline
+              </span>
             </div>
           </div>
         </div>
 
-        <div className={styles.leftFooter}>© 2026 Event Commerce OS. Operator access is logged and audited.</div>
+        <div className={styles.leftFooter}>
+          © 2026 Event Commerce OS. Operator access is logged and audited.
+        </div>
       </section>
 
       <section className={styles.rightPanel}>
@@ -278,12 +306,26 @@ export function SignInClient() {
               <h2 className={styles.formTitle}>Sign in to Event Control</h2>
               <p className={styles.formSub}>Operate live events with confidence.</p>
 
-              {error ? <div className={styles.banner}><AlertIcon /><div><strong>Sign-in failed.</strong> {error}</div></div> : null}
-              {info ? <div className={`${styles.banner} ${styles.infoBanner}`}><ShieldIcon /><div>{info}</div></div> : null}
+              {error ? (
+                <div className={styles.banner}>
+                  <AlertIcon />
+                  <div>
+                    <strong>Sign-in failed.</strong> {error}
+                  </div>
+                </div>
+              ) : null}
+              {info ? (
+                <div className={`${styles.banner} ${styles.infoBanner}`}>
+                  <ShieldIcon />
+                  <div>{info}</div>
+                </div>
+              ) : null}
 
               <form onSubmit={(event) => void submitCredentials(event)}>
                 <div className={styles.field}>
-                  <label className={styles.fieldLabel} htmlFor="operator-email">Work email</label>
+                  <label className={styles.fieldLabel} htmlFor="operator-email">
+                    Work email
+                  </label>
                   <input
                     className={styles.input}
                     id="operator-email"
@@ -300,13 +342,17 @@ export function SignInClient() {
 
                 <div className={styles.field}>
                   <div className={styles.fieldLabelRow}>
-                    <label className={styles.fieldLabel} htmlFor="operator-password">Password</label>
+                    <label className={styles.fieldLabel} htmlFor="operator-password">
+                      Password
+                    </label>
                     <button
                       type="button"
                       className={styles.linkButton}
                       onClick={() => {
                         setError(null);
-                        setInfo('Password recovery is administrator-managed during the pilot. Contact your Event Control administrator to reset access.');
+                        setInfo(
+                          'Password recovery is administrator-managed during the pilot. Contact your Event Control administrator to reset access.',
+                        );
                       }}
                     >
                       Forgot password?
@@ -337,17 +383,36 @@ export function SignInClient() {
                 </div>
 
                 <label className={styles.rememberRow}>
-                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} disabled={busy} />
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(event) => setRemember(event.target.checked)}
+                    disabled={busy}
+                  />
                   <span>Remember this device for 30 days</span>
                 </label>
 
-                <button className={styles.primaryButton} type="submit" disabled={busy || !email.trim() || !password}>
-                  {busy ? <><span className={styles.spinner} />Signing in…</> : 'Sign in'}
+                <button
+                  className={styles.primaryButton}
+                  type="submit"
+                  disabled={busy || !email.trim() || !password}
+                >
+                  {busy ? (
+                    <>
+                      <span className={styles.spinner} />
+                      Signing in…
+                    </>
+                  ) : (
+                    'Sign in'
+                  )}
                 </button>
               </form>
 
               <div className={styles.footer}>
-                <div className={styles.footerNote}><ShieldIcon />Protected by enterprise-grade security</div>
+                <div className={styles.footerNote}>
+                  <ShieldIcon />
+                  Protected by enterprise-grade security
+                </div>
                 <div className={styles.footerLinks}>No account? Contact your administrator.</div>
               </div>
             </div>
@@ -355,17 +420,29 @@ export function SignInClient() {
 
           {step === 'verify' ? (
             <div className={stepClass}>
-              <button type="button" className={styles.backButton} onClick={back} disabled={busy}><BackIcon />Back</button>
+              <button type="button" className={styles.backButton} onClick={back} disabled={busy}>
+                <BackIcon />
+                Back
+              </button>
               <h2 className={styles.formTitle}>Enter verification code</h2>
-              <p className={styles.formSub}>We sent a 6-digit code to <strong>{maskedEmail}</strong>.</p>
-              {error ? <div className={styles.banner}><AlertIcon /><div>{error}</div></div> : null}
+              <p className={styles.formSub}>
+                We sent a 6-digit code to <strong>{maskedEmail}</strong>.
+              </p>
+              {error ? (
+                <div className={styles.banner}>
+                  <AlertIcon />
+                  <div>{error}</div>
+                </div>
+              ) : null}
 
               <form onSubmit={(event) => void submitCode(event)}>
                 <div className={`${styles.codeRow} ${codeError ? styles.codeError : ''}`}>
                   {digits.map((digit, index) => (
                     <input
                       key={index}
-                      ref={(node) => { codeRefs.current[index] = node; }}
+                      ref={(node) => {
+                        codeRefs.current[index] = node;
+                      }}
                       className={styles.codeInput}
                       aria-label={`Verification digit ${index + 1}`}
                       value={digit}
@@ -378,14 +455,42 @@ export function SignInClient() {
                     />
                   ))}
                 </div>
-                <button className={styles.primaryButton} type="submit" disabled={!codeComplete || busy}>
-                  {busy ? <><span className={styles.spinner} />Verifying…</> : 'Verify and sign in'}
+                <button
+                  className={styles.primaryButton}
+                  type="submit"
+                  disabled={!codeComplete || busy}
+                >
+                  {busy ? (
+                    <>
+                      <span className={styles.spinner} />
+                      Verifying…
+                    </>
+                  ) : (
+                    'Verify and sign in'
+                  )}
                 </button>
               </form>
 
               <div className={styles.footer}>
                 <div className={styles.resendRow}>
-                  {seconds > 0 ? <>Resend code in <span className={styles.timer}>0:{String(seconds).padStart(2, '0')}</span></> : <><span>Didn&apos;t get a code?</span><button className={styles.resendButton} type="button" onClick={() => void resendCode()} disabled={busy}>Resend</button></>}
+                  {seconds > 0 ? (
+                    <>
+                      Resend code in{' '}
+                      <span className={styles.timer}>0:{String(seconds).padStart(2, '0')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Didn&apos;t get a code?</span>
+                      <button
+                        className={styles.resendButton}
+                        type="button"
+                        onClick={() => void resendCode()}
+                        disabled={busy}
+                      >
+                        Resend
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -393,7 +498,11 @@ export function SignInClient() {
 
           {step === 'success' ? (
             <div className={styles.success}>
-              <div className={styles.checkWrap}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 5 5L20 7" /></svg></div>
+              <div className={styles.checkWrap}>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m5 12 5 5L20 7" />
+                </svg>
+              </div>
               <h2 className={styles.formTitle}>You&apos;re in</h2>
               <p className={styles.formSub}>Redirecting to Event Control…</p>
             </div>

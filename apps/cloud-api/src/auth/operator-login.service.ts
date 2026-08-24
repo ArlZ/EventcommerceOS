@@ -184,7 +184,9 @@ export class OperatorLoginService {
     );
     const challenge = rows[0];
     if (!challenge) {
-      throw new UnauthorizedException('Verification code cannot be resent yet or the sign-in expired');
+      throw new UnauthorizedException(
+        'Verification code cannot be resent yet or the sign-in expired',
+      );
     }
     try {
       await this.supabase.sendEmailOtp(challenge.email);
@@ -260,7 +262,8 @@ export class OperatorLoginService {
        RETURNING id`,
       [challenge.id],
     );
-    if (consumed.rowCount !== 1) throw new UnauthorizedException('Sign-in verification has expired');
+    if (consumed.rowCount !== 1)
+      throw new UnauthorizedException('Sign-in verification has expired');
 
     const identities = await client.query<ProfileRow>(
       `UPDATE operator_identities

@@ -42,18 +42,14 @@ export function operatorLoginCookie(
   });
 }
 
-export function clearOperatorSessionCookie(
-  environment: NodeJS.ProcessEnv = process.env,
-): string {
+export function clearOperatorSessionCookie(environment: NodeJS.ProcessEnv = process.env): string {
   return serializeCookie(OPERATOR_SESSION_COOKIE, '', {
     maxAgeSeconds: 0,
     secure: environment.NODE_ENV === 'production',
   });
 }
 
-export function clearOperatorLoginCookie(
-  environment: NodeJS.ProcessEnv = process.env,
-): string {
+export function clearOperatorLoginCookie(environment: NodeJS.ProcessEnv = process.env): string {
   return serializeCookie(OPERATOR_LOGIN_COOKIE, '', {
     maxAgeSeconds: 0,
     secure: environment.NODE_ENV === 'production',

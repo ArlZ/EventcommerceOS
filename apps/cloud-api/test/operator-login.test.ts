@@ -46,18 +46,20 @@ describe('operator browser authentication', () => {
   it('accepts operator sessions from the HttpOnly cookie and hashes the credential before lookup', async () => {
     const token = `ecom_op_${'c'.repeat(50)}`;
     const database = {
-      query: vi.fn().mockResolvedValue([
-        { session_id: 'session-1', actor_id: actorId, platform_role: null },
-      ]),
+      query: vi
+        .fn()
+        .mockResolvedValue([{ session_id: 'session-1', actor_id: actorId, platform_role: null }]),
     };
     const service = new OperatorAuthService(database as never);
 
     expect(service.isOperatorAuthorization({ cookie: `ec_operator_session=${token}` })).toBe(true);
-    await expect(service.authenticate({ cookie: `ec_operator_session=${token}` })).resolves.toEqual({
-      sessionId: 'session-1',
-      actorId,
-      platformAdmin: false,
-    });
+    await expect(service.authenticate({ cookie: `ec_operator_session=${token}` })).resolves.toEqual(
+      {
+        sessionId: 'session-1',
+        actorId,
+        platformAdmin: false,
+      },
+    );
     expect(database.query).toHaveBeenCalledWith(expect.any(String), [sha256(token)]);
   });
 
@@ -73,19 +75,27 @@ describe('operator browser authentication', () => {
       }),
     };
     const supabase = {
-      passwordSignIn: vi.fn().mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-a' }),
+      passwordSignIn: vi
+        .fn()
+        .mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-a' }),
       sendEmailOtp: vi.fn().mockResolvedValue(undefined),
       signOut: vi.fn().mockResolvedValue(undefined),
     };
     const service = new OperatorLoginService(database as never, supabase as never);
 
-    const result = await service.begin({ email, password: 'correct-password', rememberDevice: true });
+    const result = await service.begin({
+      email,
+      password: 'correct-password',
+      rememberDevice: true,
+    });
     expect(result.challengeToken).toMatch(/^ecom_login_/);
     expect(result.maskedEmail).toBe('o•••@example.com');
     expect(supabase.sendEmailOtp).toHaveBeenCalledWith(email);
     expect(supabase.signOut).toHaveBeenCalledWith('supa-a');
 
-    const insert = queries.find((query) => query.text.includes('INSERT INTO operator_login_challenges'));
+    const insert = queries.find((query) =>
+      query.text.includes('INSERT INTO operator_login_challenges'),
+    );
     expect(insert).toBeDefined();
     expect(insert?.values[4]).toMatch(/^[0-9a-f]{64}$/);
     expect(insert?.values).not.toContain(result.challengeToken);
@@ -95,19 +105,25 @@ describe('operator browser authentication', () => {
     const databaseError = new Error('database offline');
     const database = { query: vi.fn().mockRejectedValue(databaseError) };
     const supabase = {
-      passwordSignIn: vi.fn().mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-b' }),
+      passwordSignIn: vi
+        .fn()
+        .mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-b' }),
       signOut: vi.fn().mockResolvedValue(undefined),
     };
     const service = new OperatorLoginService(database as never, supabase as never);
 
-    await expect(service.begin({ email, password: 'correct-password' })).rejects.toBe(databaseError);
+    await expect(service.begin({ email, password: 'correct-password' })).rejects.toBe(
+      databaseError,
+    );
     expect(supabase.signOut).toHaveBeenCalledWith('supa-b');
   });
 
   it('does not send an OTP for an email that is not an active operator identity', async () => {
     const database = { query: vi.fn().mockResolvedValue([]) };
     const supabase = {
-      passwordSignIn: vi.fn().mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-c' }),
+      passwordSignIn: vi
+        .fn()
+        .mockResolvedValue({ userId: supabaseUserId, email, accessToken: 'supa-c' }),
       sendEmailOtp: vi.fn(),
       signOut: vi.fn().mockResolvedValue(undefined),
     };

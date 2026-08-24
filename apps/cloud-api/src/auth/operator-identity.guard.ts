@@ -28,7 +28,9 @@ function isPublicOperatorAuthPath(path: string): boolean {
 
 function hasOperatorCookie(headers: HeadersRecord): boolean {
   const raw = first(headers.cookie);
-  return Boolean(raw?.split(';').some((part) => part.trim().startsWith('ec_operator_session=ecom_op_')));
+  return Boolean(
+    raw?.split(';').some((part) => part.trim().startsWith('ec_operator_session=ecom_op_')),
+  );
 }
 
 function hasOperatorBearer(headers: HeadersRecord): boolean {
