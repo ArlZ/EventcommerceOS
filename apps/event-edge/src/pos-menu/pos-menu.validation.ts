@@ -42,9 +42,7 @@ function crc32(value: string): string {
   return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
 }
 
-export function posMenuChecksum(
-  snapshot: Omit<PosMenuSnapshot, 'checksum' | 'salesLocationId'>,
-): string {
+export function posMenuChecksum(snapshot: Omit<PosMenuSnapshot, 'checksum' | 'salesLocationId'>): string {
   const parts: string[] = [];
   appendField(parts, snapshot.eventId);
   appendField(parts, snapshot.menuId);
@@ -53,9 +51,7 @@ export function posMenuChecksum(
   appendField(parts, snapshot.sourceActor);
   appendField(parts, snapshot.currency);
   [...snapshot.items]
-    .sort((left, right) =>
-      left.itemId < right.itemId ? -1 : left.itemId > right.itemId ? 1 : 0,
-    )
+    .sort((left, right) => (left.itemId < right.itemId ? -1 : left.itemId > right.itemId ? 1 : 0))
     .forEach((item) => {
       appendField(parts, item.itemId);
       appendField(parts, item.skuId);
@@ -76,10 +72,8 @@ function parseItem(value: unknown, index: number): PosMenuItemSnapshot {
     name: text(row.name, `items[${index}].name`),
     category: text(row.category, `items[${index}].category`),
     priceMinor: safeInteger(row.priceMinor, `items[${index}].priceMinor`, 0),
-    favourite:
-      row.favourite === undefined ? false : boolean(row.favourite, `items[${index}].favourite`),
-    sortOrder:
-      row.sortOrder === undefined ? 0 : safeInteger(row.sortOrder, `items[${index}].sortOrder`, 0),
+    favourite: row.favourite === undefined ? false : boolean(row.favourite, `items[${index}].favourite`),
+    sortOrder: row.sortOrder === undefined ? 0 : safeInteger(row.sortOrder, `items[${index}].sortOrder`, 0),
   };
 }
 
@@ -97,12 +91,8 @@ export function parsePosMenuSnapshot(value: unknown): PosMenuSnapshot {
   const itemIds = new Set<string>();
   const skuIds = new Set<string>();
   for (const item of items) {
-    if (itemIds.has(item.itemId)) {
-      throw new BadRequestException(`duplicate menu item id: ${item.itemId}`);
-    }
-    if (skuIds.has(item.skuId)) {
-      throw new BadRequestException(`duplicate menu item sku id: ${item.skuId}`);
-    }
+    if (itemIds.has(item.itemId)) throw new BadRequestException(`duplicate menu item id: ${item.itemId}`);
+    if (skuIds.has(item.skuId)) throw new BadRequestException(`duplicate menu item sku id: ${item.skuId}`);
     itemIds.add(item.itemId);
     skuIds.add(item.skuId);
   }
@@ -122,8 +112,6 @@ export function parsePosMenuSnapshot(value: unknown): PosMenuSnapshot {
     throw new BadRequestException('checksum must be eight lowercase hex characters');
   }
   const expected = posMenuChecksum(snapshot);
-  if (snapshot.checksum !== expected) {
-    throw new BadRequestException('menu checksum does not match content');
-  }
+  if (snapshot.checksum !== expected) throw new BadRequestException('menu checksum does not match content');
   return snapshot;
 }
