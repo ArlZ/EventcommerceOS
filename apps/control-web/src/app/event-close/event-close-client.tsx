@@ -248,6 +248,7 @@ export function EventCloseClient() {
     (report?.unresolvedCriticalAlerts.length ?? 0) > 0 ||
     reconciliationUnresolved ||
     (report?.close.sourceChangedSinceLastClose ?? false);
+  const isOperationallyClosed = report?.close.state === 'OPERATIONALLY_CLOSED';
 
   const inventoryLocationNames = useMemo(
     () =>
@@ -281,7 +282,15 @@ export function EventCloseClient() {
           </p>
         </div>
         <span className="ec-status-pill" data-tone={attentionRequired ? 'warning' : 'success'}>
-          {report ? (attentionRequired ? 'Resolve before close' : 'Ready to close') : 'Not loaded'}
+          {report
+            ? isOperationallyClosed
+              ? attentionRequired
+                ? 'Closed — review changes'
+                : 'Closed'
+              : attentionRequired
+                ? 'Resolve before close'
+                : 'Ready to close'
+            : 'Not loaded'}
         </span>
       </header>
 
@@ -373,9 +382,14 @@ export function EventCloseClient() {
 
               {attentionRequired ? (
                 <div className="ec-banner ec-banner--warning" style={{ marginTop: 14 }}>
-                  <strong>Resolve what you can before closing.</strong> You can still record a
-                  close, but unresolved items will remain visible in the stored evidence. Use the
-                  shortcuts below to investigate before choosing that option.
+                  <strong>
+                    {isOperationallyClosed
+                      ? 'Review changes after close.'
+                      : 'Resolve what you can before closing.'}
+                  </strong>{' '}
+                  {isOperationallyClosed
+                    ? 'The stored close remains immutable. Reopen before recording a new close revision if source truth needs reconciliation.'
+                    : 'You can still record a close, but unresolved items will remain visible in the stored evidence.'}
                   <div className="ec-form-actions" style={{ marginTop: 10 }}>
                     {report.unresolvedPayments.length > 0 || reconciliationUnresolved ? (
                       <Link className="ec-panel-link" href="/command-centre">
@@ -392,8 +406,9 @@ export function EventCloseClient() {
                 </div>
               ) : (
                 <div className="ec-banner ec-banner--success" style={{ marginTop: 14 }}>
-                  <strong>Ready to close.</strong> No unresolved payment, transfer, critical
-                  inventory or financial reconciliation exceptions are currently projected.
+                  <strong>{isOperationallyClosed ? 'Event is closed.' : 'Ready to close.'}</strong>{' '}
+                  No unresolved payment, transfer, critical inventory or financial reconciliation
+                  exceptions are currently projected.
                 </div>
               )}
 
@@ -478,22 +493,38 @@ export function EventCloseClient() {
             </Panel>
 
             <Panel
-              title={attentionRequired ? 'Close with unresolved items' : 'Record operational close'}
+              title={
+                isOperationallyClosed
+                  ? report.close.sourceChangedSinceLastClose
+                    ? 'Reopen to reconcile changes'
+                    : 'Event is operationally closed'
+                  : attentionRequired
+                    ? 'Close with unresolved items'
+                    : 'Record operational close'
+              }
               description={
-                attentionRequired
-                  ? 'Closing now is allowed, but it will preserve the unresolved items above rather than clearing them.'
-                  : 'No projected blockers remain. Every close or reopen still requires an audit reason.'
+                isOperationallyClosed
+                  ? 'Reopening is an audited state change. Use it when post-close source changes need a new operational close revision.'
+                  : attentionRequired
+                    ? 'Closing now is allowed, but it will preserve the unresolved items above rather than clearing them.'
+                    : 'No projected blockers remain. Every close or reopen still requires an audit reason.'
               }
             >
               {attentionRequired ? (
                 <div className="ec-banner ec-banner--warning" style={{ marginBottom: 12 }}>
-                  <strong>Closing will not resolve these items.</strong> The close revision will
-                  preserve their current state so they remain visible for follow-up and audit.
+                  <strong>
+                    {isOperationallyClosed
+                      ? 'Attention items remain after close.'
+                      : 'Closing will not resolve these items.'}
+                  </strong>{' '}
+                  {isOperationallyClosed
+                    ? 'Reopen only when a new audited operating state is required; the stored close remains unchanged.'
+                    : 'The close revision will preserve their current state so they remain visible for follow-up and audit.'}
                 </div>
               ) : null}
               <div className="ec-close-actions">
                 <input
-                  aria-label="Close reason"
+                  aria-label="Audit reason"
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
@@ -529,7 +560,7 @@ export function EventCloseClient() {
                       </button>
                     </div>
                   </div>
-                ) : report.close.state === 'OPERATIONALLY_CLOSED' ? (
+                ) : isOperationallyClosed ? (
                   <button type="button" disabled={busy} onClick={() => setPendingAction('reopen')}>
                     Reopen with audit reason
                   </button>
