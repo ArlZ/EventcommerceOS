@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { canEditEventConfiguration } from './event-configuration';
 import { priceToMinorUnits } from './pricing';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -86,10 +87,12 @@ function ItemActions({
   item,
   onRename,
   onArchive,
+  disabled = false,
 }: {
   item: NamedRecord;
   onRename: (name: string) => Promise<void>;
   onArchive: () => Promise<void>;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.name);
@@ -115,8 +118,9 @@ function ItemActions({
             aria-label={`Rename ${item.name}`}
             value={name}
             onChange={(event) => setName(event.target.value)}
+            disabled={disabled}
           />
-          <ActionButton type="button" onClick={() => void saveRename()}>
+          <ActionButton type="button" disabled={disabled} onClick={() => void saveRename()}>
             Save
           </ActionButton>
           <ActionButton
@@ -140,6 +144,7 @@ function ItemActions({
               <span>Archive this item?</span>
               <ActionButton
                 type="button"
+                disabled={disabled}
                 onClick={() => {
                   void onArchive().then(() => setConfirmingArchive(false));
                 }}
@@ -152,11 +157,15 @@ function ItemActions({
             </div>
           ) : (
             <div className="ec-alert-actions" style={{ marginTop: 0 }}>
-              <ActionButton type="button" onClick={() => setEditing(true)}>
+              <ActionButton type="button" disabled={disabled} onClick={() => setEditing(true)}>
                 Rename
               </ActionButton>
               {active ? (
-                <ActionButton type="button" onClick={() => setConfirmingArchive(true)}>
+                <ActionButton
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setConfirmingArchive(true)}
+                >
                   Archive
                 </ActionButton>
               ) : null}
@@ -309,6 +318,8 @@ export function ConfigurationClient() {
 
   const activeEvents = configuration?.events.filter((item) => item.lifecycle !== 'ARCHIVED') ?? [];
   const selectedEvent = activeEvents.find((item) => item.id === eventId);
+  const eventConfigurationEditable = canEditEventConfiguration(selectedEvent?.lifecycle);
+  const eventConfigurationLocked = Boolean(selectedEvent && !eventConfigurationEditable);
   const currentEventLocations =
     configuration?.salesLocations.filter(
       (location) => location.eventId === eventId && location.lifecycle !== 'ARCHIVED',
@@ -438,6 +449,16 @@ export function ConfigurationClient() {
             </span>
           </section>
 
+          {eventConfigurationLocked ? (
+            <section className="ec-banner ec-banner--warning">
+              <strong>{selectedEvent?.lifecycle} event setup is read only.</strong> This pilot does
+              not publish live Cloud configuration changes to venue Edge or POS devices. Select or
+              create a DRAFT event to change locations, menus, assignments, menu items or prices.
+              Organisation-level products and sellable units remain available for future event
+              setup.
+            </section>
+          ) : null}
+
           <section className="ec-kpi-grid" aria-label="Event setup progress">
             <SetupMetric label="Events" value={activeEvents.length} />
             <SetupMetric label="Sales locations" value={currentEventLocations.length} />
@@ -525,6 +546,7 @@ export function ConfigurationClient() {
                     <ItemActions
                       key={item.id}
                       item={item}
+                      disabled={item.lifecycle !== 'DRAFT'}
                       onRename={(name) => rename(`/events/${item.id}`, name)}
                       onArchive={() => archive(`/events/${item.id}`)}
                     />
@@ -571,9 +593,12 @@ export function ConfigurationClient() {
                     name="name"
                     placeholder="Main Stage Bar"
                     required
-                    disabled={!eventId || busy}
+                    disabled={!eventId || !eventConfigurationEditable || busy}
                   />
-                  <ActionButton type="submit" disabled={!eventId || busy}>
+                  <ActionButton
+                    type="submit"
+                    disabled={!eventId || !eventConfigurationEditable || busy}
+                  >
                     Add sales location
                   </ActionButton>
                 </form>
@@ -582,6 +607,7 @@ export function ConfigurationClient() {
                     <ItemActions
                       key={item.id}
                       item={item}
+                      disabled={!eventConfigurationEditable}
                       onRename={(name) => rename(`/sales-locations/${item.id}`, name)}
                       onArchive={() => archive(`/sales-locations/${item.id}`)}
                     />
@@ -611,13 +637,20 @@ export function ConfigurationClient() {
                     name="name"
                     placeholder="Central Warehouse"
                     required
-                    disabled={!eventId || busy}
+                    disabled={!eventId || !eventConfigurationEditable || busy}
                   />
-                  <select name="type" disabled={!eventId || busy} style={fieldStyle}>
+                  <select
+                    name="type"
+                    disabled={!eventId || !eventConfigurationEditable || busy}
+                    style={fieldStyle}
+                  >
                     <option value="WAREHOUSE">Warehouse</option>
                     <option value="BAR_STORAGE">Bar storage</option>
                   </select>
-                  <ActionButton type="submit" disabled={!eventId || busy}>
+                  <ActionButton
+                    type="submit"
+                    disabled={!eventId || !eventConfigurationEditable || busy}
+                  >
                     Add inventory location
                   </ActionButton>
                 </form>
@@ -626,6 +659,7 @@ export function ConfigurationClient() {
                     <ItemActions
                       key={item.id}
                       item={item}
+                      disabled={!eventConfigurationEditable}
                       onRename={(name) => rename(`/inventory-locations/${item.id}`, name)}
                       onArchive={() => archive(`/inventory-locations/${item.id}`)}
                     />
@@ -789,8 +823,16 @@ export function ConfigurationClient() {
                 }}
               >
                 <h3>Create menu</h3>
-                <Input name="name" placeholder="Event Menu" required disabled={!eventId || busy} />
-                <ActionButton type="submit" disabled={!eventId || busy}>
+                <Input
+                  name="name"
+                  placeholder="Event Menu"
+                  required
+                  disabled={!eventId || !eventConfigurationEditable || busy}
+                />
+                <ActionButton
+                  type="submit"
+                  disabled={!eventId || !eventConfigurationEditable || busy}
+                >
                   Create menu
                 </ActionButton>
                 <select
@@ -823,7 +865,12 @@ export function ConfigurationClient() {
                 <select
                   name="salesLocationId"
                   required
-                  disabled={!menuId || busy || unassignedEventLocations.length === 0}
+                  disabled={
+                    !eventConfigurationEditable ||
+                    !menuId ||
+                    busy ||
+                    unassignedEventLocations.length === 0
+                  }
                   style={fieldStyle}
                 >
                   <option value="">
@@ -839,7 +886,12 @@ export function ConfigurationClient() {
                 </select>
                 <ActionButton
                   type="submit"
-                  disabled={!menuId || busy || unassignedEventLocations.length === 0}
+                  disabled={
+                    !eventConfigurationEditable ||
+                    !menuId ||
+                    busy ||
+                    unassignedEventLocations.length === 0
+                  }
                 >
                   Assign menu to location
                 </ActionButton>
@@ -850,6 +902,7 @@ export function ConfigurationClient() {
                 <ItemActions
                   key={item.id}
                   item={item}
+                  disabled={!eventConfigurationEditable}
                   onRename={(name) => rename(`/menus/${item.id}`, name)}
                   onArchive={() => archive(`/menus/${item.id}`)}
                 />
@@ -885,6 +938,7 @@ export function ConfigurationClient() {
                 <select
                   value={skuId}
                   onChange={(event) => setSkuId(event.target.value)}
+                  disabled={!eventConfigurationEditable}
                   style={fieldStyle}
                 >
                   <option value="">Select sellable unit</option>
@@ -898,9 +952,12 @@ export function ConfigurationClient() {
                   name="displayName"
                   placeholder="Name shown on register"
                   required
-                  disabled={!menuId || !skuId || busy}
+                  disabled={!eventConfigurationEditable || !menuId || !skuId || busy}
                 />
-                <ActionButton type="submit" disabled={!menuId || !skuId || busy}>
+                <ActionButton
+                  type="submit"
+                  disabled={!eventConfigurationEditable || !menuId || !skuId || busy}
+                >
                   Add to menu
                 </ActionButton>
               </form>
@@ -928,6 +985,7 @@ export function ConfigurationClient() {
                 <select
                   value={menuItemId}
                   onChange={(event) => setMenuItemId(event.target.value)}
+                  disabled={!eventConfigurationEditable}
                   style={fieldStyle}
                 >
                   <option value="">Select menu item</option>
@@ -947,7 +1005,7 @@ export function ConfigurationClient() {
                     min="0"
                     placeholder="250"
                     required
-                    disabled={!menuItemId || busy}
+                    disabled={!eventConfigurationEditable || !menuItemId || busy}
                   />
                   <small className="ec-alert-meta">
                     Enter the amount guests see. Event Control converts it to integer minor units
@@ -963,10 +1021,14 @@ export function ConfigurationClient() {
                     maxLength={3}
                     pattern="[A-Za-z]{3}"
                     required
-                    disabled={!menuItemId || busy}
+                    disabled={!eventConfigurationEditable || !menuItemId || busy}
                   />
                 </label>
-                <select name="salesLocationId" disabled={!menuItemId || busy} style={fieldStyle}>
+                <select
+                  name="salesLocationId"
+                  disabled={!eventConfigurationEditable || !menuItemId || busy}
+                  style={fieldStyle}
+                >
                   <option value="">Default menu price</option>
                   {currentEventLocations.map((item) => (
                     <option key={item.id} value={item.id}>
@@ -974,7 +1036,10 @@ export function ConfigurationClient() {
                     </option>
                   ))}
                 </select>
-                <ActionButton type="submit" disabled={!menuItemId || busy}>
+                <ActionButton
+                  type="submit"
+                  disabled={!eventConfigurationEditable || !menuItemId || busy}
+                >
                   Save price
                 </ActionButton>
               </form>
@@ -985,6 +1050,7 @@ export function ConfigurationClient() {
                 <ItemActions
                   key={item.id}
                   item={{ id: item.id, name: item.displayName, lifecycle: item.lifecycle }}
+                  disabled={!eventConfigurationEditable}
                   onRename={(name) => rename(`/menu-items/${item.id}`, name, 'displayName')}
                   onArchive={() => archive(`/menu-items/${item.id}`)}
                 />
