@@ -42,6 +42,41 @@
   color: inherit;
 }
 
+/* Destructive operational actions require an explicit second choice. */
+.ec-inline-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ec-inline-confirm > span {
+  color: var(--ec-subtle);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ec-inline-confirm--wide {
+  width: 100%;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #f2c5c5;
+  border-radius: 12px;
+  background: #fff7f7;
+}
+
+.ec-inline-confirm--wide > div:first-child {
+  display: grid;
+  gap: 3px;
+  max-width: 620px;
+}
+
+.ec-inline-confirm--wide small {
+  color: var(--ec-subtle);
+  line-height: 1.45;
+}
+
 @media (max-width: 620px) {
   .ec-context-bar {
     align-items: flex-start;
@@ -59,5 +94,15 @@
 
   .ec-panel-heading {
     align-items: flex-start;
+  }
+
+  .ec-inline-confirm,
+  .ec-inline-confirm--wide {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ec-inline-confirm button {
+    width: 100%;
   }
 }

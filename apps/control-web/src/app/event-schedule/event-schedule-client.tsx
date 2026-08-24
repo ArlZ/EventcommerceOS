@@ -177,6 +177,8 @@ export function EventScheduleClient() {
         writeEventControlContext({
           organisationId: nextOrganisationId,
           organisationName: view.organisation.name,
+          eventId: null,
+          eventName: null,
         });
       }
       setStatus(`Loaded ${view.organisation.name}.`);
