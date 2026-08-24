@@ -78,6 +78,12 @@ function crc32(value: string): string {
   return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
 }
 
+function compareItemIds(left: PublishedPosMenuItem, right: PublishedPosMenuItem): number {
+  if (left.itemId < right.itemId) return -1;
+  if (left.itemId > right.itemId) return 1;
+  return 0;
+}
+
 export function publishedPosMenuChecksum(
   snapshot: Omit<PublishedPosMenuSnapshot, 'checksum' | 'salesLocationId'>,
 ): string {
@@ -88,17 +94,15 @@ export function publishedPosMenuChecksum(
   appendField(parts, snapshot.activatedAtEpochMs.toString());
   appendField(parts, snapshot.sourceActor);
   appendField(parts, snapshot.currency);
-  [...snapshot.items]
-    .sort((left, right) => left.itemId.localeCompare(right.itemId))
-    .forEach((item) => {
-      appendField(parts, item.itemId);
-      appendField(parts, item.skuId);
-      appendField(parts, item.name);
-      appendField(parts, item.category);
-      appendField(parts, item.priceMinor.toString());
-      appendField(parts, item.favourite ? '1' : '0');
-      appendField(parts, item.sortOrder.toString());
-    });
+  [...snapshot.items].sort(compareItemIds).forEach((item) => {
+    appendField(parts, item.itemId);
+    appendField(parts, item.skuId);
+    appendField(parts, item.name);
+    appendField(parts, item.category);
+    appendField(parts, item.priceMinor.toString());
+    appendField(parts, item.favourite ? '1' : '0');
+    appendField(parts, item.sortOrder.toString());
+  });
   return crc32(parts.join(''));
 }
 
@@ -287,9 +291,10 @@ export class PosMenuPublicationService {
       [eventId, salesLocationId],
     );
     const previousVersion = versionRows.rows[0]?.version;
-    const version = previousVersion === null || previousVersion === undefined
-      ? 1
-      : Number(BigInt(previousVersion) + 1n);
+    const version =
+      previousVersion === null || previousVersion === undefined
+        ? 1
+        : Number(BigInt(previousVersion) + 1n);
     if (!Number.isSafeInteger(version)) {
       throw new ConflictException('POS menu publication version exceeds safe integer range');
     }
