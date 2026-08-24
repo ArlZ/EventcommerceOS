@@ -7,6 +7,7 @@ const navigation = [
   { href: '/inventory', label: 'Inventory' },
   { href: '/sync-health', label: 'Devices' },
   { href: '/configuration', label: 'Setup' },
+  { href: '/event-schedule', label: 'Schedule' },
   { href: '/event-close', label: 'Close' },
 ];
 
