@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EdgeLocalAdminAuthService } from '../security/edge-local-admin-auth.service';
 import { InventoryAlertService } from './inventory-alert.service';
 import { InventoryAuthorizationService } from './inventory-authorization.service';
 import { InventoryCloudForwarderService } from './inventory-cloud-forwarder.service';
@@ -20,6 +21,7 @@ import { InventoryTransferService } from './inventory-transfer.service';
 @Module({
   controllers: [InventoryController],
   providers: [
+    EdgeLocalAdminAuthService,
     InventoryAuthorizationService,
     InventoryConfigurationService,
     InventoryLedgerService,
