@@ -15,6 +15,9 @@ export class PosMenuService {
 
   async install(snapshot: PosMenuSnapshot): Promise<PosMenuSnapshot> {
     return this.database.transaction(async (client) => {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+        `pos-menu:${snapshot.eventId}:${snapshot.salesLocationId}`,
+      ]);
       const existingResult = await client.query<SnapshotRow>(
         `SELECT version::text,checksum,payload
          FROM edge_pos_menu_snapshots
