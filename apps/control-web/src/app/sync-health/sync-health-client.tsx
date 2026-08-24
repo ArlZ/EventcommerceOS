@@ -37,22 +37,23 @@ function deviceStatus(device: DeviceCloudStatus): {
 } {
   if (device.edgeBacklogCount > 0) {
     return {
-      label: 'Backlog waiting',
+      label: 'Sales waiting to upload',
       tone: 'warning',
-      detail: `${device.edgeBacklogCount} Edge update(s) still need Cloud delivery.`,
+      detail: `${device.edgeBacklogCount} locally accepted update(s) are waiting to upload. Do not stop selling for this delay alone.`,
     };
   }
   if (!device.lastCloudDeliveryAt) {
     return {
-      label: 'Cloud delivery not observed',
+      label: 'Upload not confirmed',
       tone: 'warning',
-      detail: 'This register has reached Edge, but no Cloud delivery is currently reported.',
+      detail:
+        'No online delivery has been confirmed yet. Check connectivity; this alone does not prove the register is unavailable.',
     };
   }
   return {
-    label: 'Reporting',
+    label: 'Reporting normally',
     tone: 'success',
-    detail: 'No Edge-to-Cloud backlog is currently reported.',
+    detail: 'No pending uploads are currently reported.',
   };
 }
 
@@ -190,7 +191,7 @@ export function SyncHealthClient() {
 
       <div className="ec-context-bar">
         <div>
-          <strong>{organisationName || 'Cloud device telemetry'}</strong>
+          <strong>{organisationName || 'Register reporting'}</strong>
           {activeOrganisationId ? (
             <>
               <span className="ec-context-subtle"> • refreshes every 5 seconds</span>
@@ -220,28 +221,25 @@ export function SyncHealthClient() {
       </div>
 
       <section className="ec-kpi-grid" aria-label="Device sync summary">
-        <SyncMetric label="Registers observed" value={devices.length.toString()} />
+        <SyncMetric label="Registers seen" value={devices.length.toString()} />
         <SyncMetric label="Need attention" value={attentionDevices.toString()} />
-        <SyncMetric label="With Edge backlog" value={devicesWithBacklog.toString()} />
-        <SyncMetric
-          label="No Cloud delivery observed"
-          value={devicesWithoutCloudDelivery.toString()}
-        />
+        <SyncMetric label="Waiting to upload" value={devicesWithBacklog.toString()} />
+        <SyncMetric label="Upload not confirmed" value={devicesWithoutCloudDelivery.toString()} />
       </section>
 
       {!activeOrganisationId && !error ? (
         <div className="ec-callout">
-          <strong>Select an organisation to begin.</strong> Sync Health is operator-authenticated
-          and only returns register telemetry for the selected organisation. The organisation last
-          used elsewhere in Event Control is carried into this screen for the current browser tab.
+          <strong>Select an organisation to begin.</strong> This screen shows whether registers are
+          reporting online and whether uploads are waiting. It does not decide whether a local till
+          can continue taking orders.
         </div>
       ) : null}
 
       {activeOrganisationId && devices.length === 0 && !error && !loading ? (
         <div className="ec-empty-state">
-          <strong>No register telemetry has reached Cloud yet.</strong> This does not prove a local
-          POS is unavailable; confirm Event Edge and venue connectivity before intervening at the
-          bar.
+          <strong>No register updates have reached the online service yet.</strong> This does not
+          prove a till is unavailable; check the venue's local server and network before
+          interrupting service.
         </div>
       ) : null}
 
@@ -273,30 +271,40 @@ export function SyncHealthClient() {
 
               <div className="ec-metric-list" style={{ marginTop: 14 }}>
                 <div className="ec-metric-pair">
-                  <small>Register sequence seen</small>
-                  <strong>{device.lastSequenceSeen}</strong>
-                </div>
-                <div className="ec-metric-pair">
-                  <small>Event Edge accepted through</small>
-                  <strong>{device.edgeAcceptedThroughSequence}</strong>
-                </div>
-                <div className="ec-metric-pair">
-                  <small>POS → Edge acceptance gap</small>
-                  <strong>{edgeAcceptanceGap}</strong>
-                </div>
-                <div className="ec-metric-pair">
-                  <small>Edge → Cloud backlog</small>
+                  <small>Pending uploads</small>
                   <strong>{device.edgeBacklogCount}</strong>
                 </div>
                 <div className="ec-metric-pair">
-                  <small>Last Cloud delivery</small>
+                  <small>Last online update</small>
                   <strong>
                     {device.lastCloudDeliveryAt
                       ? ageLabel(device.lastCloudDeliveryAt)
-                      : 'Not yet reported'}
+                      : 'Not yet confirmed'}
                   </strong>
                 </div>
               </div>
+
+              <details className="ec-context-switcher" style={{ marginTop: 14 }}>
+                <summary>Technical sync details</summary>
+                <div className="ec-metric-list" style={{ marginTop: 12 }}>
+                  <div className="ec-metric-pair">
+                    <small>Register sequence seen</small>
+                    <strong>{device.lastSequenceSeen}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Event Edge accepted through</small>
+                    <strong>{device.edgeAcceptedThroughSequence}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>POS → Edge acceptance gap</small>
+                    <strong>{edgeAcceptanceGap}</strong>
+                  </div>
+                  <div className="ec-metric-pair">
+                    <small>Edge → Cloud backlog</small>
+                    <strong>{device.edgeBacklogCount}</strong>
+                  </div>
+                </div>
+              </details>
             </article>
           );
         })}
