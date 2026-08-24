@@ -1,7 +1,12 @@
 'use client';
 
-import type { EventCloseReport, EventCloseStoredReportView } from '@event-commerce/contracts';
-import { useMemo, useState, type ReactNode } from 'react';
+import type {
+  EventCloseReport,
+  EventCloseStoredReportView,
+  EventConfigurationView,
+} from '@event-commerce/contracts';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -42,6 +47,11 @@ function money(currency: string, amountMinor: string | null): string {
   } catch {
     return `${currency} ${value.toFixed(2)}`;
   }
+}
+
+function compactId(value: string): string {
+  if (value.length <= 20) return value;
+  return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
 function moneyRows(rows: Array<{ currency: string; amountMinor: string }>): string {
@@ -110,12 +120,20 @@ export function EventCloseClient() {
   const [active, setActive] = useState<ActiveEvent | null>(null);
   const [report, setReport] = useState<EventCloseReport | null>(null);
   const [stored, setStored] = useState<EventCloseStoredReportView[]>([]);
+  const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [reason, setReason] = useState('Operational close review completed');
+  const [pendingAction, setPendingAction] = useState<'close' | 'reopen' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const context = readEventControlContext();
+    if (context.organisationId) setOrganisationId(context.organisationId);
+    if (context.eventId) setEventId(context.eventId);
+  }, []);
+
   async function refresh(target: ActiveEvent): Promise<void> {
-    const [nextReport, revisions] = await Promise.all([
+    const [nextReport, revisions, nextConfiguration] = await Promise.all([
       requestJson<EventCloseReport>(
         `/event-close/events/${encodeURIComponent(target.eventId)}/report`,
         actorId,
@@ -126,9 +144,21 @@ export function EventCloseClient() {
         actorId,
         target.organisationId,
       ),
+      requestJson<EventConfigurationView>(
+        `/organisations/${encodeURIComponent(target.organisationId)}/configuration`,
+        actorId,
+        target.organisationId,
+      ).catch(() => null),
     ]);
     setReport(nextReport);
     setStored(revisions);
+    setConfiguration(nextConfiguration);
+    writeEventControlContext({
+      organisationId: target.organisationId,
+      organisationName: nextConfiguration?.organisation.name ?? null,
+      eventId: target.eventId,
+      eventName: nextReport.event.name,
+    });
     setError(null);
   }
 
@@ -139,6 +169,7 @@ export function EventCloseClient() {
       return;
     }
     setBusy(true);
+    setPendingAction(null);
     try {
       await refresh(target);
       setActive(target);
@@ -166,6 +197,7 @@ export function EventCloseClient() {
         },
       );
       await refresh(active);
+      setPendingAction(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : `Unable to ${kind} event`);
     } finally {
@@ -209,6 +241,26 @@ export function EventCloseClient() {
     reconciliationUnresolved ||
     (report?.close.sourceChangedSinceLastClose ?? false);
 
+  const inventoryLocationNames = useMemo(
+    () =>
+      new Map(
+        (configuration?.inventoryLocations ?? []).map((location) => [location.id, location.name]),
+      ),
+    [configuration],
+  );
+  const skuNames = useMemo(
+    () => new Map((configuration?.skus ?? []).map((sku) => [sku.id, sku.name])),
+    [configuration],
+  );
+
+  function inventoryLocationLabel(id: string): string {
+    return inventoryLocationNames.get(id) ?? `Location ${compactId(id)}`;
+  }
+
+  function skuLabel(id: string): string {
+    return skuNames.get(id) ?? `SKU ${compactId(id)}`;
+  }
+
   return (
     <main className="ec-page ec-page--wide">
       <header className="ec-page-header">
@@ -229,7 +281,7 @@ export function EventCloseClient() {
         </span>
       </header>
 
-      <div className="ec-operations-stack">
+      <div className="ec-operations-stack" aria-busy={busy}>
         <div className="ec-context-loader">
           <input
             aria-label="Organisation ID"
@@ -244,7 +296,7 @@ export function EventCloseClient() {
             onChange={(event) => setEventId(event.target.value)}
           />
           <button type="button" disabled={busy} onClick={() => void load()}>
-            Load close review
+            {busy ? 'Working…' : report ? 'Refresh close review' : 'Load close review'}
           </button>
         </div>
 
@@ -252,9 +304,10 @@ export function EventCloseClient() {
 
         {!report ? (
           <div className="ec-callout">
-            <strong>Load the event before closing.</strong> The review starts with unresolved
-            payment, inventory and operational signals, then moves into detailed reconciliation and
-            immutable close evidence.
+            <strong>Load the event before closing.</strong> The organisation and event last used
+            elsewhere in Event Control are carried into this screen for the current browser tab.
+            The review starts with unresolved payment, inventory and operational signals, then moves
+            into detailed reconciliation and immutable close evidence.
           </div>
         ) : null}
 
@@ -305,7 +358,8 @@ export function EventCloseClient() {
                           {payment.providerId} • {payment.status}
                         </strong>
                         <div>
-                          {payment.orderId} • {money(payment.currency, payment.amountMinor)}
+                          Order {compactId(payment.orderId)} •{' '}
+                          {money(payment.currency, payment.amountMinor)}
                         </div>
                         <small>
                           {payment.reconciliationErrorCode ??
@@ -329,7 +383,8 @@ export function EventCloseClient() {
                       <div className="ec-list-row" key={transfer.transferId}>
                         <strong>{transfer.state}</strong>
                         <div>
-                          {transfer.sourceLocationId} → {transfer.destinationLocationId}
+                          {inventoryLocationLabel(transfer.sourceLocationId)} →{' '}
+                          {inventoryLocationLabel(transfer.destinationLocationId)}
                         </div>
                       </div>
                     ))}
@@ -350,7 +405,7 @@ export function EventCloseClient() {
                           {alert.alertType} • {alert.state}
                         </strong>
                         <div>
-                          {alert.skuId} • available {alert.availableQuantityBase}
+                          {skuLabel(alert.skuId)} • available {alert.availableQuantityBase}
                         </div>
                       </div>
                     ))}
@@ -375,8 +430,36 @@ export function EventCloseClient() {
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                 />
-                {report.close.state === 'OPERATIONALLY_CLOSED' ? (
-                  <button type="button" disabled={busy} onClick={() => void action('reopen')}>
+                {pendingAction ? (
+                  <div className="ec-inline-confirm ec-inline-confirm--wide" role="alert">
+                    <div>
+                      <strong>
+                        {pendingAction === 'close'
+                          ? 'Confirm operational close'
+                          : 'Confirm audited reopen'}
+                      </strong>
+                      <small>
+                        {pendingAction === 'close'
+                          ? 'This records an immutable close revision using the current reconciliation state.'
+                          : 'This reopens operations with the audit reason entered above.'}
+                      </small>
+                    </div>
+                    <div className="ec-form-actions">
+                      <button
+                        className="ec-button-primary"
+                        type="button"
+                        disabled={busy || !reason.trim()}
+                        onClick={() => void action(pendingAction)}
+                      >
+                        {pendingAction === 'close' ? 'Confirm close' : 'Confirm reopen'}
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => setPendingAction(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : report.close.state === 'OPERATIONALLY_CLOSED' ? (
+                  <button type="button" disabled={busy} onClick={() => setPendingAction('reopen')}>
                     Reopen with audit reason
                   </button>
                 ) : (
@@ -384,7 +467,7 @@ export function EventCloseClient() {
                     className="ec-button-primary"
                     type="button"
                     disabled={busy}
-                    onClick={() => void action('close')}
+                    onClick={() => setPendingAction('close')}
                   >
                     Record operational close
                   </button>
@@ -499,9 +582,9 @@ export function EventCloseClient() {
                       className="ec-list-row"
                       key={`${scope.salesLocationId}|${scope.deviceId}|${scope.cashierId}|${scope.currency}`}
                     >
-                      <strong>{scope.salesLocationName ?? scope.salesLocationId}</strong>
+                      <strong>{scope.salesLocationName ?? compactId(scope.salesLocationId)}</strong>
                       <div>
-                        {scope.deviceId} • {scope.cashierId}
+                        Register {compactId(scope.deviceId)} • cashier {compactId(scope.cashierId)}
                       </div>
                       <div>
                         Expected {money(scope.currency, scope.expectedMinor)} • Declared{' '}
@@ -530,7 +613,8 @@ export function EventCloseClient() {
                       key={`${variance.inventoryLocationId}|${variance.skuId}`}
                     >
                       <strong>{variance.skuName}</strong> •{' '}
-                      {variance.inventoryLocationName ?? variance.inventoryLocationId}
+                      {variance.inventoryLocationName ??
+                        inventoryLocationLabel(variance.inventoryLocationId)}
                       <div>
                         Expected {variance.expectedQuantityBase} • Physical{' '}
                         {variance.physicalQuantityBase} • Variance {variance.varianceQuantityBase}
@@ -606,7 +690,7 @@ export function EventCloseClient() {
                     {report.drilldowns.map((row) => (
                       <tr key={`${row.dimensionType}|${row.dimensionId}|${row.currency}`}>
                         <td>{row.dimensionType}</td>
-                        <td>{row.dimensionName ?? row.dimensionId}</td>
+                        <td>{row.dimensionName ?? compactId(row.dimensionId)}</td>
                         <td>{row.currency}</td>
                         <td align="right">{row.transactionCount}</td>
                         <td align="right">{money(row.currency, row.grossSalesMinor)}</td>
