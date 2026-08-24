@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { QueryResultRow } from 'pg';
 import type { AdminContext } from '../configuration/admin-context';
 import { DatabaseService } from '../database/database.service';
+import { cookieValue, OPERATOR_SESSION_COOKIE } from './operator-cookie';
 
 export type OperatorOrganisationRole = 'ADMIN' | 'FINANCE' | 'SUPERVISOR' | 'VIEWER';
 export type OperatorRole = 'PLATFORM_ADMIN' | OperatorOrganisationRole;
@@ -18,6 +19,11 @@ interface SessionRow extends QueryResultRow {
   session_id: string;
   actor_id: string;
   platform_role: 'PLATFORM_ADMIN' | null;
+}
+
+interface RevokedSessionRow extends QueryResultRow {
+  session_id: string;
+  actor_id: string;
 }
 
 interface MembershipRow extends QueryResultRow {
@@ -42,16 +48,25 @@ function uuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function bearer(headers: HeadersRecord): string {
+function validOperatorToken(value: string | undefined): value is string {
+  return Boolean(value?.startsWith('ecom_op_') && value.length >= 48 && value.length <= 256);
+}
+
+function operatorToken(headers: HeadersRecord): string {
   const authorization = first(headers.authorization);
-  if (!authorization?.startsWith('Bearer ')) {
-    throw new UnauthorizedException('Operator bearer session required');
+  if (authorization?.startsWith('Bearer ')) {
+    const token = authorization.slice('Bearer '.length).trim();
+    if (!validOperatorToken(token)) {
+      throw new UnauthorizedException('Operator bearer session is invalid');
+    }
+    return token;
   }
-  const token = authorization.slice('Bearer '.length).trim();
-  if (!token.startsWith('ecom_op_') || token.length < 48 || token.length > 256) {
-    throw new UnauthorizedException('Operator bearer session is invalid');
+
+  const cookieToken = cookieValue(headers, OPERATOR_SESSION_COOKIE);
+  if (!validOperatorToken(cookieToken)) {
+    throw new UnauthorizedException('Operator session required');
   }
-  return token;
+  return cookieToken;
 }
 
 function digest(value: string): string {
@@ -63,11 +78,13 @@ export class OperatorAuthService {
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
   isOperatorAuthorization(headers: HeadersRecord): boolean {
-    return first(headers.authorization)?.startsWith('Bearer ecom_op_') ?? false;
+    const authorization = first(headers.authorization);
+    if (authorization?.startsWith('Bearer ecom_op_')) return true;
+    return validOperatorToken(cookieValue(headers, OPERATOR_SESSION_COOKIE));
   }
 
   async authenticate(headers: HeadersRecord): Promise<OperatorIdentity> {
-    const token = bearer(headers);
+    const token = operatorToken(headers);
     const rows = await this.database.query<SessionRow>(
       `UPDATE operator_sessions session
        SET last_authenticated_at=now()
@@ -89,6 +106,25 @@ export class OperatorAuthService {
       actorId: row.actor_id,
       platformAdmin: row.platform_role === 'PLATFORM_ADMIN',
     };
+  }
+
+  async revokeSession(headers: HeadersRecord): Promise<void> {
+    const token = operatorToken(headers);
+    const rows = await this.database.query<RevokedSessionRow>(
+      `UPDATE operator_sessions
+       SET revoked_at=now()
+       WHERE token_sha256=$1 AND revoked_at IS NULL
+       RETURNING id::text AS session_id,actor_id::text AS actor_id`,
+      [digest(token)],
+    );
+    const row = rows[0];
+    if (!row) return;
+    await this.database.query(
+      `INSERT INTO operator_auth_audit(
+         actor_id,action,target_actor_id,session_id,performed_by,details
+       ) VALUES ($1,'SESSION_REVOKED',$1,$2,'operator-logout','{}'::jsonb)`,
+      [row.actor_id, row.session_id],
+    );
   }
 
   async legacyProjection(headers: HeadersRecord): Promise<LegacyOperatorProjection> {

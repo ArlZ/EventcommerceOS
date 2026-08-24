@@ -1,0 +1,155 @@
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
+
+export interface SupabaseAuthProof {
+  userId: string;
+  email: string;
+  accessToken: string;
+}
+
+interface SupabaseAuthResponse {
+  access_token?: unknown;
+  user?: {
+    id?: unknown;
+    email?: unknown;
+  } | null;
+}
+
+function baseUrl(environment: NodeJS.ProcessEnv = process.env): string {
+  const raw = (environment.SUPABASE_AUTH_URL ?? environment.SUPABASE_URL)?.trim();
+  if (!raw) throw new ServiceUnavailableException('Operator identity provider is not configured');
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new ServiceUnavailableException('Operator identity provider URL is invalid');
+  }
+  if (environment.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    throw new ServiceUnavailableException('Operator identity provider must use HTTPS');
+  }
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function publishableKey(environment: NodeJS.ProcessEnv = process.env): string {
+  const value = (environment.SUPABASE_PUBLISHABLE_KEY ?? environment.SUPABASE_ANON_KEY)?.trim();
+  if (!value || value.length < 20) {
+    throw new ServiceUnavailableException('Operator identity provider key is not configured');
+  }
+  return value;
+}
+
+function authProof(value: unknown): SupabaseAuthProof {
+  if (typeof value !== 'object' || value === null) {
+    throw new UnauthorizedException(
+      'Identity provider returned an invalid authentication response',
+    );
+  }
+  const response = value as SupabaseAuthResponse;
+  const userId = response.user?.id;
+  const email = response.user?.email;
+  const accessToken = response.access_token;
+  if (
+    typeof userId !== 'string' ||
+    !userId.trim() ||
+    typeof email !== 'string' ||
+    !email.trim() ||
+    typeof accessToken !== 'string' ||
+    !accessToken.trim()
+  ) {
+    throw new UnauthorizedException('Identity provider did not return a verified user session');
+  }
+  return {
+    userId: userId.trim(),
+    email: email.trim().toLowerCase(),
+    accessToken: accessToken.trim(),
+  };
+}
+
+@Injectable()
+export class SupabaseAuthTransport {
+  async passwordSignIn(email: string, password: string): Promise<SupabaseAuthProof> {
+    return authProof(
+      await this.request('/auth/v1/token?grant_type=password', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+  }
+
+  async sendEmailOtp(email: string): Promise<void> {
+    await this.request('/auth/v1/otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, create_user: false }),
+    });
+  }
+
+  async verifyEmailOtp(email: string, token: string): Promise<SupabaseAuthProof> {
+    return authProof(
+      await this.request('/auth/v1/verify', {
+        method: 'POST',
+        body: JSON.stringify({ email, token, type: 'email' }),
+      }),
+    );
+  }
+
+  async signOut(accessToken: string): Promise<void> {
+    try {
+      await this.request('/auth/v1/logout', {
+        method: 'POST',
+        authorization: `Bearer ${accessToken}`,
+      });
+    } catch {
+      // Event Control does not retain the Supabase session. Its operator session is separate,
+      // so best-effort upstream sign-out must not turn a successful proof into a login failure.
+    }
+  }
+
+  private async request(
+    path: string,
+    input: { method: 'POST'; body?: string; authorization?: string },
+  ): Promise<unknown> {
+    const key = publishableKey();
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl()}${path}`, {
+        method: input.method,
+        headers: {
+          apikey: key,
+          'content-type': 'application/json',
+          ...(input.authorization ? { authorization: input.authorization } : {}),
+        },
+        ...(input.body ? { body: input.body } : {}),
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch {
+      throw new ServiceUnavailableException('Operator identity provider is unavailable');
+    }
+
+    let payload: unknown = null;
+    const text = await response.text();
+    if (text) {
+      try {
+        payload = JSON.parse(text) as unknown;
+      } catch {
+        payload = null;
+      }
+    }
+
+    if (response.ok) return payload;
+    if (response.status === 429) {
+      throw new HttpException(
+        'Too many authentication attempts; retry later',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    if (response.status >= 500) {
+      throw new ServiceUnavailableException('Operator identity provider is unavailable');
+    }
+    throw new UnauthorizedException('Identity verification failed');
+  }
+}

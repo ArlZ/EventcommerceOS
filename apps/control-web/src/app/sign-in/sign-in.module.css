@@ -1,0 +1,583 @@
+.shell {
+  --auth-navy: #0e1430;
+  --auth-blue: #2a5ee0;
+  --auth-border: #d6dae1;
+  --auth-text: #0f1420;
+  --auth-dim: #5b6473;
+  --auth-faint: #9099a8;
+  --auth-red: #dc3a32;
+  --auth-red-tint: #fdedec;
+  --auth-green: #0e9f6e;
+  --auth-green-tint: #eafbf3;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 480px;
+  background: #fff;
+  color: var(--auth-text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13.5px;
+}
+
+.leftPanel {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 48px;
+  color: #fff;
+  background-color: var(--auth-navy);
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(42, 94, 224, 0.35), transparent 45%),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: auto, 36px 36px, 36px 36px;
+}
+
+.brand,
+.mobileBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brandMark,
+.mobileMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+
+.brandMark {
+  width: 30px;
+  height: 30px;
+  color: var(--auth-navy);
+  background: #fff;
+  font-size: 12px;
+}
+
+.brandName {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.brandMeta {
+  margin-top: 1px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.leftBody {
+  width: 100%;
+  max-width: 420px;
+  margin: auto 0;
+}
+
+.headline {
+  margin: 0 0 14px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.subhead {
+  margin: 0 0 32px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.preview {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(6px);
+}
+
+.previewHead,
+.statGrid,
+.chips,
+.fieldLabelRow,
+.rememberRow,
+.backButton,
+.footerNote,
+.resendRow {
+  display: flex;
+  align-items: center;
+}
+
+.previewHead {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.previewTitle {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #4ade9a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.liveDot,
+.chipDot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.liveDot {
+  background: #4ade9a;
+  animation: ringPulse 1.8s ease-out infinite;
+}
+
+.statGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.statLabel {
+  margin-bottom: 3px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.statValue {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.healthy {
+  color: #4ade9a;
+}
+
+.chips {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 9.5px;
+  font-weight: 600;
+}
+
+.greenDot { background: #4ade9a; }
+.amberDot { background: #f5a742; }
+.redDot { background: #f0554b; }
+
+.leftFooter {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+}
+
+.rightPanel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px;
+}
+
+.formWrap {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+}
+
+.mobileBrand {
+  display: none;
+  margin-bottom: 36px;
+}
+
+.mobileMark {
+  width: 28px;
+  height: 28px;
+  color: #fff;
+  background: var(--auth-navy);
+  font-size: 11px;
+}
+
+.formTitle {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.formSub {
+  margin: 0 0 28px;
+  color: var(--auth-faint);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.fieldLabel,
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--auth-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.fieldLabelRow {
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.fieldLabelRow .fieldLabel {
+  margin-bottom: 0;
+}
+
+.linkButton,
+.backButton,
+.resendButton {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.linkButton {
+  padding: 0;
+  color: var(--auth-blue);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.linkButton:hover,
+.resendButton:hover {
+  text-decoration: underline;
+}
+
+.inputWrap {
+  position: relative;
+}
+
+.input {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--auth-border);
+  border-radius: 8px;
+  outline: none;
+  background: #fff;
+  color: var(--auth-text);
+  font: inherit;
+}
+
+.passwordInput {
+  padding-right: 42px;
+}
+
+.input:focus,
+.codeInput:focus {
+  border-color: var(--auth-blue);
+  box-shadow: 0 0 0 3px #eef3fe;
+}
+
+.invalidInput {
+  border-color: var(--auth-red);
+}
+
+.passwordToggle {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--auth-faint);
+  cursor: pointer;
+}
+
+.passwordToggle:hover {
+  background: #f6f7f9;
+  color: var(--auth-dim);
+}
+
+.rememberRow {
+  gap: 8px;
+  margin-bottom: 20px;
+  color: var(--auth-dim);
+  font-size: 12.5px;
+}
+
+.rememberRow input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--auth-blue);
+}
+
+.primaryButton,
+.secondaryButton {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid var(--auth-navy);
+  background: var(--auth-navy);
+  color: #fff;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.primaryButton:hover:not(:disabled) { background: #1b2350; }
+.primaryButton:active:not(:disabled) { transform: scale(0.985); }
+.primaryButton:disabled { cursor: default; opacity: 0.58; }
+
+.secondaryButton {
+  border: 1px solid var(--auth-border);
+  background: #fff;
+  color: var(--auth-dim);
+}
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 11px 13px;
+  border: 1px solid #f5c6c2;
+  border-radius: 8px;
+  background: var(--auth-red-tint);
+  color: #8a2b26;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.infoBanner {
+  border-color: #cfd9f6;
+  background: #eef3fe;
+  color: #304c8f;
+}
+
+.bannerIcon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+.footer {
+  margin-top: 28px;
+  text-align: center;
+}
+
+.footerNote {
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--auth-faint);
+  font-size: 11.5px;
+}
+
+.footerLinks {
+  color: var(--auth-faint);
+  font-size: 11.5px;
+}
+
+.backButton {
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 0;
+  color: var(--auth-faint);
+  font-size: 12px;
+}
+
+.backButton:hover { color: var(--auth-dim); }
+
+.codeRow {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.codeInput {
+  width: 100%;
+  min-width: 0;
+  height: 52px;
+  border: 1px solid var(--auth-border);
+  border-radius: 8px;
+  outline: none;
+  text-align: center;
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 19px;
+  font-weight: 600;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+}
+
+.codeError .codeInput {
+  border-color: var(--auth-red);
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+.resendRow {
+  justify-content: center;
+  gap: 5px;
+  color: var(--auth-faint);
+  font-size: 11.5px;
+}
+
+.timer {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--auth-dim);
+  font-weight: 600;
+}
+
+.resendButton {
+  padding: 0;
+  color: var(--auth-blue);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.success {
+  padding-top: 20px;
+  text-align: center;
+  animation: fadeUp 0.3s ease-out;
+}
+
+.checkWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: var(--auth-green-tint);
+  animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.checkWrap svg {
+  width: 24px;
+  height: 24px;
+  stroke: var(--auth-green);
+  stroke-width: 2.4;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  vertical-align: -2px;
+  animation: spin 0.7s linear infinite;
+}
+
+.stepForward { animation: slideRight 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.stepBack { animation: slideLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+
+.icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell :global(:focus-visible) {
+  outline: 2px solid var(--auth-blue);
+  outline-offset: 2px;
+}
+
+@media (max-width: 940px) {
+  .shell { grid-template-columns: 1fr; }
+  .leftPanel { display: none; }
+  .mobileBrand { display: flex; }
+  .rightPanel { padding: 36px 24px; }
+}
+
+@media (max-width: 420px) {
+  .rightPanel { padding: 28px 18px; }
+  .codeRow { gap: 5px; }
+  .codeInput { height: 48px; font-size: 17px; }
+}
+
+@keyframes ringPulse {
+  from { box-shadow: 0 0 0 0 rgba(74, 222, 154, 0.55); }
+  to { box-shadow: 0 0 0 9px rgba(74, 222, 154, 0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(-18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-5px); }
+  40%, 60% { transform: translateX(5px); }
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -33,6 +33,19 @@ function first(value: HeaderValue): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function cookie(headers: HeadersRecord, name: string): string | undefined {
+  const raw = first(headers.cookie);
+  if (!raw) return undefined;
+  for (const part of raw.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator <= 0) continue;
+    if (part.slice(0, separator).trim() === name) {
+      return part.slice(separator + 1).trim() || undefined;
+    }
+  }
+  return undefined;
+}
+
 function fingerprint(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
@@ -57,6 +70,14 @@ function isEdgePaymentPath(path: string): boolean {
   );
 }
 
+function isOperatorLoginPath(path: string): boolean {
+  return (
+    path === '/operator-auth/login/password' ||
+    path === '/operator-auth/login/resend' ||
+    path === '/operator-auth/login/verify'
+  );
+}
+
 export function classifyAbuseRequest(
   request: AbuseRequestLike,
 ): ClassifiedAbuseRequest | undefined {
@@ -66,6 +87,15 @@ export function classifyAbuseRequest(
   const path = normalizedPath(request);
   const authorization = first(request.headers.authorization)?.trim() ?? '';
   const edgeId = first(request.headers['x-edge-id'])?.trim() ?? '';
+
+  if (isOperatorLoginPath(path)) {
+    const challenge = cookie(request.headers, 'ec_operator_login');
+    return {
+      policy: 'OPERATOR_LOGIN',
+      ...(challenge ? { principalKey: fingerprint(`login:${challenge}`) } : {}),
+      principalType: 'anonymous',
+    };
+  }
 
   if (path === '/sync/edge-events' || path === '/inventory/edge-events') {
     return {
@@ -92,10 +122,16 @@ export function classifyAbuseRequest(
     };
   }
 
-  if (authorization.startsWith('Bearer ecom_op_')) {
+  const sessionCookie = cookie(request.headers, 'ec_operator_session');
+  const operatorCredential = authorization.startsWith('Bearer ecom_op_')
+    ? authorization
+    : sessionCookie?.startsWith('ecom_op_')
+      ? `Cookie ${sessionCookie}`
+      : '';
+  if (operatorCredential) {
     return {
       policy: method === 'GET' || method === 'HEAD' ? 'OPERATOR_READ' : 'OPERATOR_MUTATION',
-      principalKey: fingerprint(authorization),
+      principalKey: fingerprint(operatorCredential),
       principalType: 'operator',
     };
   }

@@ -5,13 +5,19 @@ import { AbuseProtectionModule } from '../security/abuse-protection.module';
 import { GlobalSecurityGuard } from '../security/global-security.guard';
 import { OperatorAuthService } from './operator-auth.service';
 import { OperatorIdentityGuard } from './operator-identity.guard';
+import { OperatorLoginController } from './operator-login.controller';
+import { OperatorLoginService } from './operator-login.service';
+import { SupabaseAuthTransport } from './supabase-auth.transport';
 
 @Global()
 @Module({
   imports: [DatabaseModule, AbuseProtectionModule],
+  controllers: [OperatorLoginController],
   providers: [
     OperatorAuthService,
     OperatorIdentityGuard,
+    OperatorLoginService,
+    SupabaseAuthTransport,
     {
       provide: APP_GUARD,
       useClass: GlobalSecurityGuard,
