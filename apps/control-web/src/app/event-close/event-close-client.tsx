@@ -305,8 +305,8 @@ export function EventCloseClient() {
         {!report ? (
           <div className="ec-callout">
             <strong>Load the event before closing.</strong> The organisation and event last used
-            elsewhere in Event Control are carried into this screen for the current browser tab.
-            The review starts with unresolved payment, inventory and operational signals, then moves
+            elsewhere in Event Control are carried into this screen for the current browser tab. The
+            review starts with unresolved payment, inventory and operational signals, then moves
             into detailed reconciliation and immutable close evidence.
           </div>
         ) : null}
