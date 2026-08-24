@@ -1,0 +1,37 @@
+name: Run operator price-entry transformer
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: agent/operator-price-entry
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: python .github/operator-price-entry.py
+      - run: pnpm exec prettier --write apps/control-web/src/app/configuration/configuration-client.tsx apps/control-web/src/app/configuration/pricing.ts apps/control-web/test/configuration-pricing.test.ts
+      - name: Verify pricing helper tests
+        run: pnpm --filter @event-commerce/control-web test -- configuration-pricing.test.ts
+      - name: Commit product changes
+        shell: bash
+        run: |
+          git rm .github/operator-price-entry.py .github/workflows/run-operator-price-entry.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/control-web/src/app/configuration/configuration-client.tsx apps/control-web/src/app/configuration/pricing.ts apps/control-web/test/configuration-pricing.test.ts
+          git commit -m 'Accept normal currency prices in Setup'
+          git push origin HEAD:agent/operator-price-entry
