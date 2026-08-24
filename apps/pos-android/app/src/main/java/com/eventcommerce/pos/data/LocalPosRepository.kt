@@ -26,6 +26,8 @@ class LocalPosRepository(
 
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
+  suspend fun activeProductionMenu(): CachedMenu? = activeMenu()?.takeUnless(::isBuiltInDevelopmentMenu)
+
   suspend fun menuForSale(): CachedMenu? {
     val open = orders.current()
     return if (open == null) menus.active() else menus.version(open.menuVersion)
@@ -84,13 +86,22 @@ class LocalPosRepository(
   suspend fun allOutboxEvents(): List<OutboxEventEntity> = outbox.events()
 
   companion object {
+    private const val DEVELOPMENT_EVENT_ID = "dev-event-offline"
+    private const val DEVELOPMENT_MENU_ID = "dev-menu-v1"
+    private const val DEVELOPMENT_SOURCE_ACTOR = "built-in-task003"
+
+    fun isBuiltInDevelopmentMenu(menu: CachedMenu): Boolean =
+      menu.eventId == DEVELOPMENT_EVENT_ID &&
+        menu.menuId == DEVELOPMENT_MENU_ID &&
+        menu.sourceActor == DEVELOPMENT_SOURCE_ACTOR
+
     fun developmentMenuCandidate(): MenuCandidate {
       val unsigned = MenuCandidate(
-        eventId = "dev-event-offline",
-        menuId = "dev-menu-v1",
+        eventId = DEVELOPMENT_EVENT_ID,
+        menuId = DEVELOPMENT_MENU_ID,
         version = 1,
         activatedAtEpochMs = 1_700_000_000_000,
-        sourceActor = "built-in-task003",
+        sourceActor = DEVELOPMENT_SOURCE_ACTOR,
         currency = "KES",
         checksum = "",
         items = listOf(
