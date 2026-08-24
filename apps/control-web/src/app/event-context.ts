@@ -1,8 +1,8 @@
 export type EventControlContext = {
-  organisationId?: string;
-  organisationName?: string;
-  eventId?: string;
-  eventName?: string;
+  organisationId?: string | null;
+  organisationName?: string | null;
+  eventId?: string | null;
+  eventName?: string | null;
 };
 
 const storageKey = 'event-commerce.command-centre-context';
@@ -35,12 +35,18 @@ export function readEventControlContext(): EventControlContext {
 
 export function writeEventControlContext(next: EventControlContext): void {
   if (typeof window === 'undefined') return;
-  const current = readEventControlContext();
+  const merged = { ...readEventControlContext(), ...next };
+  const organisationId = stringField(merged.organisationId);
+  const organisationName = stringField(merged.organisationName);
+  const eventId = stringField(merged.eventId);
+  const eventName = stringField(merged.eventName);
   window.sessionStorage.setItem(
     storageKey,
     JSON.stringify({
-      ...current,
-      ...next,
+      ...(organisationId ? { organisationId } : {}),
+      ...(organisationName ? { organisationName } : {}),
+      ...(eventId ? { eventId } : {}),
+      ...(eventName ? { eventName } : {}),
     }),
   );
 }
