@@ -1,4 +1,9 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import { EdgeDatabaseService } from '../database/database.service';
 import type { PosMenuSnapshot } from './pos-menu.types';
@@ -31,7 +36,9 @@ export class PosMenuService {
         }
         if (candidateVersion === existingVersion) {
           if (existing.checksum !== snapshot.checksum) {
-            throw new ConflictException('menu snapshot version already exists with different content');
+            throw new ConflictException(
+              'menu snapshot version already exists with different content',
+            );
           }
           return existing.payload;
         }
@@ -76,7 +83,9 @@ export class PosMenuService {
       [eventId, salesLocationId],
     );
     const row = rows[0];
-    if (!row) throw new NotFoundException('no POS menu snapshot is installed for this sales location');
+    if (!row) {
+      throw new NotFoundException('no POS menu snapshot is installed for this sales location');
+    }
     return row.payload;
   }
 }
