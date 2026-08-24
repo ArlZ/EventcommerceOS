@@ -89,6 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const publicRoute = pathname === '/sign-in';
   const [profile, setProfile] = useState<OperatorSessionProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authCheckVersion, setAuthCheckVersion] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -145,7 +146,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [profile, publicRoute, router]);
+  }, [authCheckVersion, profile, publicRoute, router]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -194,7 +195,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <h1 style={{ marginBottom: 8 }}>Securing Event Control</h1>
           <p>{authError ?? 'Checking your operator session…'}</p>
           {authError ? (
-            <button type="button" className="ec-button-primary" onClick={() => { setAuthError(null); setProfile(null); router.refresh(); }}>
+            <button
+              type="button"
+              className="ec-button-primary"
+              onClick={() => {
+                setAuthError(null);
+                setAuthCheckVersion((current) => current + 1);
+              }}
+            >
               Retry
             </button>
           ) : null}
