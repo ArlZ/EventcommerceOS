@@ -1,4 +1,11 @@
+import { WorkflowRail } from '../workflow-ui';
 import { InventoryOperationsClient } from './inventory-operations-client';
+
+const workflow = [
+  { label: 'Spot risk', detail: 'Start with critical and low-cover stock positions.' },
+  { label: 'Move safely', detail: 'Use replenishment guidance without bypassing transfer controls.' },
+  { label: 'Verify receipt', detail: 'Keep stock in motion visible until destination receipt is recorded.' },
+];
 
 export default function InventoryPage() {
   return (
@@ -13,6 +20,7 @@ export default function InventoryPage() {
         </div>
         <span className="ec-status-pill">Cloud view</span>
       </header>
+      <WorkflowRail steps={workflow} />
       <div className="ec-callout">
         <strong>Connectivity rule:</strong> This view can lag Event Edge during a network partition.
         <br />
