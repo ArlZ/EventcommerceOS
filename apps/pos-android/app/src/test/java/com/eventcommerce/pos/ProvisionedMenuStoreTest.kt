@@ -68,6 +68,20 @@ class ProvisionedMenuStoreTest {
   }
 
   @Test
+  fun `authenticated reprovision can restart menu version namespace`() = runBlocking {
+    repository.installProvisionedMenu(realMenu(version = 5), "a".repeat(64))
+    val nextVenueMenu = realMenu(version = 1).copy(eventId = "event-next", menuId = "menu-next")
+    val signedNextVenueMenu = MenuIntegrity.signed(nextVenueMenu.copy(checksum = ""))
+
+    val installed = repository.installProvisionedMenu(signedNextVenueMenu, "b".repeat(64))
+
+    assertEquals(1, installed.version)
+    assertEquals("event-next", installed.eventId)
+    assertNull(repository.activeProvisionedMenu("a".repeat(64)))
+    assertEquals("event-next", repository.activeProvisionedMenu("b".repeat(64))?.eventId)
+  }
+
+  @Test
   fun `development menu cannot be replaced while its order is open`() = runBlocking {
     val development = repository.ensureDevelopmentMenu()
     repository.addItem(development.items.first().itemId)
