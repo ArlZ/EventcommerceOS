@@ -54,8 +54,10 @@ The helper:
 2. starts/recreates the Compose services without deleting the PostgreSQL data volume;
 3. waits for Caddy to create its internal CA;
 4. exports only the public root certificate as `infra/edge-pilot/event-edge-root-ca.crt`;
-5. validates the HTTPS health endpoint using that root; and
+5. attempts to validate the HTTPS health endpoint with the exported root CA, including a Schannel retry with revocation checking disabled; if Windows Schannel itself cannot consume the CA, performs a reachability-only HTTPS health check and labels that result explicitly; and
 6. prints the exact POS sync endpoint and the public root certificate SHA-256 fingerprint.
+
+The Windows fallback is only a host diagnostic. It does not relax Android TLS policy: the POS app still requires HTTPS and the exported Event Edge root CA must be installed and fingerprint-verified on each dedicated pilot register before provisioning.
 
 The expected POS endpoint is shaped like:
 

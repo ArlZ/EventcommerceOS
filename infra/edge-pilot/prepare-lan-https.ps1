@@ -86,19 +86,41 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path $rootCertificatePath)) {
 
 $endpoint = "https://${LanAddress}:$HttpsPort/sync/device-events"
 $healthUrl = "https://${LanAddress}:$HttpsPort/health"
+$hostTrustVerified = $false
 
-& curl.exe --fail --silent --show-error --cacert $rootCertificatePath $healthUrl | Out-Null
-if ($LASTEXITCODE -ne 0) {
-  throw "HTTPS was created, but the host TLS health check failed at $healthUrl."
+# Windows curl commonly uses Schannel. Some Windows configurations return
+# SEC_E_INTERNAL_ERROR before Schannel can consume an explicit --cacert file.
+# Attempt full CA validation first, then retry with revocation checks disabled.
+# The final --insecure request is reachability-only and never changes POS trust policy.
+& curl.exe --fail --silent --show-error --connect-timeout 5 --max-time 10 --cacert $rootCertificatePath $healthUrl 2>$null | Out-Null
+if ($LASTEXITCODE -eq 0) {
+  $hostTrustVerified = $true
+} else {
+  & curl.exe --fail --silent --show-error --connect-timeout 5 --max-time 10 --ssl-no-revoke --cacert $rootCertificatePath $healthUrl 2>$null | Out-Null
+  if ($LASTEXITCODE -eq 0) { $hostTrustVerified = $true }
+}
+
+if (-not $hostTrustVerified) {
+  Write-Warning "Windows Schannel could not validate the exported Event Edge CA directly. Running a reachability-only HTTPS health check; Android CA trust is still mandatory."
+  & curl.exe --fail --silent --show-error --connect-timeout 5 --max-time 10 --insecure $healthUrl | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "HTTPS was created, but the host could not reach the Event Edge health endpoint at $healthUrl."
+  }
 }
 
 $fingerprint = (Get-FileHash -Algorithm SHA256 $rootCertificatePath).Hash
+$hostVerification = if ($hostTrustVerified) {
+  "CA verified by Windows host"
+} else {
+  "HTTPS reachability verified; Windows Schannel CA verification unavailable"
+}
 
 Write-Host ""
 Write-Host "RESULT: LAN_HTTPS_READY"
 Write-Host "Event Edge sync endpoint:" $endpoint
 Write-Host "Public root CA certificate:" $rootCertificatePath
 Write-Host "Root CA SHA-256:" $fingerprint
+Write-Host "Host TLS check:" $hostVerification
 Write-Host ""
 Write-Host "Install ONLY this public root CA certificate on dedicated pilot POS devices, then provision each register with its own Event Edge credential."
 Write-Host "Keep the Edge PC on this LAN address (use a DHCP reservation or static lease) for the pilot."
