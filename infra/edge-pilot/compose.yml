@@ -78,8 +78,8 @@ services:
         condition: service_healthy
       edge-migrate:
         condition: service_completed_successfully
-    ports:
-      - '${EDGE_BIND_ADDRESS:-0.0.0.0}:${EDGE_PORT:-3002}:3002'
+    expose:
+      - '3002'
     volumes:
       - ./bootstrap.mjs:/pilot/bootstrap.mjs:ro
       - ./rehearsal.mjs:/pilot/rehearsal.mjs:ro
@@ -87,8 +87,30 @@ services:
       - edge-internal
       - edge-lan
 
+  edge-https:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      EDGE_LAN_HOST: ${EDGE_LAN_HOST:?EDGE_LAN_HOST is required}
+    depends_on:
+      event-edge:
+        condition: service_healthy
+    ports:
+      - '${EDGE_HTTPS_BIND_ADDRESS:-0.0.0.0}:${EDGE_HTTPS_PORT:-8443}:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - edge-caddy-data:/data
+      - edge-caddy-config:/config
+    networks:
+      - edge-lan
+
 volumes:
   edge-postgres-data:
+  edge-caddy-data:
+  edge-caddy-config:
 
 networks:
   edge-internal:
