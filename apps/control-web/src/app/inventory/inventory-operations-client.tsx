@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 
 type StockRow = {
   inventoryLocationId: string;
@@ -44,6 +45,12 @@ type Operations = {
 };
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
+const severityOrder: Record<string, number> = {
+  CRITICAL: 0,
+  URGENT: 1,
+  WARNING: 2,
+  INFO: 3,
+};
 
 function alertTone(severity: string): 'danger' | 'warning' {
   return severity === 'CRITICAL' ? 'danger' : 'warning';
@@ -58,25 +65,38 @@ function transferProgress(transfer: TransferRow): string {
     .join(' • ');
 }
 
+function coverMinutes(value: string | null): number {
+  if (value === null) return Number.POSITIVE_INFINITY;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
 export function InventoryOperationsClient() {
   const [eventId, setEventId] = useState('');
   const [operations, setOperations] = useState<Operations | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const context = readEventControlContext();
+    if (context.eventId) setEventId(context.eventId);
+  }, []);
+
   async function refresh() {
-    if (!eventId.trim()) {
+    const selectedEventId = eventId.trim();
+    if (!selectedEventId) {
       setError('Enter an event ID.');
       return;
     }
     setLoading(true);
     try {
       const response = await fetch(
-        `${apiBase}/inventory/events/${encodeURIComponent(eventId.trim())}/operations`,
+        `${apiBase}/inventory/events/${encodeURIComponent(selectedEventId)}/operations`,
         { cache: 'no-store' },
       );
       if (!response.ok) throw new Error(`Cloud API returned ${response.status}`);
       setOperations((await response.json()) as Operations);
+      writeEventControlContext({ eventId: selectedEventId });
       setError(null);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Unable to load inventory operations');
@@ -86,12 +106,19 @@ export function InventoryOperationsClient() {
   }
 
   const activeAlerts = useMemo(
-    () => operations?.alerts.filter((alert) => alert.state !== 'RESOLVED') ?? [],
+    () =>
+      [...(operations?.alerts.filter((alert) => alert.state !== 'RESOLVED') ?? [])].sort(
+        (left, right) =>
+          (severityOrder[left.severity] ?? 99) - (severityOrder[right.severity] ?? 99) ||
+          coverMinutes(left.minutesOfCover) - coverMinutes(right.minutesOfCover),
+      ),
     [operations],
   );
   const criticalAlerts = activeAlerts.filter((alert) => alert.severity === 'CRITICAL');
   const activeTransfers =
     operations?.transfers.filter((transfer) => transfer.state !== 'RECEIVED') ?? [];
+  const inventoryTone =
+    criticalAlerts.length > 0 ? 'danger' : activeAlerts.length > 0 ? 'warning' : 'success';
 
   return (
     <section className="ec-operations-stack" style={{ marginTop: 18 }}>
@@ -103,7 +130,7 @@ export function InventoryOperationsClient() {
           aria-label="Event ID"
         />
         <button type="button" onClick={() => void refresh()} disabled={loading}>
-          {loading ? 'Loading…' : 'Load inventory'}
+          {loading ? 'Loading…' : operations ? 'Refresh inventory' : 'Load inventory'}
         </button>
       </div>
 
@@ -112,12 +139,26 @@ export function InventoryOperationsClient() {
       {!operations && !error ? (
         <div className="ec-callout">
           <strong>Start with the event.</strong> Active stock risks and transfers will appear before
-          the location-by-location ledger projection.
+          the location-by-location ledger projection. If you already opened this event in Live, its
+          event ID is carried into this screen for the current browser tab.
         </div>
       ) : null}
 
       {operations ? (
         <>
+          <div className="ec-context-bar">
+            <div>
+              <strong>Inventory operations</strong> • event {eventId.trim()}
+            </div>
+            <span className="ec-status-pill" data-tone={inventoryTone}>
+              {criticalAlerts.length > 0
+                ? `${criticalAlerts.length} critical risk${criticalAlerts.length === 1 ? '' : 's'}`
+                : activeAlerts.length > 0
+                  ? `${activeAlerts.length} active risk${activeAlerts.length === 1 ? '' : 's'}`
+                  : 'Stock healthy'}
+            </span>
+          </div>
+
           <section className="ec-kpi-grid" aria-label="Inventory operations summary">
             <InventoryMetric label="Active alerts" value={activeAlerts.length.toString()} />
             <InventoryMetric label="Critical alerts" value={criticalAlerts.length.toString()} />
@@ -133,20 +174,11 @@ export function InventoryOperationsClient() {
               <div>
                 <h2>Stock risks requiring attention</h2>
                 <p>
-                  Work from highest severity to lowest cover. A suggestion is guidance, not an
+                  Highest severity and lowest cover appear first. A suggestion is guidance, not an
                   inventory movement until the transfer workflow records it.
                 </p>
               </div>
-              <span
-                className="ec-status-pill"
-                data-tone={
-                  criticalAlerts.length > 0
-                    ? 'danger'
-                    : activeAlerts.length > 0
-                      ? 'warning'
-                      : 'success'
-                }
-              >
+              <span className="ec-status-pill" data-tone={inventoryTone}>
                 {criticalAlerts.length > 0
                   ? `${criticalAlerts.length} critical`
                   : activeAlerts.length > 0
@@ -206,6 +238,12 @@ export function InventoryOperationsClient() {
                   <h2>Transfers in motion</h2>
                   <p>Follow stock until receipt is recorded at the destination.</p>
                 </div>
+                <span
+                  className="ec-status-pill"
+                  data-tone={activeTransfers.length > 0 ? 'warning' : 'success'}
+                >
+                  {activeTransfers.length > 0 ? `${activeTransfers.length} in progress` : 'Clear'}
+                </span>
               </div>
               {operations.transfers.length === 0 ? (
                 <p className="ec-empty">No transfers recorded for this event.</p>
@@ -237,6 +275,7 @@ export function InventoryOperationsClient() {
                   <h2>Stock by location</h2>
                   <p>Current Cloud projection of the append-only stock ledger.</p>
                 </div>
+                <span className="ec-status-pill">{operations.stock.length} positions</span>
               </div>
               {operations.stock.length === 0 ? (
                 <p className="ec-empty">No stock positions reported.</p>

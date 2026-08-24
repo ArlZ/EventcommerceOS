@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { AppShell } from './app-shell';
 import './globals.css';
 import './operations.css';
+import './workflow-polish.css';
 
 export const metadata: Metadata = {
   title: 'Event Commerce OS — Event Control',

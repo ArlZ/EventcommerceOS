@@ -2,6 +2,7 @@
 
 import type { DeviceCloudStatus } from '@event-commerce/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { readEventControlContext, writeEventControlContext } from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -10,6 +11,10 @@ function ageLabel(value: string): string {
   if (ageSeconds < 60) return `${ageSeconds}s ago`;
   if (ageSeconds < 3600) return `${Math.floor(ageSeconds / 60)}m ago`;
   return `${Math.floor(ageSeconds / 3600)}h ago`;
+}
+
+function deviceNeedsAttention(device: DeviceCloudStatus): boolean {
+  return device.edgeBacklogCount > 0 || !device.lastCloudDeliveryAt;
 }
 
 function deviceStatus(device: DeviceCloudStatus): {
@@ -45,6 +50,11 @@ export function SyncHealthClient() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const context = readEventControlContext();
+    if (context.organisationId) setOrganisationId(context.organisationId);
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!activeOrganisationId) return;
     setLoading(true);
@@ -69,6 +79,7 @@ export function SyncHealthClient() {
       setError('Enter an organisation ID.');
       return;
     }
+    writeEventControlContext({ organisationId: nextOrganisationId });
     if (nextOrganisationId === activeOrganisationId) {
       void refresh();
       return;
@@ -93,6 +104,17 @@ export function SyncHealthClient() {
     () => devices.filter((device) => !device.lastCloudDeliveryAt).length,
     [devices],
   );
+  const attentionDevices = useMemo(() => devices.filter(deviceNeedsAttention).length, [devices]);
+  const orderedDevices = useMemo(
+    () =>
+      [...devices].sort((left, right) => {
+        const attentionDelta =
+          Number(deviceNeedsAttention(right)) - Number(deviceNeedsAttention(left));
+        if (attentionDelta !== 0) return attentionDelta;
+        return Date.parse(left.lastSeenAt) - Date.parse(right.lastSeenAt);
+      }),
+    [devices],
+  );
 
   return (
     <section className="ec-operations-stack" style={{ marginTop: 18 }}>
@@ -104,7 +126,7 @@ export function SyncHealthClient() {
           aria-label="Organisation ID"
         />
         <button type="button" onClick={loadOrganisation} disabled={loading}>
-          {loading ? 'Loading…' : 'Load sync health'}
+          {loading ? 'Loading…' : activeOrganisationId ? 'Refresh devices' : 'Load sync health'}
         </button>
       </div>
 
@@ -120,17 +142,20 @@ export function SyncHealthClient() {
             : ' • select an organisation'}
           {activeOrganisationId ? ' • refreshes every 5 seconds' : ''}
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading || !activeOrganisationId}
-        >
-          {loading ? 'Refreshing…' : 'Refresh now'}
-        </button>
+        {activeOrganisationId ? (
+          <span className="ec-status-pill" data-tone={attentionDevices > 0 ? 'warning' : 'success'}>
+            {attentionDevices > 0
+              ? `${attentionDevices} register${attentionDevices === 1 ? '' : 's'} need attention`
+              : devices.length > 0
+                ? 'All reporting'
+                : 'Awaiting telemetry'}
+          </span>
+        ) : null}
       </div>
 
       <section className="ec-kpi-grid" aria-label="Device sync summary">
         <SyncMetric label="Registers observed" value={devices.length.toString()} />
+        <SyncMetric label="Need attention" value={attentionDevices.toString()} />
         <SyncMetric label="With Edge backlog" value={devicesWithBacklog.toString()} />
         <SyncMetric
           label="No Cloud delivery observed"
@@ -141,7 +166,8 @@ export function SyncHealthClient() {
       {!activeOrganisationId && !error ? (
         <div className="ec-callout">
           <strong>Select an organisation to begin.</strong> Sync Health is operator-authenticated
-          and only returns register telemetry for the selected organisation.
+          and only returns register telemetry for the selected organisation. The organisation last
+          used in Live is carried into this screen for the current browser tab.
         </div>
       ) : null}
 
@@ -154,8 +180,12 @@ export function SyncHealthClient() {
       ) : null}
 
       <section className="ec-control-grid">
-        {devices.map((device) => {
+        {orderedDevices.map((device) => {
           const status = deviceStatus(device);
+          const edgeAcceptanceGap = Math.max(
+            0,
+            device.lastSequenceSeen - device.edgeAcceptedThroughSequence,
+          );
           return (
             <article className="ec-panel" key={device.deviceId}>
               <div className="ec-panel-heading">
@@ -182,6 +212,10 @@ export function SyncHealthClient() {
                 <div className="ec-metric-pair">
                   <small>Event Edge accepted through</small>
                   <strong>{device.edgeAcceptedThroughSequence}</strong>
+                </div>
+                <div className="ec-metric-pair">
+                  <small>POS → Edge acceptance gap</small>
+                  <strong>{edgeAcceptanceGap}</strong>
                 </div>
                 <div className="ec-metric-pair">
                   <small>Edge → Cloud backlog</small>

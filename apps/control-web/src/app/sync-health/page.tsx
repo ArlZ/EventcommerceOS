@@ -1,4 +1,17 @@
+import { WorkflowRail } from '../workflow-ui';
 import { SyncHealthClient } from './sync-health-client';
+
+const workflow = [
+  {
+    label: 'Detect',
+    detail: 'Surface backlog and missing Cloud delivery before it becomes operational noise.',
+  },
+  { label: 'Diagnose', detail: 'Separate local POS availability from Edge-to-Cloud delay.' },
+  {
+    label: 'Recover',
+    detail: 'Restore connectivity without interrupting locally committed sales.',
+  },
+];
 
 export default function SyncHealthPage() {
   return (
@@ -14,6 +27,7 @@ export default function SyncHealthPage() {
         </div>
         <span className="ec-status-pill">Operational health</span>
       </header>
+      <WorkflowRail steps={workflow} />
       <SyncHealthClient />
     </main>
   );

@@ -1,8 +1,18 @@
+import { WorkflowRail } from '../workflow-ui';
 import { ConfigurationClient } from './configuration-client';
 
 const setupSequence =
   'organisation → event → sales locations → inventory locations → catalogue → menu.';
 const setupFollowUp = 'Device assignment and final pre-open checks follow in pilot operations.';
+
+const workflow = [
+  { label: 'Organisation', detail: 'Choose the operator that owns the event configuration.' },
+  { label: 'Event', detail: 'Create the event and establish the trading context.' },
+  { label: 'Locations', detail: 'Map guest-facing sales points and controlled stock locations.' },
+  { label: 'Catalogue', detail: 'Create products and the sellable units the register will show.' },
+  { label: 'Menu', detail: 'Assign the event menu to the correct sales locations.' },
+  { label: 'Price', detail: 'Complete menu items and prices before pre-open checks.' },
+];
 
 export default function ConfigurationPage() {
   return (
@@ -20,6 +30,7 @@ export default function ConfigurationPage() {
           Setup mode
         </span>
       </header>
+      <WorkflowRail steps={workflow} />
       <div className="ec-callout">
         <strong>Pilot workflow:</strong> {setupSequence} {setupFollowUp}
       </div>
