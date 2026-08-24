@@ -15,6 +15,7 @@ class LocalPosRepository(
   faultInjector: TransactionFaultInjector = TransactionFaultInjector { _ -> },
 ) {
   private val menus = LocalMenuStore(db, clock, faultInjector)
+  private val metadata = db.localMetadata()
   private val deviceState = LocalDeviceState(db, idFactory)
   private val outbox = LocalOutbox(db, deviceState, clock, idFactory)
   private val orders = LocalOrderStore(db, menus, deviceState, outbox, clock, idFactory, faultInjector)
@@ -24,7 +25,29 @@ class LocalPosRepository(
 
   suspend fun installMenu(candidate: MenuCandidate): CachedMenu = menus.install(candidate)
 
+  suspend fun installProvisionedMenu(candidate: MenuCandidate, provisioningBinding: String): CachedMenu {
+    require(PROVISIONING_BINDING.matches(provisioningBinding)) { "invalid POS menu provisioning binding" }
+    val current = activeMenu()
+    val installed = if (current != null && isDevelopmentMenu(current)) {
+      require(orders.current() == null) {
+        "cannot replace the development menu while an order is open"
+      }
+      menus.replaceDevelopmentMenu(current.version, current.checksum, candidate)
+    } else {
+      menus.install(candidate)
+    }
+    metadata.put(LocalMetadataEntity(MENU_PROVISIONING_BINDING_KEY, provisioningBinding))
+    return installed
+  }
+
   suspend fun activeMenu(): CachedMenu? = menus.active()
+
+  suspend fun activeProvisionedMenu(provisioningBinding: String): CachedMenu? {
+    if (!PROVISIONING_BINDING.matches(provisioningBinding)) return null
+    val storedBinding = metadata.find(MENU_PROVISIONING_BINDING_KEY)?.value
+    if (storedBinding != provisioningBinding) return null
+    return activeMenu()?.takeUnless(::isDevelopmentMenu)
+  }
 
   suspend fun menuForSale(): CachedMenu? {
     val open = orders.current()
@@ -83,7 +106,18 @@ class LocalPosRepository(
 
   suspend fun allOutboxEvents(): List<OutboxEventEntity> = outbox.events()
 
+  private fun isDevelopmentMenu(menu: CachedMenu): Boolean {
+    val development = developmentMenuCandidate()
+    return menu.eventId == development.eventId &&
+      menu.menuId == development.menuId &&
+      menu.version == development.version &&
+      menu.checksum == development.checksum
+  }
+
   companion object {
+    private const val MENU_PROVISIONING_BINDING_KEY = "pos.menu.provisioning-binding"
+    private val PROVISIONING_BINDING = Regex("^[0-9a-f]{64}$")
+
     fun developmentMenuCandidate(): MenuCandidate {
       val unsigned = MenuCandidate(
         eventId = "dev-event-offline",
