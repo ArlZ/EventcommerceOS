@@ -9,10 +9,14 @@ function normalizeCurrency(currency: string): string {
 export function currencyFractionDigits(currency: string): number {
   const normalized = normalizeCurrency(currency);
   try {
-    return new Intl.NumberFormat('en', {
+    const fractionDigits = new Intl.NumberFormat('en', {
       style: 'currency',
       currency: normalized,
     }).resolvedOptions().maximumFractionDigits;
+    if (fractionDigits === undefined) {
+      throw new Error(`Unsupported currency code: ${normalized}.`);
+    }
+    return fractionDigits;
   } catch {
     throw new Error(`Unsupported currency code: ${normalized}.`);
   }
