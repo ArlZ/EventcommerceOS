@@ -35,7 +35,7 @@ describeIntegration('operator sync device health', () => {
 
   beforeEach(async () => {
     await database.query(
-      'TRUNCATE operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_device_state',
+      'TRUNCATE pos_menu_publications, operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_device_state',
     );
     await database.query(
       `INSERT INTO sync_device_state(

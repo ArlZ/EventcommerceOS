@@ -94,6 +94,45 @@ describe('PosMenuService', () => {
     expect(query).toHaveBeenCalledTimes(3);
   });
 
+  it('rejects duplicate event/location scope before opening a batch transaction', async () => {
+    const transaction = vi.fn();
+    const database = { transaction } as unknown as EdgeDatabaseService;
+    const service = new PosMenuService(database);
+
+    await expect(service.installBatch([snapshot, { ...snapshot }])).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('installs a multi-location batch inside one database transaction', async () => {
+    const second = {
+      ...snapshot,
+      salesLocationId: 'bar-2',
+      checksum: 'bbbbbbbb',
+    };
+    const query = vi.fn(async (text: string, values?: unknown[]) => {
+      if (text.includes('pg_advisory_xact_lock')) return { rows: [] };
+      if (text.includes('FOR UPDATE')) return { rows: [] };
+      if (text.includes('INSERT INTO edge_pos_menu_snapshots')) {
+        const location = values?.[1];
+        return { rows: [row(location === 'bar-1' ? snapshot : second)] };
+      }
+      throw new Error(`unexpected query: ${text}`);
+    });
+    const transaction = vi.fn(
+      async <T>(operation: (client: { query: typeof query }) => Promise<T>) => operation({ query }),
+    );
+    const database = { transaction } as unknown as EdgeDatabaseService;
+    const service = new PosMenuService(database);
+
+    await expect(service.installBatch([second, snapshot])).resolves.toEqual([snapshot, second]);
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls.filter(([text]) => String(text).includes('INSERT INTO'))).toHaveLength(
+      2,
+    );
+  });
+
   it('returns the current scoped snapshot and fails closed when absent', async () => {
     const database = {
       query: vi
