@@ -5,7 +5,7 @@ const workflow = [
   { label: 'Spot risk', detail: 'Start with critical and low-cover stock positions.' },
   {
     label: 'Move safely',
-    detail: 'Use replenishment guidance without bypassing transfer controls.',
+    detail: 'Follow the recommended physical move, then record it through venue transfer controls.',
   },
   {
     label: 'Verify receipt',
@@ -21,10 +21,11 @@ export default function InventoryPage() {
           <p className="ec-page-kicker">During trading</p>
           <h1 className="ec-page-title">Protect stock availability</h1>
           <p className="ec-page-description">
-            Keep the highest stockout risks visible while the team coordinates replenishment.
+            See what is at risk, what to move, and what is still in transit while the venue keeps
+            selling locally.
           </p>
         </div>
-        <span className="ec-status-pill">Cloud view</span>
+        <span className="ec-status-pill">Read-only guidance</span>
       </header>
       <WorkflowRail steps={workflow} />
       <div className="ec-callout">

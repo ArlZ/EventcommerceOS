@@ -271,8 +271,8 @@ export function InventoryOperationsClient() {
       {!operations && !error ? (
         <div className="ec-callout">
           <strong>Start with the event.</strong> Active stock risks and transfers will appear before
-          the location-by-location ledger projection. If you already selected this event elsewhere
-          in Event Control, its context is carried into this screen for the current browser tab.
+          the location-by-location stock view. If you already selected this event elsewhere in Event
+          Control, its context is carried into this screen for the current browser tab.
         </div>
       ) : null}
 
@@ -313,8 +313,8 @@ export function InventoryOperationsClient() {
               <div>
                 <h2>Stock risks requiring attention</h2>
                 <p>
-                  Highest severity and lowest cover appear first. A suggestion is guidance, not an
-                  inventory movement until the transfer workflow records it.
+                  Highest severity and lowest cover appear first. Recommended moves are guidance
+                  only; stock changes only when the venue transfer workflow records them.
                 </p>
               </div>
               <span className="ec-status-pill" data-tone={inventoryTone}>
@@ -335,37 +335,77 @@ export function InventoryOperationsClient() {
 
             <div className="ec-action-list">
               {activeAlerts.map((alert) => {
-                const suggestedTransfer =
-                  alert.suggestedTransferQuantityBase &&
-                  alert.suggestedTransferQuantityBase !== '0';
+                const suggestedQuantity =
+                  alert.suggestedTransferQuantityBase && alert.suggestedTransferQuantityBase !== '0'
+                    ? alert.suggestedTransferQuantityBase
+                    : null;
+                const suggestedSource = alert.suggestedSourceLocationId
+                  ? locationLabel(alert.suggestedSourceLocationId)
+                  : null;
+                const ownerId = alert.assignedActorId ?? alert.responsibleActorId;
                 return (
-                  <article className="ec-alert-card" data-severity={alert.severity} key={alert.id}>
-                    <div className="ec-alert-card-head">
-                      <div>
-                        <strong>{alert.alertType.replaceAll('_', ' ')}</strong>
-                        <div className="ec-alert-meta">
-                          {locationLabel(alert.inventoryLocationId)} • {skuLabel(alert.skuId)}
+                  <article
+                    className="ec-alert-card"
+                    data-tone={alertTone(alert.severity)}
+                    key={alert.id}
+                  >
+                    <div className="ec-alert-rail" aria-hidden="true" />
+                    <div className="ec-alert-card-content">
+                      <div className="ec-alert-card-head">
+                        <div>
+                          <strong className="ec-alert-title">{skuLabel(alert.skuId)}</strong>
+                          <div className="ec-alert-meta">
+                            {locationLabel(alert.inventoryLocationId)} •{' '}
+                            {alert.alertType.replaceAll('_', ' ')}
+                          </div>
+                        </div>
+                        <span className="ec-alert-severity" data-tone={alertTone(alert.severity)}>
+                          {alert.severity}
+                        </span>
+                      </div>
+                      <div className="ec-kpi-grid" style={{ marginTop: 12 }}>
+                        <InventoryMetric label="Available" value={alert.availableQuantityBase} />
+                        <InventoryMetric
+                          label="Minutes of cover"
+                          value={alert.minutesOfCover ?? 'Unknown'}
+                        />
+                      </div>
+                      <div
+                        className={suggestedQuantity ? 'ec-banner ec-banner--warning' : 'ec-banner'}
+                        style={{ marginTop: 12 }}
+                      >
+                        {suggestedQuantity && suggestedSource ? (
+                          <>
+                            <strong>Recommended move.</strong> Move {suggestedQuantity}{' '}
+                            {skuLabel(alert.skuId)} from {suggestedSource} to{' '}
+                            {locationLabel(alert.inventoryLocationId)}.
+                          </>
+                        ) : suggestedQuantity ? (
+                          <>
+                            <strong>Replenishment quantity identified.</strong> Move{' '}
+                            {suggestedQuantity} {skuLabel(alert.skuId)} to{' '}
+                            {locationLabel(alert.inventoryLocationId)} once the venue team confirms
+                            a safe source location.
+                          </>
+                        ) : (
+                          <>
+                            <strong>No transfer recommendation yet.</strong> Coordinate
+                            replenishment locally for {skuLabel(alert.skuId)} at{' '}
+                            {locationLabel(alert.inventoryLocationId)}; this screen has no safe
+                            source recommendation.
+                          </>
+                        )}
+                        <div className="ec-alert-meta" style={{ marginTop: 6 }}>
+                          Record any move through the venue transfer workflow. This Cloud screen
+                          does not move stock.
                         </div>
                       </div>
-                      <span className="ec-status-pill" data-tone={alertTone(alert.severity)}>
-                        {alert.severity}
-                      </span>
-                    </div>
-                    <div className="ec-kpi-grid" style={{ marginTop: 12 }}>
-                      <InventoryMetric label="Available" value={alert.availableQuantityBase} />
-                      <InventoryMetric
-                        label="Minutes of cover"
-                        value={alert.minutesOfCover ?? 'Unknown'}
-                      />
-                    </div>
-                    <p>
-                      {suggestedTransfer
-                        ? `Suggested response: move ${alert.suggestedTransferQuantityBase} from ${locationLabel(alert.suggestedSourceLocationId)}.`
-                        : 'No transfer recommendation is currently available.'}
-                    </p>
-                    <div className="ec-alert-meta">
-                      {alert.state} • owner{' '}
-                      {alert.assignedActorId ?? alert.responsibleActorId ?? 'unassigned'}
+                      <details className="ec-context-switcher" style={{ marginTop: 10 }}>
+                        <summary>Alert details</summary>
+                        <div className="ec-alert-meta" style={{ marginTop: 8 }}>
+                          {alert.state} • {ownerId ? `owner ${compactId(ownerId)}` : 'unassigned'}
+                        </div>
+                      </details>
                     </div>
                   </article>
                 );
@@ -408,7 +448,13 @@ export function InventoryOperationsClient() {
                       </span>
                     </div>
                     <small>{transferProgress(transfer)}</small>
-                    <small>Owner: {transfer.assignedActorId ?? 'unassigned'}</small>
+                    <small>{transfer.assignedActorId ? 'Assigned' : 'Unassigned'}</small>
+                    {transfer.assignedActorId ? (
+                      <details className="ec-context-switcher">
+                        <summary>Transfer details</summary>
+                        <small>Owner ID: {compactId(transfer.assignedActorId)}</small>
+                      </details>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -418,7 +464,10 @@ export function InventoryOperationsClient() {
               <div className="ec-panel-heading">
                 <div>
                   <h2>Stock by location</h2>
-                  <p>Current Cloud projection of the append-only stock ledger.</p>
+                  <p>
+                    Latest stock positions received online; this view can lag venue Edge during
+                    outages.
+                  </p>
                 </div>
                 <span className="ec-status-pill">{operations.stock.length} positions</span>
               </div>
