@@ -152,17 +152,37 @@ export function SyncHealthClient() {
       aria-busy={loading}
       aria-live="polite"
     >
-      <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
-        <input
-          value={organisationId}
-          onChange={(event) => setOrganisationId(event.target.value)}
-          placeholder="Organisation ID"
-          aria-label="Organisation ID"
-        />
-        <button type="button" onClick={loadOrganisation} disabled={loading}>
-          {loading ? 'Refreshing…' : activeOrganisationId ? 'Refresh now' : 'Load sync health'}
-        </button>
-      </div>
+      {activeOrganisationId ? (
+        <details className="ec-context-switcher">
+          <summary>Change organisation</summary>
+          <div
+            className="ec-context-loader ec-context-loader--embedded"
+            style={{ gridTemplateColumns: '1fr auto' }}
+          >
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder="Organisation ID"
+              aria-label="Organisation ID"
+            />
+            <button type="button" onClick={loadOrganisation} disabled={loading}>
+              {loading ? 'Loading…' : 'Load organisation'}
+            </button>
+          </div>
+        </details>
+      ) : (
+        <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
+          <input
+            value={organisationId}
+            onChange={(event) => setOrganisationId(event.target.value)}
+            placeholder="Organisation ID"
+            aria-label="Organisation ID"
+          />
+          <button type="button" onClick={loadOrganisation} disabled={loading}>
+            {loading ? 'Loading…' : 'Load sync health'}
+          </button>
+        </div>
+      )}
 
       {error ? (
         <div className="ec-banner ec-banner--danger">Device health unavailable: {error}</div>
@@ -181,13 +201,21 @@ export function SyncHealthClient() {
           )}
         </div>
         {activeOrganisationId ? (
-          <span className="ec-status-pill" data-tone={attentionDevices > 0 ? 'warning' : 'success'}>
-            {attentionDevices > 0
-              ? `${attentionDevices} register${attentionDevices === 1 ? '' : 's'} need attention`
-              : devices.length > 0
-                ? 'All reporting'
-                : 'Awaiting telemetry'}
-          </span>
+          <div className="ec-context-bar-actions">
+            <button type="button" onClick={() => void refresh()} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh now'}
+            </button>
+            <span
+              className="ec-status-pill"
+              data-tone={attentionDevices > 0 ? 'warning' : 'success'}
+            >
+              {attentionDevices > 0
+                ? `${attentionDevices} register${attentionDevices === 1 ? '' : 's'} need attention`
+                : devices.length > 0
+                  ? 'All reporting'
+                  : 'Awaiting telemetry'}
+            </span>
+          </div>
         ) : null}
       </div>
 
@@ -230,9 +258,6 @@ export function SyncHealthClient() {
                 <div className="ec-entity-heading">
                   <p className="ec-eyebrow">Register</p>
                   <h2>{compactId(device.deviceId)}</h2>
-                  <code className="ec-entity-id" title={device.deviceId}>
-                    {device.deviceId}
-                  </code>
                   <p>Last register activity {ageLabel(device.lastSeenAt)}</p>
                 </div>
                 <span className="ec-status-pill" data-tone={status.tone}>

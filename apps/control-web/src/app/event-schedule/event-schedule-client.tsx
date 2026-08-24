@@ -240,42 +240,73 @@ export function EventScheduleClient() {
         <strong>{busy ? 'Working…' : 'Schedule status'}</strong> • {status}
       </section>
 
-      <section className="ec-panel">
-        <div className="ec-panel-heading">
-          <div>
-            <p className="ec-eyebrow">Organisation</p>
-            <h2>Load event schedules</h2>
-            <p>
-              The organisation selected elsewhere in Event Control loads automatically. Use the
-              setup ID below only when you need to switch organisation or retry a failed load.
-            </p>
-          </div>
-        </div>
-        <form
-          style={formStyle}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void loadOrganisation();
-          }}
-        >
-          <input
-            value={organisationId}
-            onChange={(event) => setOrganisationId(event.target.value)}
-            placeholder="Organisation ID"
-            aria-label="Organisation ID"
-            required
-            disabled={busy}
-            style={fieldStyle}
-          />
-          <button
-            type="submit"
-            disabled={busy || !organisationId.trim()}
-            style={{ padding: '9px 12px' }}
+      {configuration ? (
+        <details className="ec-context-switcher">
+          <summary>Change organisation</summary>
+          <form
+            className="ec-context-loader ec-context-loader--embedded"
+            style={{ gridTemplateColumns: '1fr auto' }}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadOrganisation();
+            }}
           >
-            Load organisation
-          </button>
-        </form>
-      </section>
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder="Organisation ID"
+              aria-label="Organisation ID"
+              required
+              disabled={busy}
+              style={fieldStyle}
+            />
+            <button
+              type="submit"
+              disabled={busy || !organisationId.trim()}
+              style={{ padding: '9px 12px' }}
+            >
+              Load organisation
+            </button>
+          </form>
+        </details>
+      ) : (
+        <section className="ec-panel">
+          <div className="ec-panel-heading">
+            <div>
+              <p className="ec-eyebrow">Organisation</p>
+              <h2>Load event schedules</h2>
+              <p>
+                The organisation selected elsewhere in Event Control loads automatically. Use the
+                setup ID below only when you need to switch organisation or retry a failed load.
+              </p>
+            </div>
+          </div>
+          <form
+            style={formStyle}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadOrganisation();
+            }}
+          >
+            <input
+              value={organisationId}
+              onChange={(event) => setOrganisationId(event.target.value)}
+              placeholder="Organisation ID"
+              aria-label="Organisation ID"
+              required
+              disabled={busy}
+              style={fieldStyle}
+            />
+            <button
+              type="submit"
+              disabled={busy || !organisationId.trim()}
+              style={{ padding: '9px 12px' }}
+            >
+              Load organisation
+            </button>
+          </form>
+        </section>
+      )}
 
       {configuration ? (
         <section className="ec-panel">

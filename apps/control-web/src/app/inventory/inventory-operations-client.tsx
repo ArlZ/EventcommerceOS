@@ -228,20 +228,43 @@ export function InventoryOperationsClient() {
       aria-busy={loading}
       aria-live="polite"
     >
-      <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
-        <input
-          value={eventId}
-          onChange={(event) => {
-            setEventId(event.target.value);
-            setEventName('');
-          }}
-          placeholder="Event ID"
-          aria-label="Event ID"
-        />
-        <button type="button" onClick={() => void refresh()} disabled={loading}>
-          {loading ? 'Refreshing…' : operations ? 'Refresh inventory' : 'Load inventory'}
-        </button>
-      </div>
+      {operations ? (
+        <details className="ec-context-switcher">
+          <summary>Change event context</summary>
+          <div
+            className="ec-context-loader ec-context-loader--embedded"
+            style={{ gridTemplateColumns: '1fr auto' }}
+          >
+            <input
+              value={eventId}
+              onChange={(event) => {
+                setEventId(event.target.value);
+                setEventName('');
+              }}
+              placeholder="Event ID"
+              aria-label="Event ID"
+            />
+            <button type="button" onClick={() => void refresh()} disabled={loading}>
+              {loading ? 'Loading…' : 'Load event'}
+            </button>
+          </div>
+        </details>
+      ) : (
+        <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
+          <input
+            value={eventId}
+            onChange={(event) => {
+              setEventId(event.target.value);
+              setEventName('');
+            }}
+            placeholder="Event ID"
+            aria-label="Event ID"
+          />
+          <button type="button" onClick={() => void refresh()} disabled={loading}>
+            {loading ? 'Loading…' : 'Load inventory'}
+          </button>
+        </div>
+      )}
 
       {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
 
@@ -261,13 +284,18 @@ export function InventoryOperationsClient() {
               {organisationName ? ` • ${organisationName}` : ''}
               <span className="ec-context-subtle"> • updated {updatedLabel(lastUpdatedAt)}</span>
             </div>
-            <span className="ec-status-pill" data-tone={inventoryTone}>
-              {criticalAlerts.length > 0
-                ? `${criticalAlerts.length} critical risk${criticalAlerts.length === 1 ? '' : 's'}`
-                : activeAlerts.length > 0
-                  ? `${activeAlerts.length} active risk${activeAlerts.length === 1 ? '' : 's'}`
-                  : 'Stock healthy'}
-            </span>
+            <div className="ec-context-bar-actions">
+              <button type="button" onClick={() => void refresh()} disabled={loading}>
+                {loading ? 'Refreshing…' : 'Refresh inventory'}
+              </button>
+              <span className="ec-status-pill" data-tone={inventoryTone}>
+                {criticalAlerts.length > 0
+                  ? `${criticalAlerts.length} critical risk${criticalAlerts.length === 1 ? '' : 's'}`
+                  : activeAlerts.length > 0
+                    ? `${activeAlerts.length} active risk${activeAlerts.length === 1 ? '' : 's'}`
+                    : 'Stock healthy'}
+              </span>
+            </div>
           </div>
 
           <section className="ec-kpi-grid" aria-label="Inventory operations summary">

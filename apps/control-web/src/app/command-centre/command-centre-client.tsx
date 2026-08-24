@@ -539,8 +539,6 @@ export function CommandCentreClient() {
               <span>Snapshot {ageLabel(snapshot.freshness.generatedAt, now)}</span>
               <span aria-hidden="true">•</span>
               <span>Last sale {formatTime(snapshot.sales.lastSaleAt)}</span>
-              <span aria-hidden="true">•</span>
-              <span className="ec-mono">{snapshot.event.eventId}</span>
             </div>
           ) : null}
         </div>
