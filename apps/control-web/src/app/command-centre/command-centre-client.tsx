@@ -314,6 +314,18 @@ function deviceState(snapshot: CommandCentreSnapshot): {
   };
 }
 
+function registerStatusLabel(status: string): string {
+  if (status === 'HEALTHY') return 'Reporting';
+  if (status === 'DEGRADED') return 'Delayed';
+  if (status === 'STALE') return 'Not reporting';
+  return status;
+}
+
+function compactRegisterId(value: string): string {
+  if (value.length <= 18) return value;
+  return `${value.slice(0, 8)}…${value.slice(-5)}`;
+}
+
 function SystemStatusRow({
   label,
   value,
@@ -630,10 +642,10 @@ export function CommandCentreClient() {
                 tone={devices?.tone ?? 'neutral'}
                 label={
                   snapshot.devices.length === 0
-                    ? 'Sync · no devices yet'
+                    ? 'Registers · none seen yet'
                     : devices?.issues === 0
-                      ? 'Sync · all devices healthy'
-                      : `Sync · ${devices?.issues ?? 0} device issue(s)`
+                      ? 'Registers · all reporting'
+                      : `Registers · ${devices?.issues ?? 0} need attention`
                 }
               />
               <StatusChip
@@ -658,7 +670,7 @@ export function CommandCentreClient() {
                     : `Alerts · ${snapshot.alerts.length} active`
                 }
               />
-              <StatusChip tone="success" label="Local-first POS protected" />
+              <StatusChip tone="success" label="Local sales do not depend on Cloud" />
             </div>
 
             <section className="ec-kpi-strip" aria-label="Event operating snapshot">
@@ -681,9 +693,9 @@ export function CommandCentreClient() {
                 tone={inventoryTone}
               />
               <Metric
-                label="Device issues"
+                label="Register issues"
                 value={devices?.issues ?? 0}
-                sub={`${devices?.degraded ?? 0} degraded · ${devices?.stale ?? 0} stale`}
+                sub={`${devices?.degraded ?? 0} delayed · ${devices?.stale ?? 0} not reporting`}
                 tone={devices?.tone ?? 'neutral'}
               />
               <Metric
@@ -730,7 +742,7 @@ export function CommandCentreClient() {
                   <strong>Attention required</strong>
                   <span>
                     {snapshot.alerts.length} active alert(s) · {snapshot.inventory.risks.length}{' '}
-                    inventory risk(s) · {devices?.issues ?? 0} device issue(s)
+                    inventory risk(s) · {devices?.issues ?? 0} register issue(s)
                   </span>
                 </div>
               </div>
@@ -742,7 +754,8 @@ export function CommandCentreClient() {
                 <div>
                   <strong>All clear</strong>
                   <span>
-                    No active alerts, inventory risks or device health exceptions are projected.
+                    No active alerts, inventory risks or register reporting exceptions are
+                    projected.
                   </span>
                 </div>
               </div>
@@ -846,8 +859,8 @@ export function CommandCentreClient() {
                 </Panel>
 
                 <Panel
-                  title="Device health"
-                  meta="Register heartbeat, backlog and locally committed sales visibility"
+                  title="Register health"
+                  meta="Which tills are reporting normally and which need connectivity attention"
                   action={
                     <Link className="ec-panel-link" href="/sync-health">
                       View devices →
@@ -857,21 +870,21 @@ export function CommandCentreClient() {
                   <div className="ec-device-summary">
                     <div data-tone="success">
                       <strong>{devices?.healthy ?? 0}</strong>
-                      <span>Healthy</span>
+                      <span>Reporting</span>
                     </div>
                     <div data-tone="warning">
                       <strong>{devices?.degraded ?? 0}</strong>
-                      <span>Degraded</span>
+                      <span>Delayed</span>
                     </div>
                     <div data-tone="danger">
                       <strong>{devices?.stale ?? 0}</strong>
-                      <span>Stale</span>
+                      <span>Not reporting</span>
                     </div>
                     <div>
                       <strong>
                         {snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0)}
                       </strong>
-                      <span>Total backlog</span>
+                      <span>Pending uploads</span>
                     </div>
                   </div>
                   {snapshot.devices.length === 0 ? (
@@ -900,17 +913,23 @@ export function CommandCentreClient() {
                                 aria-hidden="true"
                               />
                               <span>
-                                <strong>{device.deviceId}</strong>
-                                <small>{device.salesLocationName ?? 'Unknown location'}</small>
+                                <strong>
+                                  {device.salesLocationName ?? compactRegisterId(device.deviceId)}
+                                </strong>
+                                <small>
+                                  {device.salesLocationName
+                                    ? `Register ${compactRegisterId(device.deviceId)}`
+                                    : 'Location unavailable'}
+                                </small>
                               </span>
                             </div>
                             <div className="ec-compact-row-value">
-                              <strong>{device.status}</strong>
+                              <strong>{registerStatusLabel(device.status)}</strong>
                               <small>
-                                backlog {device.edgeBacklogCount} ·{' '}
+                                {device.edgeBacklogCount} pending upload(s) ·{' '}
                                 {device.syncAgeSeconds === null
-                                  ? 'no heartbeat'
-                                  : `${device.syncAgeSeconds}s sync age`}
+                                  ? 'no recent report'
+                                  : `last report ${device.syncAgeSeconds}s ago`}
                               </small>
                             </div>
                           </div>
@@ -973,7 +992,7 @@ export function CommandCentreClient() {
                       tone={payment?.tone ?? 'neutral'}
                     />
                     <SystemStatusRow
-                      label="Sync"
+                      label="Registers"
                       value={
                         snapshot.devices.length === 0
                           ? 'No devices'
@@ -981,7 +1000,7 @@ export function CommandCentreClient() {
                             ? 'Healthy'
                             : `${devices?.issues ?? 0} issues`
                       }
-                      detail={`${devices?.healthy ?? 0} healthy · ${devices?.degraded ?? 0} degraded · ${devices?.stale ?? 0} stale`}
+                      detail={`${devices?.healthy ?? 0} reporting · ${devices?.degraded ?? 0} delayed · ${devices?.stale ?? 0} not reporting`}
                       tone={devices?.tone ?? 'neutral'}
                     />
                     <SystemStatusRow
@@ -999,7 +1018,7 @@ export function CommandCentreClient() {
                       tone={inventoryTone}
                     />
                     <SystemStatusRow
-                      label="Realtime"
+                      label="Dashboard data"
                       value={
                         stale
                           ? 'Stale'

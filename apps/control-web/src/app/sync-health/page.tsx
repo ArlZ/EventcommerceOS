@@ -4,12 +4,15 @@ import { SyncHealthClient } from './sync-health-client';
 const workflow = [
   {
     label: 'Detect',
-    detail: 'Surface backlog and missing Cloud delivery before it becomes operational noise.',
+    detail: 'Spot registers with sales waiting to upload or no recent online reporting.',
   },
-  { label: 'Diagnose', detail: 'Separate local POS availability from Edge-to-Cloud delay.' },
+  {
+    label: 'Diagnose',
+    detail: 'Confirm service can continue locally before checking connectivity.',
+  },
   {
     label: 'Recover',
-    detail: 'Restore connectivity without interrupting locally committed sales.',
+    detail: 'Restore online reporting without interrupting locally committed sales.',
   },
 ];
 
@@ -21,8 +24,8 @@ export default function SyncHealthPage() {
           <p className="ec-page-kicker">During trading</p>
           <h1 className="ec-page-title">Find registers that need attention</h1>
           <p className="ec-page-description">
-            Use device and sync state to identify delayed or disconnected registers. POS ordering is
-            local-first and must remain available while recovery happens in the background.
+            See which registers are reporting normally and which need connectivity attention. A
+            reporting delay alone is not a reason to stop locally committed selling.
           </p>
         </div>
         <span className="ec-status-pill">Operational health</span>
