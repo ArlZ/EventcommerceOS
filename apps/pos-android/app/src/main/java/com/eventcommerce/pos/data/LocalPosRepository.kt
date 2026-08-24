@@ -24,7 +24,11 @@ class LocalPosRepository(
 
   suspend fun installMenu(candidate: MenuCandidate): CachedMenu = menus.install(candidate)
 
-  suspend fun installProvisionedMenu(candidate: MenuCandidate): CachedMenu {
+  suspend fun installProvisionedMenu(
+    candidate: MenuCandidate,
+    salesLocationId: String,
+  ): CachedMenu {
+    require(salesLocationId.isNotBlank()) { "sales location assignment must not be blank" }
     val active = activeMenu()
     if (active != null && active.eventId != candidate.eventId) {
       if (active.eventId == DEVELOPMENT_EVENT_ID) {
@@ -36,7 +40,7 @@ class LocalPosRepository(
         error("register already contains menu history for another event; reset before reprovisioning")
       }
     }
-    return menus.install(candidate)
+    return menus.install(candidate, salesLocationId)
   }
 
   suspend fun activeMenu(): CachedMenu? = menus.active()
@@ -45,6 +49,8 @@ class LocalPosRepository(
     val open = orders.current()
     return if (open == null) menus.active() else menus.version(open.menuVersion)
   }
+
+  suspend fun assignedSalesLocationId(): String? = menus.assignedSalesLocationId()
 
   suspend fun addItem(menuItemId: String, quantityDelta: Int = 1): LocalOrder =
     orders.addItem(menuItemId, quantityDelta)
