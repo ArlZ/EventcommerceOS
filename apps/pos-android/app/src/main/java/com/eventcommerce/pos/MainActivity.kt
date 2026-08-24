@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
               syncProvisioning.provision(endpoint, deviceId, token)
               knownEndpoint = endpoint
               provisioned = syncProvisioning.current()
-              menuVersion = repository.activeMenu()?.version
+              menuVersion = null
               editingProvisioning = false
             }
           }
@@ -94,7 +94,9 @@ class MainActivity : ComponentActivity() {
               activeProvisioning.deviceId,
               activeProvisioning.token,
             ) {
-              menuVersion = repository.activeMenu()?.version
+              if (menuVersion != null) {
+                menuVersion = repository.activeMenu()?.version
+              }
               MenuRefreshCoordinator(
                 repository,
                 HttpsEdgeMenuTransport(
