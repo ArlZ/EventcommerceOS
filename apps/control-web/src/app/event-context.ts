@@ -6,6 +6,7 @@ export type EventControlContext = {
 };
 
 const storageKey = 'event-commerce.command-centre-context';
+export const eventControlContextChangedEvent = 'event-commerce:event-control-context-changed';
 
 function stringField(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
@@ -49,4 +50,5 @@ export function writeEventControlContext(next: EventControlContext): void {
       ...(eventName ? { eventName } : {}),
     }),
   );
+  window.dispatchEvent(new Event(eventControlContextChangedEvent));
 }
