@@ -10,6 +10,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "supabase:check": "node db.js",
     "backup-restore-evidence": "node scripts/backup-restore-evidence.mjs",
+    "recovery:seed-representative": "node scripts/seed-recovery-representative.mjs",
     "edge-credential": "node scripts/manage-edge-credential.mjs",
     "operator-auth": "node scripts/manage-operator-auth.mjs",
     "lint": "eslint src test --max-warnings=0",

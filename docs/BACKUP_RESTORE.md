@@ -145,6 +145,26 @@ export BACKUP_REQUIRE_REPRESENTATIVE_DATA=false
 
 A smoke test with that override is **not** SEC-006 release evidence and cannot satisfy the controlled-pilot `representativeRecovery` gate.
 
+## CI representative recovery rehearsal
+
+The `Backup restore smoke` workflow no longer bypasses the representative-data checks. After applying the exact release migrations to a fresh local PostgreSQL service, it runs:
+
+```bash
+pnpm --filter @event-commerce/cloud-api recovery:seed-representative
+```
+
+The fixture command is deliberately guarded:
+
+- it refuses `NODE_ENV=production`;
+- it refuses every non-local PostgreSQL hostname;
+- it requires `RECOVERY_FIXTURE_ACK=SEED:<database name>`;
+- it requires the migrated operational tables to be empty;
+- it requires at least 100 orders and caps the fixture at 10,000 orders.
+
+CI currently seeds 250 closed orders with matching payments and payment attempts, inventory Edge events and ledger movements, audit history, an immutable event-close report, an Edge machine identity and a human operator identity. The subsequent backup/restore command runs with `BACKUP_REQUIRE_REPRESENTATIVE_DATA=true`, so the same representative-domain gate used by the release drill must pass before CI evidence can be produced.
+
+This rehearsal is valuable automated evidence that the exact release schema, backup archive, restore path and fingerprint verifier work on an event-scale multi-domain dataset. It is **not by itself final SEC-006 approval**. The controlled-pilot recovery gate still requires the approved release-candidate dataset or live-data drill as applicable, production backup-cadence evidence, agreed RPO/RTO targets, retained evidence and a named human reviewer.
+
 ## RPO and RTO interpretation
 
 The drill records:
