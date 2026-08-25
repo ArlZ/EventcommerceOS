@@ -5,12 +5,58 @@ plugins {
   id("com.google.devtools.ksp")
 }
 
+val releaseCommit = providers.environmentVariable("RELEASE_COMMIT").orElse("development").get()
+if (releaseCommit != "development" && !Regex("^[0-9a-f]{40}$").matches(releaseCommit)) {
+  error("RELEASE_COMMIT must be a lowercase 40-character Git SHA or omitted for development builds")
+}
+
+val releaseKeystorePath = providers.environmentVariable("POS_RELEASE_KEYSTORE_PATH").orNull
+val releaseKeystorePassword = providers.environmentVariable("POS_RELEASE_KEYSTORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("POS_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("POS_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningValues =
+  listOf(releaseKeystorePath, releaseKeystorePassword, releaseKeyAlias, releaseKeyPassword)
+val releaseSigningConfigured = releaseSigningValues.all { !it.isNullOrBlank() }
+if (!releaseSigningConfigured && releaseSigningValues.any { !it.isNullOrBlank() }) {
+  error("Controlled-pilot release signing configuration must be supplied completely")
+}
+
 android {
   namespace = "com.eventcommerce.pos"
   compileSdk = 35
-  defaultConfig { applicationId = "com.eventcommerce.pos"; minSdk = 26; targetSdk = 35; versionCode = 1; versionName = "0.1.0"; testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner" }
-  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-  buildFeatures { compose = true }
+  defaultConfig {
+    applicationId = "com.eventcommerce.pos"
+    minSdk = 26
+    targetSdk = 35
+    versionCode = 1
+    versionName = "0.1.0"
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    buildConfigField("String", "RELEASE_COMMIT", "\"$releaseCommit\"")
+  }
+  compileOptions {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+  }
+  buildFeatures {
+    compose = true
+    buildConfig = true
+  }
+  signingConfigs {
+    if (releaseSigningConfigured) {
+      create("controlledPilotRelease") {
+        storeFile = file(requireNotNull(releaseKeystorePath))
+        storePassword = releaseKeystorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeyPassword
+      }
+    }
+  }
+  buildTypes {
+    getByName("release") {
+      isDebuggable = false
+      signingConfigs.findByName("controlledPilotRelease")?.let { signingConfig = it }
+    }
+  }
   testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
