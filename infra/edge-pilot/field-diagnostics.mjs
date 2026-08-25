@@ -43,85 +43,97 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
   const edgeId = required(env, 'EDGE_ID');
   const eventId = required(env, 'PILOT_EVENT_ID');
 
-  const [watermarks, processed, backlog, exceptions, stock, transfers, counts, payments] =
-    await Promise.all([
-      client.query(
-        `SELECT d.device_id,
-                d.status AS device_status,
-                (w.device_id IS NOT NULL) AS watermark_present,
-                coalesce(w.accepted_through_sequence,0)::text AS accepted_through_sequence,
-                coalesce(w.highest_sequence_seen,0)::text AS highest_sequence_seen,
-                w.last_seen_at,
-                w.last_cloud_delivery_at
-         FROM edge_pos_devices d
-         LEFT JOIN edge_device_watermarks w ON w.device_id=d.device_id
-         WHERE d.event_id=$1
-         ORDER BY d.device_id`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT device_id,count(*)::text AS processed_count
-         FROM edge_processed_device_events
-         WHERE event_id=$1
-         GROUP BY device_id
-         ORDER BY device_id`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT o.device_id,
-                count(*) FILTER (WHERE o.delivered_at IS NULL)::text AS pending_count,
-                coalesce(max(o.attempts) FILTER (WHERE o.delivered_at IS NULL),0)::text AS max_pending_attempts
-         FROM edge_cloud_outbox o
-         JOIN edge_processed_device_events e ON e.event_instance_id=o.event_instance_id
-         WHERE e.event_id=$1
-         GROUP BY o.device_id
-         ORDER BY o.device_id`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT x.device_id,count(*)::text AS unresolved_count
-         FROM edge_reconciliation_exceptions x
-         LEFT JOIN edge_processed_device_events e ON e.event_instance_id=x.event_instance_id
-         LEFT JOIN edge_pos_devices d ON d.device_id=x.device_id
-         WHERE x.resolved_at IS NULL
-           AND (
-             e.event_id=$1 OR
-             d.event_id=$1 OR
-             (x.device_id IS NULL AND x.event_instance_id IS NULL)
-           )
-         GROUP BY x.device_id
-         ORDER BY x.device_id NULLS FIRST`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT inventory_location_id,sku_id,on_hand::text
-         FROM edge_inventory_stock_projection
-         WHERE event_id=$1
-         ORDER BY inventory_location_id,sku_id`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT count(*)::text AS open_count
-         FROM edge_stock_transfers
-         WHERE event_id=$1 AND state NOT IN ('RECEIVED','CANCELLED')`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT count(*)::text AS open_count
-         FROM edge_stock_counts
-         WHERE event_id=$1 AND state='OPEN'`,
-        [eventId],
-      ),
-      client.query(
-        `SELECT provider_id,status,count(*)::text AS attempt_count,
-                coalesce(sum(amount_minor),0)::text AS value_minor
-         FROM edge_payment_attempt_cache
-         WHERE event_id=$1 AND status IN ('PENDING','UNKNOWN')
-         GROUP BY provider_id,status
-         ORDER BY provider_id,status`,
-        [eventId],
-      ),
-    ]);
+  const [
+    watermarks,
+    processed,
+    backlog,
+    exceptions,
+    globalUnattributedExceptions,
+    stock,
+    transfers,
+    counts,
+    payments,
+  ] = await Promise.all([
+    client.query(
+      `SELECT d.device_id,
+              d.status AS device_status,
+              (w.device_id IS NOT NULL) AS watermark_present,
+              coalesce(w.accepted_through_sequence,0)::text AS accepted_through_sequence,
+              coalesce(w.highest_sequence_seen,0)::text AS highest_sequence_seen,
+              w.last_seen_at,
+              w.last_cloud_delivery_at
+       FROM edge_pos_devices d
+       LEFT JOIN edge_device_watermarks w ON w.device_id=d.device_id
+       WHERE d.event_id=$1
+       ORDER BY d.device_id`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT device_id,count(*)::text AS processed_count
+       FROM edge_processed_device_events
+       WHERE event_id=$1
+       GROUP BY device_id
+       ORDER BY device_id`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT o.device_id,
+              count(*) FILTER (WHERE o.delivered_at IS NULL)::text AS pending_count,
+              coalesce(max(o.attempts) FILTER (WHERE o.delivered_at IS NULL),0)::text AS max_pending_attempts
+       FROM edge_cloud_outbox o
+       JOIN edge_processed_device_events e ON e.event_instance_id=o.event_instance_id
+       WHERE e.event_id=$1
+       GROUP BY o.device_id
+       ORDER BY o.device_id`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT x.device_id,count(*)::text AS unresolved_count
+       FROM edge_reconciliation_exceptions x
+       LEFT JOIN edge_processed_device_events e ON e.event_instance_id=x.event_instance_id
+       LEFT JOIN edge_pos_devices d ON d.device_id=x.device_id
+       WHERE x.resolved_at IS NULL
+         AND (e.event_id=$1 OR d.event_id=$1)
+       GROUP BY x.device_id
+       ORDER BY x.device_id NULLS FIRST`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT count(*)::text AS unresolved_count
+       FROM edge_reconciliation_exceptions
+       WHERE resolved_at IS NULL
+         AND device_id IS NULL
+         AND event_instance_id IS NULL`,
+    ),
+    client.query(
+      `SELECT inventory_location_id,sku_id,on_hand::text
+       FROM edge_inventory_stock_projection
+       WHERE event_id=$1
+       ORDER BY inventory_location_id,sku_id`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT count(*)::text AS open_count
+       FROM edge_stock_transfers
+       WHERE event_id=$1 AND state NOT IN ('RECEIVED','CANCELLED')`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT count(*)::text AS open_count
+       FROM edge_stock_counts
+       WHERE event_id=$1 AND state='OPEN'`,
+      [eventId],
+    ),
+    client.query(
+      `SELECT provider_id,status,count(*)::text AS attempt_count,
+              coalesce(sum(amount_minor),0)::text AS value_minor
+       FROM edge_payment_attempt_cache
+       WHERE event_id=$1 AND status IN ('PENDING','UNKNOWN')
+       GROUP BY provider_id,status
+       ORDER BY provider_id,status`,
+      [eventId],
+    ),
+  ]);
 
   const processedByDevice = mapBy(processed.rows, 'device_id');
   const backlogByDevice = mapBy(backlog.rows, 'device_id');
@@ -185,12 +197,16 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     throw new Error('pilot event has processed device events without a registered pilot device');
   }
 
-  const unattributedReconciliationExceptionCount = exceptions.rows
+  const eventUnattributedReconciliationExceptionCount = exceptions.rows
     .filter((row) => row.device_id === null)
     .reduce(
-      (sum, row) => sum + asSafeInteger(row.unresolved_count, 'unattributedExceptionCount'),
+      (sum, row) => sum + asSafeInteger(row.unresolved_count, 'eventUnattributedExceptionCount'),
       0,
     );
+  const hostGlobalUnattributedReconciliationExceptionCount = asSafeInteger(
+    globalUnattributedExceptions.rows[0]?.unresolved_count ?? 0,
+    'hostGlobalUnattributedReconciliationExceptionCount',
+  );
 
   const inventory = stock.rows.map((row) => ({
     inventoryLocationId: String(row.inventory_location_id),
@@ -223,8 +239,9 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
       processedEventCount: devices.reduce((sum, row) => sum + row.processedEventCount, 0),
       cloudBacklogCount: devices.reduce((sum, row) => sum + row.cloudBacklogCount, 0),
       unresolvedReconciliationExceptionCount:
-        deviceReconciliationExceptionCount + unattributedReconciliationExceptionCount,
-      unattributedReconciliationExceptionCount,
+        deviceReconciliationExceptionCount + eventUnattributedReconciliationExceptionCount,
+      eventUnattributedReconciliationExceptionCount,
+      hostGlobalUnattributedReconciliationExceptionCount,
       openTransferCount: asSafeInteger(
         transfers.rows[0]?.open_count ?? 0,
         'openTransferCount',
@@ -243,6 +260,8 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     unresolvedPayments,
     dataSafetyNotice:
       'Aggregate operational evidence only: no event payloads, payment identifiers, credentials or raw reconciliation details are included.',
+    scopeNotice:
+      'Event totals exclude host-global reconciliation exceptions that cannot be attributed to an event; those are reported separately as a safety signal.',
   };
 }
 
