@@ -19,7 +19,9 @@ function fakeClient(overrides = {}) {
         };
       }
       if (sql.includes('FROM edge_processed_device_events')) {
-        return { rows: overrides.processed ?? [{ device_id: 'register-01', processed_count: '6' }] };
+        return {
+          rows: overrides.processed ?? [{ device_id: 'register-01', processed_count: '6' }],
+        };
       }
       if (sql.includes('FROM edge_cloud_outbox')) {
         return {
@@ -49,13 +51,32 @@ function fakeClient(overrides = {}) {
       if (sql.includes('FROM edge_payment_attempt_cache')) {
         return {
           rows: overrides.payments ?? [
-            { provider_id: 'MPESA', status: 'PENDING', attempt_count: '1', value_minor: '100' },
+            {
+              provider_id: 'MPESA',
+              status: 'PENDING',
+              attempt_count: '1',
+              value_minor: '100',
+            },
           ],
         };
       }
       throw new Error(`unexpected diagnostic query: ${sql}`);
     },
   };
+}
+
+function allObjectKeys(value, output = new Set()) {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => allObjectKeys(entry, output));
+    return output;
+  }
+  if (value === null || typeof value !== 'object') return output;
+
+  for (const [key, nested] of Object.entries(value)) {
+    output.add(key);
+    allObjectKeys(nested, output);
+  }
+  return output;
 }
 
 const env = {
@@ -79,6 +100,7 @@ test('edge field diagnostics reports aggregate sync, inventory and payment evide
     processedEventCount: 6,
     cloudBacklogCount: 3,
     unresolvedReconciliationExceptionCount: 1,
+    unattributedReconciliationExceptionCount: 0,
     openTransferCount: 1,
     openStockCountCount: 0,
     unresolvedPaymentAttemptCount: 1,
@@ -100,9 +122,37 @@ test('edge field diagnostics reports aggregate sync, inventory and payment evide
   assert.deepEqual(report.unresolvedPayments, [
     { providerId: 'MPESA', status: 'PENDING', attemptCount: 1, valueMinor: '100' },
   ]);
-  assert.equal(JSON.stringify(report).includes('payload'), false);
-  assert.equal(JSON.stringify(report).includes('token'), false);
-  assert.equal(JSON.stringify(report).includes('providerReference'), false);
+
+  const keys = allObjectKeys(report);
+  for (const forbiddenKey of [
+    'payload',
+    'envelope',
+    'token',
+    'providerReference',
+    'paymentId',
+    'orderId',
+    'customer',
+    'lastError',
+    'details',
+  ]) {
+    assert.equal(keys.has(forbiddenKey), false, `forbidden evidence key ${forbiddenKey} is present`);
+  }
+});
+
+test('edge field diagnostics includes unattributed reconciliation exceptions in totals', async () => {
+  const report = await collectEdgeFieldDiagnostics(
+    fakeClient({
+      exceptions: [
+        { device_id: null, unresolved_count: '2' },
+        { device_id: 'register-01', unresolved_count: '1' },
+      ],
+    }),
+    env,
+  );
+
+  assert.equal(report.totals.unresolvedReconciliationExceptionCount, 3);
+  assert.equal(report.totals.unattributedReconciliationExceptionCount, 2);
+  assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
 });
 
 test('edge field diagnostics fails closed if processed events lack a device watermark', async () => {
