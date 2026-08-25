@@ -48,6 +48,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
       client.query(
         `SELECT d.device_id,
                 d.status AS device_status,
+                (w.device_id IS NOT NULL) AS watermark_present,
                 coalesce(w.accepted_through_sequence,0)::text AS accepted_through_sequence,
                 coalesce(w.highest_sequence_seen,0)::text AS highest_sequence_seen,
                 w.last_seen_at,
@@ -132,11 +133,21 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
   const devices = watermarks.rows.map((row) => {
     const deviceId = String(row.device_id);
     const processedRow = processedByDevice.get(deviceId);
+    const processedEventCount = asSafeInteger(
+      processedRow?.processed_count ?? 0,
+      `${deviceId}.processedEventCount`,
+    );
+    const watermarkPresent = row.watermark_present === true;
+    if (processedEventCount > 0 && !watermarkPresent) {
+      throw new Error(`pilot device ${deviceId} has processed events without a device watermark`);
+    }
+
     const backlogRow = backlogByDevice.get(deviceId);
     const exceptionRow = exceptionsByDevice.get(deviceId);
     return {
       deviceId,
       deviceStatus: String(row.device_status),
+      watermarkPresent,
       acceptedThroughSequence: asBigIntString(
         row.accepted_through_sequence,
         `${deviceId}.acceptedThroughSequence`,
@@ -145,10 +156,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
         row.highest_sequence_seen,
         `${deviceId}.highestSequenceSeen`,
       ),
-      processedEventCount: asSafeInteger(
-        processedRow?.processed_count ?? 0,
-        `${deviceId}.processedEventCount`,
-      ),
+      processedEventCount,
       cloudBacklogCount: asSafeInteger(
         backlogRow?.pending_count ?? 0,
         `${deviceId}.cloudBacklogCount`,
