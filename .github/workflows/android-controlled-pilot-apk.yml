@@ -35,6 +35,7 @@ jobs:
           set -euo pipefail
           umask 077
           keytool -genkeypair \
+            -storetype JKS \
             -keystore "$RUNNER_TEMP/pos-release-ci.jks" \
             -storepass 'ci-release-store-password' \
             -alias 'ci-controlled-pilot' \
