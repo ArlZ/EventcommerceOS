@@ -51,8 +51,7 @@ function parseInstallations(body: unknown): InstallReceiptInput[] {
       throw new BadRequestException(`installations[${index}] must be an object`);
     }
     const input = value as Record<string, unknown>;
-    const salesLocationId =
-      typeof input.salesLocationId === 'string' ? input.salesLocationId : '';
+    const salesLocationId = typeof input.salesLocationId === 'string' ? input.salesLocationId : '';
     const version = input.version;
     const checksum = typeof input.checksum === 'string' ? input.checksum : '';
     if (!isUuid(salesLocationId)) {
