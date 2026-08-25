@@ -1,16 +1,14 @@
 name: Managed deployment smoke
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       expected_release_commit:
         description: Optional exact release SHA expected on both managed public surfaces
         required: false
         type: string
-  pull_request:
-    paths:
-      - '.github/workflows/managed-deployment-smoke.yml'
-      - 'infra/hostinger/managed/README.md'
 
 permissions:
   contents: read
@@ -23,7 +21,7 @@ jobs:
       CLOUD_HEALTH_URL: https://api-event.nairobuy.com/health
       CONTROL_HEALTH_URL: https://event.nairobuy.com/api/health
       CONTROL_ORIGIN: https://event.nairobuy.com
-      EXPECTED_RELEASE_COMMIT: ${{ inputs.expected_release_commit }}
+      EXPECTED_RELEASE_COMMIT: ${{ github.event_name == 'push' && github.sha || inputs.expected_release_commit }}
     steps:
       - name: Probe managed public deployment
         run: |
@@ -96,10 +94,26 @@ jobs:
               if (body?.status !== 'ok') {
                 throw new Error(`expected status ok, got ${JSON.stringify(body?.status)}`);
               }
-              if (!shaPattern.test(body?.releaseCommit ?? '')) {
-                throw new Error(
-                  `missing/invalid releaseCommit ${JSON.stringify(body?.releaseCommit ?? null)}`,
+
+              const releaseCommit = body?.releaseCommit ?? null;
+              if (!shaPattern.test(releaseCommit)) {
+                lastError = new Error(`missing/invalid releaseCommit ${JSON.stringify(releaseCommit)}`);
+                if (expected && attempt < 20) {
+                  await sleep(15_000);
+                  continue;
+                }
+                throw lastError;
+              }
+
+              if (expected && releaseCommit !== expected) {
+                lastError = new Error(
+                  `${expectedService} is still on release ${releaseCommit}; expected ${expected}`,
                 );
+                if (attempt < 20) {
+                  await sleep(15_000);
+                  continue;
+                }
+                break;
               }
 
               return {
@@ -109,7 +123,7 @@ jobs:
                 service: body.service,
                 status: body.status,
                 version: body.version ?? null,
-                releaseCommit: body.releaseCommit,
+                releaseCommit,
                 serviceTimestamp: body.timestamp ?? null,
                 accessControlAllowOrigin: response.headers.get('access-control-allow-origin'),
               };
@@ -136,12 +150,6 @@ jobs:
             if (cloud.releaseCommit !== control.releaseCommit) {
               throw new Error(
                 `managed surfaces are on different releases: cloud=${cloud.releaseCommit}, control=${control.releaseCommit}`,
-              );
-            }
-
-            if (expected && cloud.releaseCommit !== expected) {
-              throw new Error(
-                `managed release ${cloud.releaseCommit} does not match expected ${expected}`,
               );
             }
 
