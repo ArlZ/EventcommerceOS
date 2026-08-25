@@ -1,6 +1,7 @@
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { makeHealthResponse, type HealthResponse } from '@event-commerce/contracts';
 import { DatabaseService } from '../database/database.service';
+import { runtimeReleaseCommit } from './release-identity';
 
 @Controller('health')
 export class HealthController {
@@ -13,6 +14,6 @@ export class HealthController {
     } catch {
       throw new ServiceUnavailableException('service not ready');
     }
-    return makeHealthResponse('cloud-api', new Date(), process.env.RELEASE_COMMIT);
+    return makeHealthResponse('cloud-api', new Date(), runtimeReleaseCommit());
   }
 }
