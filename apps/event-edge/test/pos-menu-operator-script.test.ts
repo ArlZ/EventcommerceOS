@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer, type RequestListener } from 'node:http';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -19,9 +19,7 @@ afterEach(async () => {
   );
 });
 
-async function localServer(
-  handler: Parameters<typeof createServer>[0],
-): Promise<number> {
+async function localServer(handler: RequestListener): Promise<number> {
   const server = createServer(handler);
   servers.push(server);
   await new Promise<void>((resolve, reject) => {
