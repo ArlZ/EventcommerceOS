@@ -34,6 +34,18 @@ function fakeClient(overrides = {}) {
           ],
         };
       }
+      if (
+        sql.includes('FROM edge_reconciliation_exceptions') &&
+        sql.includes('device_id IS NULL')
+      ) {
+        return {
+          rows: [
+            {
+              unresolved_count: String(overrides.hostGlobalUnattributedExceptions ?? 0),
+            },
+          ],
+        };
+      }
       if (sql.includes('FROM edge_reconciliation_exceptions')) {
         return {
           rows: overrides.exceptions ?? [
@@ -108,7 +120,8 @@ test('edge field diagnostics reports event-scoped aggregate evidence', async () 
     processedEventCount: 6,
     cloudBacklogCount: 3,
     unresolvedReconciliationExceptionCount: 1,
-    unattributedReconciliationExceptionCount: 0,
+    eventUnattributedReconciliationExceptionCount: 0,
+    hostGlobalUnattributedReconciliationExceptionCount: 0,
     openTransferCount: 1,
     openStockCountCount: 0,
     unresolvedPaymentAttemptCount: 1,
@@ -182,7 +195,7 @@ test(
 );
 
 test(
-  'edge field diagnostics includes unattributed reconciliation exceptions in totals',
+  'edge field diagnostics keeps event-unattributed and host-global exceptions distinct',
   async () => {
     const report = await collectEdgeFieldDiagnostics(
       fakeClient({
@@ -190,12 +203,14 @@ test(
           { device_id: null, unresolved_count: '2' },
           { device_id: 'register-01', unresolved_count: '1' },
         ],
+        hostGlobalUnattributedExceptions: 4,
       }),
       env,
     );
 
     assert.equal(report.totals.unresolvedReconciliationExceptionCount, 3);
-    assert.equal(report.totals.unattributedReconciliationExceptionCount, 2);
+    assert.equal(report.totals.eventUnattributedReconciliationExceptionCount, 2);
+    assert.equal(report.totals.hostGlobalUnattributedReconciliationExceptionCount, 4);
     assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
   },
 );
