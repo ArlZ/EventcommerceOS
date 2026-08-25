@@ -2,10 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
-import {
-  eventControlContextChangedEvent,
-  readEventControlContext,
-} from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -144,7 +141,11 @@ export function PosMenuPublicationControl() {
       )}
 
       {message ? (
-        <div className={`ec-banner ec-banner--${tone}`} aria-live="polite" style={{ marginTop: 12 }}>
+        <div
+          className={`ec-banner ec-banner--${tone}`}
+          aria-live="polite"
+          style={{ marginTop: 12 }}
+        >
           {message}
         </div>
       ) : null}
