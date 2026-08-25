@@ -5,6 +5,7 @@ on:
     paths:
       - 'apps/cloud-api/migrations/**'
       - 'apps/cloud-api/scripts/backup-restore-evidence.mjs'
+      - 'apps/cloud-api/scripts/seed-recovery-representative.mjs'
       - 'apps/cloud-api/package.json'
       - 'pnpm-lock.yaml'
       - 'docs/BACKUP_RESTORE.md'
@@ -23,11 +24,13 @@ jobs:
       DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
       RESTORE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5433/event_commerce_restore
       RESTORE_TARGET_RESET_ACK: RESET:event_commerce_restore
-      BACKUP_OPERATOR: ci-backup-restore-smoke
-      RELEASE_COMMIT_SHA: ${{ github.sha }}
+      RECOVERY_FIXTURE_ACK: SEED:event_commerce_test
+      RECOVERY_FIXTURE_ORDER_COUNT: '250'
+      BACKUP_OPERATOR: ci-representative-recovery-drill
+      RELEASE_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       BACKUP_RPO_TARGET_MINUTES: '60'
       BACKUP_RTO_TARGET_MINUTES: '10'
-      BACKUP_REQUIRE_REPRESENTATIVE_DATA: 'false'
+      BACKUP_REQUIRE_REPRESENTATIVE_DATA: 'true'
       BACKUP_KEEP_DUMP: 'false'
       BACKUP_OUTPUT_DIR: artifacts/backup-restore-smoke
     services:
@@ -74,7 +77,9 @@ jobs:
           pg_restore --version
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
-      - name: Run disposable backup restore smoke
+      - name: Seed guarded representative recovery fixture
+        run: pnpm --filter @event-commerce/cloud-api recovery:seed-representative
+      - name: Run representative backup restore drill
         run: pnpm --filter @event-commerce/cloud-api backup-restore-evidence
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
         if: always()
@@ -82,4 +87,4 @@ jobs:
           name: backup-restore-smoke-evidence
           path: apps/cloud-api/artifacts/backup-restore-smoke/**
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
