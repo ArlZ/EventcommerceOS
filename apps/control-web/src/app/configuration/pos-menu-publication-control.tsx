@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
+import { posMenusReadyToOpen } from './pos-menu-readiness';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -25,7 +26,9 @@ export function PosMenuPublicationControl() {
   const [eventName, setEventName] = useState('');
   const [lifecycle, setLifecycle] = useState<string | null>(null);
   const [publicationStatus, setPublicationStatus] = useState<LocationStatus[]>([]);
+  const [activeSalesLocationIds, setActiveSalesLocationIds] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
+  const [openingConfirming, setOpeningConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('warning');
@@ -59,6 +62,13 @@ export function PosMenuPublicationControl() {
         configuration.salesLocations.map((location) => [location.id, location.name]),
       );
       setLifecycle(selected?.lifecycle ?? null);
+      setActiveSalesLocationIds(
+        configuration.salesLocations
+          .filter(
+            (location) => location.eventId === selectedEventId && location.lifecycle === 'ACTIVE',
+          )
+          .map((location) => location.id),
+      );
       setPublicationStatus(
         statuses.map((status) => ({
           ...status,
@@ -77,7 +87,9 @@ export function PosMenuPublicationControl() {
     setEventName(context.eventName ?? '');
     setLifecycle(null);
     setPublicationStatus([]);
+    setActiveSalesLocationIds([]);
     setConfirming(false);
+    setOpeningConfirming(false);
     setMessage('');
     if (!context.organisationId || !context.eventId) return;
 
@@ -93,6 +105,42 @@ export function PosMenuPublicationControl() {
     window.addEventListener(eventControlContextChangedEvent, syncContext);
     return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, [syncContext]);
+
+  const readyToOpen =
+    lifecycle === 'DRAFT' && posMenusReadyToOpen(activeSalesLocationIds, publicationStatus);
+
+  async function openForTrading(): Promise<void> {
+    if (!organisationId || !eventId || !readyToOpen) return;
+    const version = contextVersion.current;
+    const selectedOrganisationId = organisationId;
+    const selectedEventId = eventId;
+    setBusy(true);
+    setTone('warning');
+    setMessage('Opening event for trading…');
+    try {
+      const response = await fetch(`${apiBase}/events/${selectedEventId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'content-type': 'application/json',
+          'x-organisation-id': selectedOrganisationId,
+        },
+        body: JSON.stringify({ lifecycle: 'ACTIVE' }),
+      });
+      if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+      if (contextVersion.current !== version) return;
+      setTone('success');
+      setMessage(`${eventName || 'Event'} is open for trading.`);
+      setOpeningConfirming(false);
+      await loadStatus(selectedOrganisationId, selectedEventId, version);
+    } catch (error) {
+      if (contextVersion.current !== version) return;
+      setTone('danger');
+      setMessage(error instanceof Error ? error.message : 'Unable to open event for trading');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function publish(): Promise<void> {
     if (!organisationId || !eventId || lifecycle !== 'DRAFT') return;
@@ -173,6 +221,48 @@ export function PosMenuPublicationControl() {
             );
           })}
         </div>
+      ) : null}
+
+      {lifecycle === 'DRAFT' ? (
+        readyToOpen ? (
+          openingConfirming ? (
+            <div className="ec-inline-confirm" role="group" aria-label="Confirm event opening">
+              <span>
+                Open <strong>{eventName || 'this event'}</strong> for live trading? Event-scoped
+                setup becomes read only after activation.
+              </span>
+              <button
+                className="ec-button-primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void openForTrading()}
+              >
+                {busy ? 'Opening…' : 'Confirm open for trading'}
+              </button>
+              <button type="button" disabled={busy} onClick={() => setOpeningConfirming(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="ec-banner ec-banner--success">
+              <strong>Ready to open.</strong> Every active sales location has its latest POS menu
+              installed on Event Edge.{' '}
+              <button
+                className="ec-button-primary"
+                type="button"
+                disabled={busy}
+                onClick={() => setOpeningConfirming(true)}
+              >
+                Open event for trading
+              </button>
+            </div>
+          )
+        ) : (
+          <div className="ec-banner ec-banner--warning">
+            <strong>Not ready to open.</strong> Publish the current configuration and install the
+            latest POS menu on Event Edge for every active sales location first.
+          </div>
+        )
       ) : null}
 
       {lifecycle !== 'DRAFT' ? (

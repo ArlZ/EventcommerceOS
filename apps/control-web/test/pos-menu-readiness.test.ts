@@ -24,9 +24,10 @@ describe('posMenusReadyToOpen', () => {
     ).toBe(false);
 
     expect(
-      posMenusReadyToOpen(['bar-a', 'bar-b'], [
-        { salesLocationId: 'bar-a', installedEdges: [{ edgeId: 'edge-1' }] },
-      ]),
+      posMenusReadyToOpen(
+        ['bar-a', 'bar-b'],
+        [{ salesLocationId: 'bar-a', installedEdges: [{ edgeId: 'edge-1' }] }],
+      ),
     ).toBe(false);
   });
 
