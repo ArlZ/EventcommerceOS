@@ -12,16 +12,62 @@ type Publication = {
   checksum: string;
 };
 
+type PublicationStatus = Publication & {
+  publishedAt: string;
+  installedEdges: Array<{ edgeId: string; reportedAt: string }>;
+};
+
+type LocationStatus = PublicationStatus & { salesLocationName: string };
+
 export function PosMenuPublicationControl() {
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [eventName, setEventName] = useState('');
   const [lifecycle, setLifecycle] = useState<string | null>(null);
+  const [publicationStatus, setPublicationStatus] = useState<LocationStatus[]>([]);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('warning');
   const contextVersion = useRef(0);
+
+  const loadStatus = useCallback(
+    async (selectedOrganisationId: string, selectedEventId: string, version: number) => {
+      const headers = { 'x-organisation-id': selectedOrganisationId };
+      const [configurationResponse, statusResponse] = await Promise.all([
+        fetch(`${apiBase}/organisations/${selectedOrganisationId}/configuration`, {
+          credentials: 'include',
+          headers,
+        }),
+        fetch(`${apiBase}/events/${selectedEventId}/pos-menu-publication-status`, {
+          credentials: 'include',
+          headers,
+        }),
+      ]);
+      if (!configurationResponse.ok) {
+        throw new Error(`${configurationResponse.status}: ${await configurationResponse.text()}`);
+      }
+      if (!statusResponse.ok) {
+        throw new Error(`${statusResponse.status}: ${await statusResponse.text()}`);
+      }
+      const configuration = (await configurationResponse.json()) as EventConfigurationView;
+      const statuses = (await statusResponse.json()) as PublicationStatus[];
+      if (contextVersion.current !== version) return;
+
+      const selected = configuration.events.find((event) => event.id === selectedEventId);
+      const locations = new Map(
+        configuration.salesLocations.map((location) => [location.id, location.name]),
+      );
+      setLifecycle(selected?.lifecycle ?? null);
+      setPublicationStatus(
+        statuses.map((status) => ({
+          ...status,
+          salesLocationName: locations.get(status.salesLocationId) ?? status.salesLocationId,
+        })),
+      );
+    },
+    [],
+  );
 
   const syncContext = useCallback(() => {
     const version = ++contextVersion.current;
@@ -30,27 +76,17 @@ export function PosMenuPublicationControl() {
     setEventId(context.eventId ?? '');
     setEventName(context.eventName ?? '');
     setLifecycle(null);
+    setPublicationStatus([]);
     setConfirming(false);
     setMessage('');
     if (!context.organisationId || !context.eventId) return;
 
-    void fetch(`${apiBase}/organisations/${context.organisationId}/configuration`, {
-      credentials: 'include',
-      headers: { 'x-organisation-id': context.organisationId },
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
-        return (await response.json()) as EventConfigurationView;
-      })
-      .then((view) => {
-        if (contextVersion.current !== version) return;
-        const selected = view.events.find((event) => event.id === context.eventId);
-        setLifecycle(selected?.lifecycle ?? null);
-      })
-      .catch(() => {
-        if (contextVersion.current === version) setLifecycle(null);
-      });
-  }, []);
+    void loadStatus(context.organisationId, context.eventId, version).catch(() => {
+      if (contextVersion.current !== version) return;
+      setLifecycle(null);
+      setPublicationStatus([]);
+    });
+  }, [loadStatus]);
 
   useEffect(() => {
     syncContext();
@@ -89,6 +125,7 @@ export function PosMenuPublicationControl() {
         `Published ${publications.length} location snapshot${publications.length === 1 ? '' : 's'}${summary ? `: ${summary}` : '.'}`,
       );
       setConfirming(false);
+      await loadStatus(publicationOrganisationId, publicationEventId, version);
     } catch (error) {
       if (contextVersion.current !== version) return;
       setTone('danger');
@@ -116,6 +153,27 @@ export function PosMenuPublicationControl() {
           {lifecycle ?? 'Unavailable'}
         </span>
       </div>
+
+      {publicationStatus.length > 0 ? (
+        <div className="ec-stack" aria-label="POS menu delivery status">
+          {publicationStatus.map((status) => {
+            const installed = status.installedEdges.length > 0;
+            return (
+              <div className="ec-inline-confirm" key={status.salesLocationId}>
+                <span>
+                  <strong>{status.salesLocationName}</strong> · v{status.version} ·{' '}
+                  {installed
+                    ? `Installed on ${status.installedEdges.map((edge) => edge.edgeId).join(', ')}`
+                    : 'Awaiting Event Edge installation'}
+                </span>
+                <span className="ec-status-pill" data-tone={installed ? 'success' : 'warning'}>
+                  {installed ? 'Installed' : 'Published'}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       {lifecycle !== 'DRAFT' ? (
         <div className="ec-banner ec-banner--warning">

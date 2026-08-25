@@ -46,7 +46,9 @@ export class PosMenuController {
   ): Promise<PosMenuSnapshot[]> {
     this.localAdmin.authorize(headers);
     const snapshots = await this.cloudMenus.latest(eventId);
-    return this.menus.installBatch(snapshots);
+    const installed = await this.menus.installBatch(snapshots);
+    await this.cloudMenus.acknowledgeInstalled(eventId, installed);
+    return installed;
   }
 
   @Get('current')

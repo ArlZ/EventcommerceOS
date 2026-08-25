@@ -43,12 +43,15 @@ afterEach(() => {
 });
 
 describe('CloudPosMenuTransport', () => {
-  it('derives the publication endpoint from the configured Cloud sync authority', () => {
+  it('derives publication and receipt endpoints from the configured Cloud sync authority', () => {
     process.env.CLOUD_SYNC_URL = 'https://api.example.test/sync/edge-events';
     const transport = new CloudPosMenuTransport();
 
     expect(transport.endpoint(eventId)).toBe(
       `https://api.example.test/sync/events/${eventId}/pos-menu-publications`,
+    );
+    expect(transport.endpoint(eventId, 'pos-menu-install-receipts')).toBe(
+      `https://api.example.test/sync/events/${eventId}/pos-menu-install-receipts`,
     );
   });
 
@@ -78,6 +81,38 @@ describe('CloudPosMenuTransport', () => {
     expect(request?.[1]?.headers).toMatchObject({
       'x-edge-id': 'edge-pilot',
       authorization: `Bearer ${'x'.repeat(48)}`,
+    });
+  });
+
+  it('reports only publication coordinates after a durable local install', async () => {
+    process.env.CLOUD_SYNC_URL = 'https://api.example.test/sync/edge-events';
+    process.env.EDGE_ID = 'edge-pilot';
+    process.env.EDGE_CLOUD_SYNC_TOKEN = 'x'.repeat(48);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+    const transport = new CloudPosMenuTransport();
+
+    await expect(transport.acknowledgeInstalled(eventId, [snapshot])).resolves.toBeUndefined();
+    const request = fetchMock.mock.calls[0];
+    expect(request?.[0]).toBe(
+      `https://api.example.test/sync/events/${eventId}/pos-menu-install-receipts`,
+    );
+    expect(request?.[1]).toMatchObject({
+      method: 'POST',
+      headers: {
+        'x-edge-id': 'edge-pilot',
+        authorization: `Bearer ${'x'.repeat(48)}`,
+        'content-type': 'application/json',
+      },
+    });
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      installations: [
+        {
+          salesLocationId: snapshot.salesLocationId,
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+        },
+      ],
     });
   });
 

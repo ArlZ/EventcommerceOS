@@ -6,7 +6,7 @@ import { parsePosMenuSnapshot } from './pos-menu.validation';
 @Injectable()
 export class CloudPosMenuTransport {
   async latest(eventId: string): Promise<PosMenuSnapshot[]> {
-    const endpoint = this.endpoint(eventId);
+    const endpoint = this.endpoint(eventId, 'pos-menu-publications');
     const credentials = edgeCloudRequestCredentials();
     const response = await fetch(endpoint, {
       method: 'GET',
@@ -31,11 +31,41 @@ export class CloudPosMenuTransport {
     });
   }
 
-  endpoint(eventId: string): string {
+  async acknowledgeInstalled(eventId: string, snapshots: PosMenuSnapshot[]): Promise<void> {
+    if (snapshots.length === 0) return;
+    if (snapshots.some((snapshot) => snapshot.eventId !== eventId)) {
+      throw new Error('installed POS menu batch escaped the requested event scope');
+    }
+    const credentials = edgeCloudRequestCredentials();
+    const response = await fetch(this.endpoint(eventId, 'pos-menu-install-receipts'), {
+      method: 'POST',
+      headers: {
+        ...credentials.headers,
+        accept: 'application/json',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        installations: snapshots.map((snapshot) => ({
+          salesLocationId: snapshot.salesLocationId,
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+        })),
+      }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) {
+      throw new Error(`cloud POS menu installation receipt returned HTTP ${response.status}`);
+    }
+  }
+
+  endpoint(eventId: string, resource = 'pos-menu-publications'): string {
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(eventId)
     ) {
       throw new Error('eventId must be a UUID');
+    }
+    if (resource !== 'pos-menu-publications' && resource !== 'pos-menu-install-receipts') {
+      throw new Error('unsupported POS menu Cloud resource');
     }
     const syncUrl = process.env.CLOUD_SYNC_URL ?? 'http://localhost:3001/sync/edge-events';
     const parsed = new URL(syncUrl);
@@ -50,7 +80,7 @@ export class CloudPosMenuTransport {
       throw new Error('CLOUD_SYNC_URL must end with /sync/edge-events without query or fragment');
     }
     const prefix = parsed.pathname.slice(0, -'/sync/edge-events'.length);
-    parsed.pathname = `${prefix}/sync/events/${eventId}/pos-menu-publications`;
+    parsed.pathname = `${prefix}/sync/events/${eventId}/${resource}`;
     return parsed.toString();
   }
 }
