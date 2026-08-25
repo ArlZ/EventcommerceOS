@@ -51,20 +51,27 @@ function parseInstallations(body: unknown): InstallReceiptInput[] {
       throw new BadRequestException(`installations[${index}] must be an object`);
     }
     const input = value as Record<string, unknown>;
-    const salesLocationId = typeof input.salesLocationId === 'string' ? input.salesLocationId : '';
+    const salesLocationId =
+      typeof input.salesLocationId === 'string' ? input.salesLocationId : '';
     const version = input.version;
     const checksum = typeof input.checksum === 'string' ? input.checksum : '';
     if (!isUuid(salesLocationId)) {
       throw new BadRequestException(`installations[${index}].salesLocationId must be a UUID`);
     }
     if (!Number.isSafeInteger(version) || (version as number) < 1) {
-      throw new BadRequestException(`installations[${index}].version must be a positive safe integer`);
+      throw new BadRequestException(
+        `installations[${index}].version must be a positive safe integer`,
+      );
     }
     if (!/^[0-9a-f]{8}$/.test(checksum)) {
-      throw new BadRequestException(`installations[${index}].checksum must be an 8 character lowercase hex checksum`);
+      throw new BadRequestException(
+        `installations[${index}].checksum must be an 8 character lowercase hex checksum`,
+      );
     }
     const scope = `${salesLocationId}:${String(version)}`;
-    if (scopes.has(scope)) throw new BadRequestException('installations contains a duplicate publication scope');
+    if (scopes.has(scope)) {
+      throw new BadRequestException('installations contains a duplicate publication scope');
+    }
     scopes.add(scope);
     return { salesLocationId, version: version as number, checksum };
   });
@@ -155,7 +162,9 @@ export class PosMenuInstallReceiptService {
     );
     const publicationId = publication.rows[0]?.id;
     if (!publicationId) {
-      throw new BadRequestException('installation receipt does not match an approved POS menu publication');
+      throw new BadRequestException(
+        'installation receipt does not match an approved POS menu publication',
+      );
     }
 
     await client.query(
