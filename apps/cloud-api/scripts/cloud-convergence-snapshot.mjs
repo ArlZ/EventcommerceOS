@@ -19,7 +19,8 @@ function nonEmpty(value, label) {
 function safeCount(value, label) {
   if (!/^\d+$/.test(String(value))) throw new Error(`${label} is not a non-negative integer`);
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) throw new Error(`${label} exceeds JavaScript safe integer range`);
+  if (!Number.isSafeInteger(parsed))
+    throw new Error(`${label} exceeds JavaScript safe integer range`);
   return parsed;
 }
 

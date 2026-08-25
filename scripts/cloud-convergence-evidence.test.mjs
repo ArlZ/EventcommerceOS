@@ -43,7 +43,9 @@ function snapshot({
       eventType: index % 2 === 0 ? 'ORDER_OPENED' : 'ORDER_CLOSED_CASH',
       aggregateId: `order-${Math.floor(index / 2) + 1}`,
     })),
-    orders: Array.from({ length: closedCount }, (_, index) => order(`order-${index + 1}`, index + 1)),
+    orders: Array.from({ length: closedCount }, (_, index) =>
+      order(`order-${index + 1}`, index + 1),
+    ),
     inventoryEdgeEvents: Array.from({ length: inventoryCount }, (_, index) => ({
       id: `inventory-event-${index + 1}`,
       eventType: 'INVENTORY_LEDGER_POSTED',

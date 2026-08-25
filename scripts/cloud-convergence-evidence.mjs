@@ -41,7 +41,9 @@ function canonical(value) {
 }
 
 function digest(value) {
-  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(value)))
+    .digest('hex');
 }
 
 function validateSnapshot(snapshot, label, releaseCommit, eventId) {
@@ -118,7 +120,11 @@ export function verifyCloudConvergenceEvidence({
     { minimum: 100 },
   );
 
-  if (!durabilityReport || typeof durabilityReport !== 'object' || Array.isArray(durabilityReport)) {
+  if (
+    !durabilityReport ||
+    typeof durabilityReport !== 'object' ||
+    Array.isArray(durabilityReport)
+  ) {
     throw new Error('durability report must be a JSON object');
   }
 
@@ -181,7 +187,9 @@ export function verifyCloudConvergenceEvidence({
     const baselineClosed = closedOrderIds(baseline);
     const firstClosed = closedOrderIds(firstDrain);
     const replayClosed = closedOrderIds(afterDuplicateReplay);
-    newCloudClosedOrders = [...firstClosed].filter((orderId) => !baselineClosed.has(orderId)).length;
+    newCloudClosedOrders = [...firstClosed].filter(
+      (orderId) => !baselineClosed.has(orderId),
+    ).length;
     const expectedNewClosedOrders = durabilityReport.aggregateNewClosedOrders;
 
     checks.push(
