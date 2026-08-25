@@ -99,13 +99,21 @@ jobs:
               file === '.github/workflows/recovery-smoke.yml',
           );
 
+          const androidReleaseRelevant = files.some(
+            (file) =>
+              file.startsWith('apps/pos-android/') ||
+              file === '.github/workflows/android-controlled-pilot-apk.yml',
+          );
+
           const required = ['typescript', 'android', 'sca', 'gitleaks'];
           if (runtimeRelevant) required.push('build-runtime-images');
           if (recoveryRelevant) required.push('backup-restore-smoke');
+          if (androidReleaseRelevant) required.push('build-signed-release');
 
           console.log(`Changed files: ${files.length}`);
           console.log(`Runtime gate required: ${runtimeRelevant}`);
           console.log(`Backup/restore gate required: ${recoveryRelevant}`);
+          console.log(`Signed Android release gate required: ${androidReleaseRelevant}`);
           console.log(`Required checks: ${required.join(', ')}`);
 
           const deadline = Date.now() + 30 * 60 * 1000;
