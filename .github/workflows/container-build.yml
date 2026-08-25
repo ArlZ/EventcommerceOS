@@ -17,19 +17,6 @@ on:
       - '.github/workflows/container-build.yml'
   push:
     branches: [main]
-    paths:
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.base.json'
-      - 'apps/cloud-api/**'
-      - 'apps/event-edge/**'
-      - 'apps/control-web/**'
-      - 'packages/contracts/**'
-      - 'packages/domain/**'
-      - '.github/workflows/container-build.yml'
   workflow_dispatch:
 
 permissions:
