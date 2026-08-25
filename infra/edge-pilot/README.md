@@ -113,6 +113,20 @@ The bootstrap:
 
 Re-running with unchanged inputs is safe. If a previously used idempotency key is supplied with different movement content, Event Edge fails closed rather than silently altering stock history.
 
+## Install the approved POS menu before opening
+
+Publishing a menu in Event Control does not push it live automatically. After the Cloud publication is approved and while the event is still in the controlled pre-open phase, a venue operator must explicitly pull and install it on Event Edge:
+
+```sh
+docker compose --env-file .env -f compose.yml exec -T event-edge node scripts/manage-pos-menu.mjs pull
+```
+
+The command runs inside the hardened Event Edge container, so `EDGE_LOCAL_ADMIN_TOKEN` stays in the container environment and is never copied onto a command line. It calls only Event Edge's loopback admin endpoint, pulls the latest approved Cloud publication for `PILOT_EVENT_ID`, installs the location snapshots in one local transaction, and acknowledges Cloud only after that transaction commits. The output lists only non-secret sales-location IDs, versions and checksums.
+
+If a non-pilot event is being deliberately operated from the same runtime, set `POS_MENU_EVENT_ID` for that one invocation; it takes precedence over `PILOT_EVENT_ID`. Do not use this mechanism to change a live event's Cloud configuration. A new approved publication remains an explicit human-controlled installation step.
+
+After the command succeeds, Event Control's publication status can distinguish the Cloud publication from the Edge installation receipt. Do not treat “published” as “installed” until the receipt appears.
+
 ## Run the one-sale Edge rehearsal
 
 After bootstrap and before provisioning a physical Android register, a fresh pilot state may run one synthetic POS sale through the real POS-device authentication and device-sync boundary:
