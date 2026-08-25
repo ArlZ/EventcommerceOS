@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
 
@@ -21,8 +21,10 @@ export function PosMenuPublicationControl() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [tone, setTone] = useState<'success' | 'warning' | 'danger'>('warning');
+  const contextVersion = useRef(0);
 
   const syncContext = useCallback(() => {
+    const version = ++contextVersion.current;
     const context = readEventControlContext();
     setOrganisationId(context.organisationId ?? '');
     setEventId(context.eventId ?? '');
@@ -41,10 +43,13 @@ export function PosMenuPublicationControl() {
         return (await response.json()) as EventConfigurationView;
       })
       .then((view) => {
+        if (contextVersion.current !== version) return;
         const selected = view.events.find((event) => event.id === context.eventId);
         setLifecycle(selected?.lifecycle ?? null);
       })
-      .catch(() => setLifecycle(null));
+      .catch(() => {
+        if (contextVersion.current === version) setLifecycle(null);
+      });
   }, []);
 
   useEffect(() => {
@@ -55,20 +60,24 @@ export function PosMenuPublicationControl() {
 
   async function publish(): Promise<void> {
     if (!organisationId || !eventId || lifecycle !== 'DRAFT') return;
+    const version = contextVersion.current;
+    const publicationEventId = eventId;
+    const publicationOrganisationId = organisationId;
     setBusy(true);
     setTone('warning');
     setMessage('Publishing immutable POS menu snapshots…');
     try {
-      const response = await fetch(`${apiBase}/events/${eventId}/pos-menu-publications`, {
+      const response = await fetch(`${apiBase}/events/${publicationEventId}/pos-menu-publications`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'content-type': 'application/json',
-          'x-organisation-id': organisationId,
+          'x-organisation-id': publicationOrganisationId,
         },
       });
       if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
       const publications = (await response.json()) as Publication[];
+      if (contextVersion.current !== version) return;
       const summary = publications
         .map((publication) => `v${publication.version} for ${publication.salesLocationId}`)
         .join(', ');
@@ -78,6 +87,7 @@ export function PosMenuPublicationControl() {
       );
       setConfirming(false);
     } catch (error) {
+      if (contextVersion.current !== version) return;
       setTone('danger');
       setMessage(error instanceof Error ? error.message : 'Unable to publish POS menus');
     } finally {
