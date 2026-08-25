@@ -59,6 +59,10 @@ jobs:
           KEY_PASSWORD: ${{ secrets.POS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          if [ "$GITHUB_REF" != 'refs/heads/main' ]; then
+            echo "::error::Controlled-pilot Android signing may only run from main; got $GITHUB_REF"
+            exit 1
+          fi
           for name in KEYSTORE_B64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
             if [ -z "${!name:-}" ]; then
               echo "::error::Required controlled-pilot Android signing secret $name is not configured"
@@ -91,7 +95,10 @@ jobs:
           fi
           test -x "$APKANALYZER"
           DEBUGGABLE="$("$APKANALYZER" manifest debuggable "$APK" | tr -d '\r\n[:space:]')"
-          test "$DEBUGGABLE" = 'false'
+          if [ "$DEBUGGABLE" != 'false' ]; then
+            echo "::error::Release APK is unexpectedly debuggable: $DEBUGGABLE"
+            exit 1
+          fi
       - name: Stage controlled pilot release evidence
         run: |
           set -euo pipefail
@@ -102,15 +109,30 @@ jobs:
           APK_SHA="$(sha256sum "$OUT/event-commerce-pos-controlled-pilot.apk" | awk '{print $1}')"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$APKSIGNER" verify --print-certs "$OUT/event-commerce-pos-controlled-pilot.apk" > "$RUNNER_TEMP/apksigner-certs.txt"
-          SIGNER_SHA="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/apksigner-certs.txt" | head -1 | tr -d '\r\n')"
-          test "${#SIGNER_SHA}" -eq 64
+          SIGNER_SHA="$(grep -m1 -E 'certificate SHA-256 digest:' "$RUNNER_TEMP/apksigner-certs.txt" | sed -E 's/.*digest:[[:space:]]*//' | tr -d '\r\n[:space:]' | tr '[:upper:]' '[:lower:]')"
+          if ! [[ "$SIGNER_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo '::error::Unable to extract a valid signer certificate SHA-256 digest'
+            cat "$RUNNER_TEMP/apksigner-certs.txt"
+            exit 1
+          fi
           APKANALYZER="$(command -v apkanalyzer || true)"
           if [ -z "$APKANALYZER" ]; then
             APKANALYZER="$(find "$ANDROID_HOME" -type f -name apkanalyzer | head -1)"
           fi
-          APP_ID="$("$APKANALYZER" manifest application-id "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n')"
-          VERSION_NAME="$("$APKANALYZER" manifest version-name "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n')"
-          VERSION_CODE="$("$APKANALYZER" manifest version-code "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n')"
+          test -x "$APKANALYZER"
+          APP_ID="$("$APKANALYZER" manifest application-id "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n[:space:]')"
+          VERSION_NAME="$("$APKANALYZER" manifest version-name "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n[:space:]')"
+          VERSION_CODE="$("$APKANALYZER" manifest version-code "$OUT/event-commerce-pos-controlled-pilot.apk" | tr -d '\r\n[:space:]')"
+          if [ "$APP_ID" != 'com.eventcommerce.pos' ]; then
+            echo "::error::Unexpected application id: $APP_ID"
+            exit 1
+          fi
+          if [ -z "$VERSION_NAME" ] || [ -z "$VERSION_CODE" ]; then
+            echo '::error::APK version metadata is missing'
+            exit 1
+          fi
+          printf 'Controlled-pilot APK metadata: app=%s version=%s (%s) signer=%s\n' \
+            "$APP_ID" "$VERSION_NAME" "$VERSION_CODE" "$SIGNER_SHA"
           export APK_SHA SIGNER_SHA APP_ID VERSION_NAME VERSION_CODE
           node <<'NODE'
           import { writeFileSync } from 'node:fs';
@@ -124,16 +146,15 @@ jobs:
           if (!/^[0-9a-f]{40}$/.test(releaseCommit ?? '')) {
             throw new Error('RELEASE_COMMIT must be a lowercase 40-character Git SHA');
           }
-          if (process.env.APP_ID !== 'com.eventcommerce.pos') {
-            throw new Error(`unexpected application id ${JSON.stringify(process.env.APP_ID)}`);
-          }
 
+          const validationOnly = process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch';
           const evidence = {
             schemaVersion: 1,
             releaseCommit,
             workflowRunId: process.env.GITHUB_RUN_ID,
             repository: process.env.GITHUB_REPOSITORY,
             buildType: 'release',
+            validationOnly,
             applicationId: process.env.APP_ID,
             versionName: process.env.VERSION_NAME,
             versionCode: process.env.VERSION_CODE,
@@ -144,10 +165,12 @@ jobs:
               signed: true,
               debuggable: false,
             },
-            signingKeyClass:
-              process.env.GITHUB_EVENT_NAME === 'workflow_dispatch'
-                ? 'controlled-pilot-secret'
-                : 'ephemeral-ci-validation',
+            signingKeyClass: validationOnly
+              ? 'ephemeral-ci-validation'
+              : 'controlled-pilot-secret',
+            warning: validationOnly
+              ? 'CI validation artifact only. Never install for live-money service.'
+              : null,
             builtAt: new Date().toISOString(),
           };
           writeFileSync(
