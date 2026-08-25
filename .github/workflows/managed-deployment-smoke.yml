@@ -1,0 +1,143 @@
+name: Managed deployment smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_release_commit:
+        description: Optional exact release SHA expected on both managed public surfaces
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - '.github/workflows/managed-deployment-smoke.yml'
+      - 'infra/hostinger/managed/README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  managed-deployment-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUD_HEALTH_URL: https://api-event.nairobuy.com/health
+      CONTROL_HEALTH_URL: https://event.nairobuy.com/api/health/
+      CONTROL_ORIGIN: https://event.nairobuy.com
+      EXPECTED_RELEASE_COMMIT: ${{ inputs.expected_release_commit }}
+    steps:
+      - name: Probe managed public deployment
+        run: |
+          mkdir -p artifacts/managed-deployment-smoke
+          node <<'NODE'
+          import { writeFile } from 'node:fs/promises';
+
+          const shaPattern = /^[0-9a-f]{40}$/;
+          const cloudUrl = process.env.CLOUD_HEALTH_URL;
+          const controlUrl = process.env.CONTROL_HEALTH_URL;
+          const controlOrigin = process.env.CONTROL_ORIGIN;
+          const expected = process.env.EXPECTED_RELEASE_COMMIT?.trim() || null;
+
+          if (expected && !shaPattern.test(expected)) {
+            throw new Error('expected_release_commit must be a lowercase 40-character Git SHA');
+          }
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          async function readHealth(url, expectedService, origin) {
+            let lastError;
+            for (let attempt = 1; attempt <= 20; attempt += 1) {
+              try {
+                const response = await fetch(url, {
+                  redirect: 'follow',
+                  headers: origin ? { Origin: origin } : undefined,
+                  signal: AbortSignal.timeout(10_000),
+                });
+                const text = await response.text();
+                let body;
+                try {
+                  body = JSON.parse(text);
+                } catch {
+                  throw new Error(`non-JSON response (${response.status}): ${text.slice(0, 200)}`);
+                }
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (body?.service !== expectedService) {
+                  throw new Error(`expected service ${expectedService}, got ${JSON.stringify(body?.service)}`);
+                }
+                if (body?.status !== 'ok') {
+                  throw new Error(`expected status ok, got ${JSON.stringify(body?.status)}`);
+                }
+                if (!shaPattern.test(body?.releaseCommit ?? '')) {
+                  throw new Error(
+                    `missing/invalid releaseCommit ${JSON.stringify(body?.releaseCommit ?? null)}`,
+                  );
+                }
+
+                return {
+                  requestedUrl: url,
+                  finalUrl: response.url,
+                  httpStatus: response.status,
+                  service: body.service,
+                  status: body.status,
+                  version: body.version ?? null,
+                  releaseCommit: body.releaseCommit,
+                  serviceTimestamp: body.timestamp ?? null,
+                  accessControlAllowOrigin: response.headers.get('access-control-allow-origin'),
+                };
+              } catch (error) {
+                lastError = error;
+                if (attempt < 20) await sleep(15_000);
+              }
+            }
+            throw new Error(
+              `${expectedService} health probe failed after retries: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+            );
+          }
+
+          const [cloud, control] = await Promise.all([
+            readHealth(cloudUrl, 'cloud-api', controlOrigin),
+            readHealth(controlUrl, 'control-web'),
+          ]);
+
+          if (cloud.accessControlAllowOrigin !== controlOrigin) {
+            throw new Error(
+              `Cloud CORS origin mismatch: expected ${controlOrigin}, got ${JSON.stringify(cloud.accessControlAllowOrigin)}`,
+            );
+          }
+
+          if (cloud.releaseCommit !== control.releaseCommit) {
+            throw new Error(
+              `managed surfaces are on different releases: cloud=${cloud.releaseCommit}, control=${control.releaseCommit}`,
+            );
+          }
+
+          if (expected && cloud.releaseCommit !== expected) {
+            throw new Error(
+              `managed release ${cloud.releaseCommit} does not match expected ${expected}`,
+            );
+          }
+
+          const evidence = {
+            schemaVersion: 1,
+            checkedAt: new Date().toISOString(),
+            expectedReleaseCommit: expected,
+            releaseCommit: cloud.releaseCommit,
+            controlOrigin,
+            cloud,
+            control,
+            result: 'PASS',
+          };
+
+          const output = 'artifacts/managed-deployment-smoke/managed-deployment-smoke.json';
+          await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
+          console.log(`Managed deployment smoke: PASS (${evidence.releaseCommit})`);
+          console.log(`Evidence: ${output}`);
+          NODE
+      - name: Upload managed deployment evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
+        with:
+          name: managed-deployment-smoke-evidence
+          path: artifacts/managed-deployment-smoke/*.json
+          if-no-files-found: warn
+          retention-days: 30
