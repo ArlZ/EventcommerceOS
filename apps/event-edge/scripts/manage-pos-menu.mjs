@@ -49,7 +49,9 @@ function installedSnapshots(value) {
   });
 }
 
-const eventId = uuid('POS_MENU_EVENT_ID', required('POS_MENU_EVENT_ID'));
+const configuredEventId =
+  process.env.POS_MENU_EVENT_ID?.trim() || process.env.PILOT_EVENT_ID?.trim() || '';
+const eventId = uuid('POS_MENU_EVENT_ID or PILOT_EVENT_ID', configuredEventId);
 const adminToken = required('EDGE_LOCAL_ADMIN_TOKEN');
 if (adminToken.length < 32) {
   throw new Error('EDGE_LOCAL_ADMIN_TOKEN must contain at least 32 characters');
