@@ -46,34 +46,51 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
   const [watermarks, processed, backlog, exceptions, stock, transfers, counts, payments] =
     await Promise.all([
       client.query(
-        `SELECT device_id,
-                accepted_through_sequence::text,
-                highest_sequence_seen::text,
-                last_seen_at,
-                last_cloud_delivery_at
-         FROM edge_device_watermarks
-         ORDER BY device_id`,
+        `SELECT d.device_id,
+                d.status AS device_status,
+                coalesce(w.accepted_through_sequence,0)::text AS accepted_through_sequence,
+                coalesce(w.highest_sequence_seen,0)::text AS highest_sequence_seen,
+                w.last_seen_at,
+                w.last_cloud_delivery_at
+         FROM edge_pos_devices d
+         LEFT JOIN edge_device_watermarks w ON w.device_id=d.device_id
+         WHERE d.event_id=$1
+         ORDER BY d.device_id`,
+        [eventId],
       ),
       client.query(
         `SELECT device_id,count(*)::text AS processed_count
          FROM edge_processed_device_events
+         WHERE event_id=$1
          GROUP BY device_id
          ORDER BY device_id`,
+        [eventId],
       ),
       client.query(
-        `SELECT device_id,
-                count(*) FILTER (WHERE delivered_at IS NULL)::text AS pending_count,
-                coalesce(max(attempts) FILTER (WHERE delivered_at IS NULL),0)::text AS max_pending_attempts
-         FROM edge_cloud_outbox
-         GROUP BY device_id
-         ORDER BY device_id`,
+        `SELECT o.device_id,
+                count(*) FILTER (WHERE o.delivered_at IS NULL)::text AS pending_count,
+                coalesce(max(o.attempts) FILTER (WHERE o.delivered_at IS NULL),0)::text AS max_pending_attempts
+         FROM edge_cloud_outbox o
+         JOIN edge_processed_device_events e ON e.event_instance_id=o.event_instance_id
+         WHERE e.event_id=$1
+         GROUP BY o.device_id
+         ORDER BY o.device_id`,
+        [eventId],
       ),
       client.query(
-        `SELECT device_id,count(*)::text AS unresolved_count
-         FROM edge_reconciliation_exceptions
-         WHERE resolved_at IS NULL
-         GROUP BY device_id
-         ORDER BY device_id NULLS FIRST`,
+        `SELECT x.device_id,count(*)::text AS unresolved_count
+         FROM edge_reconciliation_exceptions x
+         LEFT JOIN edge_processed_device_events e ON e.event_instance_id=x.event_instance_id
+         LEFT JOIN edge_pos_devices d ON d.device_id=x.device_id
+         WHERE x.resolved_at IS NULL
+           AND (
+             e.event_id=$1 OR
+             d.event_id=$1 OR
+             (x.device_id IS NULL AND x.event_instance_id IS NULL)
+           )
+         GROUP BY x.device_id
+         ORDER BY x.device_id NULLS FIRST`,
+        [eventId],
       ),
       client.query(
         `SELECT inventory_location_id,sku_id,on_hand::text
@@ -119,6 +136,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     const exceptionRow = exceptionsByDevice.get(deviceId);
     return {
       deviceId,
+      deviceStatus: String(row.device_status),
       acceptedThroughSequence: asBigIntString(
         row.accepted_through_sequence,
         `${deviceId}.acceptedThroughSequence`,
@@ -148,14 +166,15 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     };
   });
 
+  const pilotDeviceIds = new Set(devices.map((row) => row.deviceId));
   const processedForUnknownDevices = processed.rows
-    .filter((row) => !watermarks.rows.some((watermark) => watermark.device_id === row.device_id))
+    .filter((row) => !pilotDeviceIds.has(String(row.device_id)))
     .reduce(
       (sum, row) => sum + asSafeInteger(row.processed_count, 'orphanProcessedEventCount'),
       0,
     );
   if (processedForUnknownDevices > 0) {
-    throw new Error('processed device events exist without an Edge device watermark');
+    throw new Error('pilot event has processed device events without a registered pilot device');
   }
 
   const unattributedReconciliationExceptionCount = exceptions.rows
@@ -191,6 +210,8 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     eventId,
     totals: {
       deviceCount: devices.length,
+      activeDeviceCount: devices.filter((row) => row.deviceStatus === 'ACTIVE').length,
+      revokedDeviceCount: devices.filter((row) => row.deviceStatus === 'REVOKED').length,
       processedEventCount: devices.reduce((sum, row) => sum + row.processedEventCount, 0),
       cloudBacklogCount: devices.reduce((sum, row) => sum + row.cloudBacklogCount, 0),
       unresolvedReconciliationExceptionCount:
