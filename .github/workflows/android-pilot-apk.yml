@@ -1,4 +1,4 @@
-name: Android pilot APK
+name: Android debug rehearsal APK
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ jobs:
       - name: Verify exact checked-out release
         run: |
           test "$RELEASE_COMMIT" = "$(git rev-parse HEAD)"
-          printf 'Building pilot APK for exact commit %s\n' "$RELEASE_COMMIT"
+          printf 'Building debug rehearsal APK for exact commit %s\n' "$RELEASE_COMMIT"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -32,13 +32,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
         with:
           gradle-version: '8.11.1'
-      - name: Test, lint and build pilot APK
+      - name: Test, lint and build debug rehearsal APK
         run: gradle -p apps/pos-android testDebugUnitTest lintDebug assembleDebug --stacktrace
-      - name: Stage exact-release pilot artifact evidence
+      - name: Stage exact-release debug rehearsal evidence
         run: |
           set -euo pipefail
-          mkdir -p artifacts/pilot-apk
-          apk=artifacts/pilot-apk/event-commerce-pos-pilot-debug.apk
+          mkdir -p artifacts/debug-rehearsal-apk
+          apk=artifacts/debug-rehearsal-apk/event-commerce-pos-debug-rehearsal.apk
           cp apps/pos-android/app/build/outputs/apk/debug/app-debug.apk "$apk"
           digest="$(sha256sum "$apk" | awk '{print $1}')"
           printf '%s  %s\n' "$digest" "$(basename "$apk")" > "$apk.sha256"
@@ -59,23 +59,26 @@ jobs:
             releaseCommit,
             workflowRunId: process.env.GITHUB_RUN_ID,
             repository: process.env.GITHUB_REPOSITORY,
-            buildType: 'debug-pilot',
+            buildType: 'debug-rehearsal',
+            liveMoneyApproved: false,
             apk: {
-              file: 'event-commerce-pos-pilot-debug.apk',
+              file: 'event-commerce-pos-debug-rehearsal.apk',
               sha256: apkSha256,
             },
+            warning:
+              'Debug rehearsal artifact only. Do not use for live-money service; use the signed controlled-pilot release workflow.',
             builtAt: new Date().toISOString(),
           };
           writeFileSync(
-            'artifacts/pilot-apk/release-manifest.json',
+            'artifacts/debug-rehearsal-apk/release-manifest.json',
             `${JSON.stringify(evidence, null, 2)}\n`,
             { mode: 0o600 },
           );
           NODE
-      - name: Upload pilot APK
+      - name: Upload debug rehearsal APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
         with:
-          name: event-commerce-pos-pilot-apk-${{ github.sha }}
-          path: artifacts/pilot-apk/*
+          name: event-commerce-pos-debug-rehearsal-${{ github.sha }}
+          path: artifacts/debug-rehearsal-apk/*
           if-no-files-found: error
           retention-days: 30
