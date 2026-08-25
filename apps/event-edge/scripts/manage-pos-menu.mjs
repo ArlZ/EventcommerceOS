@@ -84,5 +84,7 @@ if (installed.length === 0) {
       `${snapshot.salesLocationId} version=${snapshot.version} checksum=${snapshot.checksum}`,
     );
   }
-  console.log('Cloud installation receipts were acknowledged after the local transaction committed.');
+  console.log(
+    'Cloud installation receipts were acknowledged after the local transaction committed.',
+  );
 }

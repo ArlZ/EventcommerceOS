@@ -93,7 +93,9 @@ describe('POS menu operator command', () => {
     });
 
     expect(requestSeen).toBe(true);
-    expect(result.stdout).toContain(`No approved POS menu publications were available for event ${eventId}.`);
+    expect(result.stdout).toContain(
+      `No approved POS menu publications were available for event ${eventId}.`,
+    );
   });
 
   it('rejects a weak local-admin credential before making a request', async () => {
