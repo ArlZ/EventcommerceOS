@@ -130,17 +130,20 @@ export function verifyDurabilityEvidence({ manifest, posSnapshots, edgeFinal, no
         check(
           `pos:${assetId}:${checkpoint}:schema`,
           errors.length === 0,
-          errors.length === 0 ? 'snapshot schema and release identity are valid' : errors.join('; '),
+          errors.length === 0
+            ? 'snapshot schema and release identity are valid'
+            : errors.join('; '),
         ),
       );
     }
 
-    const invalid = CHECKPOINTS.some((checkpoint) =>
-      validatePosSnapshot(
-        snapshots[checkpoint],
-        `${assetId}.${checkpoint}`,
-        manifest.releaseCommit,
-      ).length,
+    const invalid = CHECKPOINTS.some(
+      (checkpoint) =>
+        validatePosSnapshot(
+          snapshots[checkpoint],
+          `${assetId}.${checkpoint}`,
+          manifest.releaseCommit,
+        ).length,
     );
     if (invalid) continue;
 
@@ -266,7 +269,9 @@ export function verifyDurabilityEvidence({ manifest, posSnapshots, edgeFinal, no
     check(
       'edge:final-schema',
       edgeErrors.length === 0,
-      edgeErrors.length === 0 ? 'Edge snapshot schema and release/event identity are valid' : edgeErrors.join('; '),
+      edgeErrors.length === 0
+        ? 'Edge snapshot schema and release/event identity are valid'
+        : edgeErrors.join('; '),
     ),
   );
 
@@ -278,7 +283,9 @@ export function verifyDurabilityEvidence({ manifest, posSnapshots, edgeFinal, no
         check(
           `edge:${register.assetId}:device-present`,
           Boolean(edge),
-          edge ? `Edge contains ${register.deviceId}` : `Edge does not contain ${register.deviceId}`,
+          edge
+            ? `Edge contains ${register.deviceId}`
+            : `Edge does not contain ${register.deviceId}`,
         ),
       );
       if (!edge) continue;
@@ -343,9 +350,7 @@ export function verifyDurabilityEvidence({ manifest, posSnapshots, edgeFinal, no
 }
 
 function usage() {
-  console.error(
-    'Usage: node scripts/durability-evidence.mjs <manifest.json> [output.json]',
-  );
+  console.error('Usage: node scripts/durability-evidence.mjs <manifest.json> [output.json]');
 }
 
 async function main() {
