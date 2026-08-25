@@ -86,14 +86,37 @@ jobs:
           CHECK_PASSWORD='event-commerce-signing-preflight-only'
           rm -f "$CHECK_STORE"
 
-          keytool -list \
+          if [ "$GITHUB_EVENT_NAME" = 'workflow_dispatch' ]; then
+            printf 'Decoded controlled-pilot JKS SHA-256: %s\n' \
+              "$(sha256sum "$POS_RELEASE_KEYSTORE_PATH" | awk '{print $1}')"
+            if [ "$POS_RELEASE_KEYSTORE_PASSWORD" = "$POS_RELEASE_KEY_PASSWORD" ]; then
+              echo 'Configured store/key password relation: same'
+            else
+              echo '::error::Configured store and key password secrets differ; the controlled-pilot JKS was created with one shared password'
+              exit 1
+            fi
+          fi
+
+          if ! keytool -list \
+            -keystore "$POS_RELEASE_KEYSTORE_PATH" \
+            -storetype JKS \
+            -storepass "$POS_RELEASE_KEYSTORE_PASSWORD" \
+            >/dev/null 2>&1; then
+            echo '::error::Decoded JKS cannot be opened with POS_RELEASE_KEYSTORE_PASSWORD'
+            exit 1
+          fi
+
+          if ! keytool -list \
             -keystore "$POS_RELEASE_KEYSTORE_PATH" \
             -storetype JKS \
             -storepass "$POS_RELEASE_KEYSTORE_PASSWORD" \
             -alias "$POS_RELEASE_KEY_ALIAS" \
-            >/dev/null
+            >/dev/null 2>&1; then
+            echo '::error::POS_RELEASE_KEY_ALIAS is not present in the decoded JKS'
+            exit 1
+          fi
 
-          keytool -importkeystore -noprompt \
+          if ! keytool -importkeystore -noprompt \
             -srckeystore "$POS_RELEASE_KEYSTORE_PATH" \
             -srcstoretype JKS \
             -srcstorepass "$POS_RELEASE_KEYSTORE_PASSWORD" \
@@ -103,14 +126,20 @@ jobs:
             -deststoretype PKCS12 \
             -deststorepass "$CHECK_PASSWORD" \
             -destkeypass "$CHECK_PASSWORD" \
-            >/dev/null
+            >/dev/null 2>&1; then
+            echo '::error::Private key cannot be recovered with POS_RELEASE_KEY_PASSWORD'
+            exit 1
+          fi
 
-          keytool -list \
+          if ! keytool -list -v \
             -keystore "$CHECK_STORE" \
             -storetype PKCS12 \
             -storepass "$CHECK_PASSWORD" \
             -alias "$POS_RELEASE_KEY_ALIAS" \
-            | grep -q 'PrivateKeyEntry'
+            | grep -q 'Entry type: PrivateKeyEntry'; then
+            echo '::error::Signing preflight did not recover a PrivateKeyEntry'
+            exit 1
+          fi
           rm -f "$CHECK_STORE"
       - name: Test, lint and build signed release APK
         run: gradle -p apps/pos-android testDebugUnitTest lintRelease assembleRelease --stacktrace
