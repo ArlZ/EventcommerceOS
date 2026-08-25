@@ -1,30 +1,41 @@
 name: Android device format probe
 
 on:
-  pull_request:
+  push:
+    branches:
+      - 'agent/android-device-provenance-evidence'
     paths:
       - 'scripts/android-device-evidence.mjs'
       - 'scripts/android-device-evidence.test.mjs'
       - '.github/workflows/android-device-format-probe.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  prettier-diff:
+  prettier-fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: 'agent/android-device-provenance-evidence'
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: '22'
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
-      - name: Print authoritative Prettier diff
+      - name: Apply authoritative Prettier output
+        run: pnpm exec prettier --write scripts/android-device-evidence.mjs scripts/android-device-evidence.test.mjs
+      - name: Commit formatting only
         run: |
-          pnpm exec prettier --write scripts/android-device-evidence.mjs scripts/android-device-evidence.test.mjs
-          git diff --no-ext-diff -- scripts/android-device-evidence.mjs scripts/android-device-evidence.test.mjs
+          git add scripts/android-device-evidence.mjs scripts/android-device-evidence.test.mjs
+          if git diff --cached --quiet; then
+            echo 'No formatting changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Format Android device evidence tooling'
+          git push origin HEAD:agent/android-device-provenance-evidence
