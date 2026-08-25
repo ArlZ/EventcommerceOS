@@ -65,7 +65,7 @@ function isEdgeSyncPath(path: string): boolean {
   return (
     path === '/sync/edge-events' ||
     path === '/inventory/edge-events' ||
-    /^\/sync\/events\/[0-9a-f-]+\/pos-menu-publications$/i.test(path)
+    /^\/sync\/events\/[0-9a-f-]+\/(pos-menu-publications|pos-menu-install-receipts)$/i.test(path)
   );
 }
 
