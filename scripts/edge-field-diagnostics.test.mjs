@@ -5,11 +5,12 @@ import { collectEdgeFieldDiagnostics } from '../infra/edge-pilot/field-diagnosti
 function fakeClient(overrides = {}) {
   return {
     async query(sql) {
-      if (sql.includes('FROM edge_device_watermarks')) {
+      if (sql.includes('FROM edge_pos_devices d')) {
         return {
           rows: overrides.watermarks ?? [
             {
               device_id: 'register-01',
+              device_status: 'ACTIVE',
               accepted_through_sequence: '3',
               highest_sequence_seen: '6',
               last_seen_at: new Date('2026-08-25T09:00:00Z'),
@@ -18,7 +19,7 @@ function fakeClient(overrides = {}) {
           ],
         };
       }
-      if (sql.includes('FROM edge_processed_device_events')) {
+      if (sql.includes('FROM edge_processed_device_events') && !sql.includes('JOIN')) {
         return {
           rows: overrides.processed ?? [{ device_id: 'register-01', processed_count: '6' }],
         };
@@ -85,7 +86,7 @@ const env = {
   PILOT_EVENT_ID: 'event-01',
 };
 
-test('edge field diagnostics reports aggregate sync, inventory and payment evidence', async () => {
+test('edge field diagnostics reports event-scoped aggregate evidence', async () => {
   const report = await collectEdgeFieldDiagnostics(
     fakeClient(),
     env,
@@ -97,6 +98,8 @@ test('edge field diagnostics reports aggregate sync, inventory and payment evide
   assert.equal(report.eventId, 'event-01');
   assert.deepEqual(report.totals, {
     deviceCount: 1,
+    activeDeviceCount: 1,
+    revokedDeviceCount: 0,
     processedEventCount: 6,
     cloudBacklogCount: 3,
     unresolvedReconciliationExceptionCount: 1,
@@ -107,6 +110,7 @@ test('edge field diagnostics reports aggregate sync, inventory and payment evide
   });
   assert.deepEqual(report.devices[0], {
     deviceId: 'register-01',
+    deviceStatus: 'ACTIVE',
     acceptedThroughSequence: '3',
     highestSequenceSeen: '6',
     processedEventCount: 6,
@@ -139,6 +143,34 @@ test('edge field diagnostics reports aggregate sync, inventory and payment evide
   }
 });
 
+test('edge field diagnostics includes revoked pilot devices without losing their evidence', async () => {
+  const report = await collectEdgeFieldDiagnostics(
+    fakeClient({
+      watermarks: [
+        {
+          device_id: 'register-retired',
+          device_status: 'REVOKED',
+          accepted_through_sequence: '9',
+          highest_sequence_seen: '9',
+          last_seen_at: null,
+          last_cloud_delivery_at: null,
+        },
+      ],
+      processed: [{ device_id: 'register-retired', processed_count: '9' }],
+      backlog: [],
+      exceptions: [],
+      stock: [],
+      payments: [],
+    }),
+    env,
+  );
+
+  assert.equal(report.totals.deviceCount, 1);
+  assert.equal(report.totals.activeDeviceCount, 0);
+  assert.equal(report.totals.revokedDeviceCount, 1);
+  assert.equal(report.devices[0].deviceStatus, 'REVOKED');
+});
+
 test('edge field diagnostics includes unattributed reconciliation exceptions in totals', async () => {
   const report = await collectEdgeFieldDiagnostics(
     fakeClient({
@@ -155,7 +187,7 @@ test('edge field diagnostics includes unattributed reconciliation exceptions in 
   assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
 });
 
-test('edge field diagnostics fails closed if processed events lack a device watermark', async () => {
+test('edge field diagnostics fails closed if pilot events exist for an unregistered device', async () => {
   await assert.rejects(
     collectEdgeFieldDiagnostics(
       fakeClient({
@@ -168,6 +200,6 @@ test('edge field diagnostics fails closed if processed events lack a device wate
       }),
       env,
     ),
-    /processed device events exist without an Edge device watermark/,
+    /pilot event has processed device events without a registered pilot device/,
   );
 });
