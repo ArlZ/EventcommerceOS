@@ -9,6 +9,7 @@ import { DatabaseService } from '../src/database/database.service';
 import type { PublishedPosMenuSnapshot } from '../src/sync/pos-menu-publication.service';
 import { publishedPosMenuChecksum } from '../src/sync/pos-menu-publication.service';
 import { grantOperatorMembership, provisionOperator } from './operator-auth-testkit';
+import { provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -43,7 +44,7 @@ describeIntegration('pre-open POS menu publication', () => {
     await app.close();
   });
 
-  it('publishes immutable monotonic snapshots only while an event is DRAFT', async () => {
+  it('publishes immutable snapshots and records only authenticated exact-match Edge installs', async () => {
     const organisation = (
       await request(app.getHttpServer())
         .post('/organisations')
@@ -175,6 +176,107 @@ describeIntegration('pre-open POS menu publication', () => {
     expect(rows.map((row) => row.version)).toEqual(['1', '2']);
     expect(rows[0]?.snapshot.checksum).toBe(first[0]?.checksum);
     expect(rows[1]?.snapshot.checksum).toBe(second[0]?.checksum);
+
+    const edge = await provisionSyncEdge(database, {
+      edgeId: `publication-edge-${randomUUID()}`,
+      organisationId: organisation.id,
+      eventIds: [event.id],
+    });
+    const latest = second[0]!;
+
+    await request(app.getHttpServer())
+      .post(`/sync/events/${event.id}/pos-menu-install-receipts`)
+      .set(edge.headers)
+      .send({
+        installations: [
+          {
+            salesLocationId: latest.salesLocationId,
+            version: latest.version,
+            checksum: '00000000',
+          },
+        ],
+      })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post(`/sync/events/${event.id}/pos-menu-install-receipts`)
+      .set(edge.headers)
+      .send({
+        installations: [
+          {
+            salesLocationId: latest.salesLocationId,
+            version: latest.version,
+            checksum: latest.checksum,
+          },
+        ],
+      })
+      .expect(201)
+      .expect({ recorded: 1 });
+
+    await request(app.getHttpServer())
+      .post(`/sync/events/${event.id}/pos-menu-install-receipts`)
+      .set(edge.headers)
+      .send({
+        installations: [
+          {
+            salesLocationId: latest.salesLocationId,
+            version: latest.version,
+            checksum: latest.checksum,
+          },
+        ],
+      })
+      .expect(201)
+      .expect({ recorded: 1 });
+
+    const receiptRows = await database.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+       FROM pos_menu_install_receipts receipt
+       JOIN pos_menu_publications publication ON publication.id=receipt.publication_id
+       WHERE publication.event_id=$1 AND receipt.edge_id=$2`,
+      [event.id, edge.headers['x-edge-id']],
+    );
+    expect(receiptRows[0]?.count).toBe('1');
+
+    const status = (
+      await request(app.getHttpServer())
+        .get(`/events/${event.id}/pos-menu-publication-status`)
+        .set(organisationHeaders(organisation.id))
+        .expect(200)
+    ).body as Array<{
+      salesLocationId: string;
+      version: number;
+      checksum: string;
+      installedEdges: Array<{ edgeId: string; reportedAt: string }>;
+    }>;
+    expect(status).toHaveLength(1);
+    expect(status[0]).toMatchObject({
+      salesLocationId: location.id,
+      version: 2,
+      checksum: latest.checksum,
+    });
+    expect(status[0]?.installedEdges).toEqual([
+      expect.objectContaining({ edgeId: edge.headers['x-edge-id'] }),
+    ]);
+
+    const otherOrganisationId = randomUUID();
+    const otherEdge = await provisionSyncEdge(database, {
+      edgeId: `wrong-org-edge-${randomUUID()}`,
+      organisationId: otherOrganisationId,
+      eventIds: [randomUUID()],
+    });
+    await request(app.getHttpServer())
+      .post(`/sync/events/${event.id}/pos-menu-install-receipts`)
+      .set(otherEdge.headers)
+      .send({
+        installations: [
+          {
+            salesLocationId: latest.salesLocationId,
+            version: latest.version,
+            checksum: latest.checksum,
+          },
+        ],
+      })
+      .expect(401);
 
     await request(app.getHttpServer())
       .patch(`/events/${event.id}`)
