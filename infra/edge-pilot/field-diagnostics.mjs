@@ -25,7 +25,9 @@ function asBigIntString(value, label) {
 function isoOrNull(value) {
   if (value === null || value === undefined) return null;
   const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) throw new Error(`invalid database timestamp ${String(value)}`);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`invalid database timestamp ${String(value)}`);
+  }
   return date.toISOString();
 }
 
@@ -71,7 +73,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
          FROM edge_reconciliation_exceptions
          WHERE resolved_at IS NULL
          GROUP BY device_id
-         ORDER BY device_id`,
+         ORDER BY device_id NULLS FIRST`,
       ),
       client.query(
         `SELECT inventory_location_id,sku_id,on_hand::text
@@ -105,7 +107,10 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
 
   const processedByDevice = mapBy(processed.rows, 'device_id');
   const backlogByDevice = mapBy(backlog.rows, 'device_id');
-  const exceptionsByDevice = mapBy(exceptions.rows, 'device_id');
+  const exceptionsByDevice = mapBy(
+    exceptions.rows.filter((row) => row.device_id !== null),
+    'device_id',
+  );
 
   const devices = watermarks.rows.map((row) => {
     const deviceId = String(row.device_id);
@@ -118,9 +123,18 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
         row.accepted_through_sequence,
         `${deviceId}.acceptedThroughSequence`,
       ),
-      highestSequenceSeen: asBigIntString(row.highest_sequence_seen, `${deviceId}.highestSequenceSeen`),
-      processedEventCount: asSafeInteger(processedRow?.processed_count ?? 0, `${deviceId}.processedEventCount`),
-      cloudBacklogCount: asSafeInteger(backlogRow?.pending_count ?? 0, `${deviceId}.cloudBacklogCount`),
+      highestSequenceSeen: asBigIntString(
+        row.highest_sequence_seen,
+        `${deviceId}.highestSequenceSeen`,
+      ),
+      processedEventCount: asSafeInteger(
+        processedRow?.processed_count ?? 0,
+        `${deviceId}.processedEventCount`,
+      ),
+      cloudBacklogCount: asSafeInteger(
+        backlogRow?.pending_count ?? 0,
+        `${deviceId}.cloudBacklogCount`,
+      ),
       maxPendingCloudDeliveryAttempts: asSafeInteger(
         backlogRow?.max_pending_attempts ?? 0,
         `${deviceId}.maxPendingCloudDeliveryAttempts`,
@@ -136,10 +150,20 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
 
   const processedForUnknownDevices = processed.rows
     .filter((row) => !watermarks.rows.some((watermark) => watermark.device_id === row.device_id))
-    .reduce((sum, row) => sum + asSafeInteger(row.processed_count, 'orphanProcessedEventCount'), 0);
+    .reduce(
+      (sum, row) => sum + asSafeInteger(row.processed_count, 'orphanProcessedEventCount'),
+      0,
+    );
   if (processedForUnknownDevices > 0) {
     throw new Error('processed device events exist without an Edge device watermark');
   }
+
+  const unattributedReconciliationExceptionCount = exceptions.rows
+    .filter((row) => row.device_id === null)
+    .reduce(
+      (sum, row) => sum + asSafeInteger(row.unresolved_count, 'unattributedExceptionCount'),
+      0,
+    );
 
   const inventory = stock.rows.map((row) => ({
     inventoryLocationId: String(row.inventory_location_id),
@@ -154,6 +178,11 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     valueMinor: asBigIntString(row.value_minor, 'payment.valueMinor'),
   }));
 
+  const deviceReconciliationExceptionCount = devices.reduce(
+    (sum, row) => sum + row.unresolvedReconciliationExceptionCount,
+    0,
+  );
+
   return {
     schemaVersion: 1,
     generatedAt: now.toISOString(),
@@ -164,13 +193,21 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
       deviceCount: devices.length,
       processedEventCount: devices.reduce((sum, row) => sum + row.processedEventCount, 0),
       cloudBacklogCount: devices.reduce((sum, row) => sum + row.cloudBacklogCount, 0),
-      unresolvedReconciliationExceptionCount: devices.reduce(
-        (sum, row) => sum + row.unresolvedReconciliationExceptionCount,
+      unresolvedReconciliationExceptionCount:
+        deviceReconciliationExceptionCount + unattributedReconciliationExceptionCount,
+      unattributedReconciliationExceptionCount,
+      openTransferCount: asSafeInteger(
+        transfers.rows[0]?.open_count ?? 0,
+        'openTransferCount',
+      ),
+      openStockCountCount: asSafeInteger(
+        counts.rows[0]?.open_count ?? 0,
+        'openStockCountCount',
+      ),
+      unresolvedPaymentAttemptCount: unresolvedPayments.reduce(
+        (sum, row) => sum + row.attemptCount,
         0,
       ),
-      openTransferCount: asSafeInteger(transfers.rows[0]?.open_count ?? 0, 'openTransferCount'),
-      openStockCountCount: asSafeInteger(counts.rows[0]?.open_count ?? 0, 'openStockCountCount'),
-      unresolvedPaymentAttemptCount: unresolvedPayments.reduce((sum, row) => sum + row.attemptCount, 0),
     },
     devices,
     inventory,
