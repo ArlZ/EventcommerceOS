@@ -55,3 +55,7 @@ test('release identity rejects malformed explicit fallback', () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('SEC-009 intentional failing branch protection proof', () => {
+  assert.fail('intentional SEC-009 branch protection proof failure');
+});
