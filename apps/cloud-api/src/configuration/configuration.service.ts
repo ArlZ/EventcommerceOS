@@ -229,6 +229,46 @@ export class ConfigurationService {
     });
   }
 
+  private async assertPosMenuActivationReady(
+    client: PoolClient,
+    eventId: string,
+    organisationId: string,
+  ): Promise<void> {
+    const result = await client.query<{ sales_location_id: string }>(
+      `SELECT location.id::text AS sales_location_id
+       FROM sales_locations location
+       LEFT JOIN LATERAL (
+         SELECT publication.id
+         FROM pos_menu_publications publication
+         WHERE publication.event_id=$1
+           AND publication.organisation_id=$2
+           AND publication.sales_location_id=location.id
+         ORDER BY publication.version DESC
+         LIMIT 1
+       ) latest ON true
+       LEFT JOIN LATERAL (
+         SELECT receipt.id
+         FROM pos_menu_install_receipts receipt
+         WHERE receipt.publication_id=latest.id
+           AND receipt.organisation_id=$2
+         ORDER BY receipt.reported_at,receipt.id
+         LIMIT 1
+       ) installed ON true
+       WHERE location.event_id=$1
+         AND location.organisation_id=$2
+         AND location.lifecycle='ACTIVE'
+         AND (latest.id IS NULL OR installed.id IS NULL)
+       ORDER BY location.id
+       LIMIT 1`,
+      [eventId, organisationId],
+    );
+    if (result.rowCount !== 0) {
+      throw new ConflictException(
+        'Event cannot become ACTIVE until the latest POS menu for every active sales location is installed on Event Edge',
+      );
+    }
+  }
+
   async updateEvent(
     context: AdminContext,
     eventId: string,
@@ -254,6 +294,9 @@ export class ConfigurationService {
         throw new BadRequestException('endsAt must be after startsAt');
       }
       const lifecycle = patch.lifecycle ?? String(row.lifecycle);
+      if (lifecycle === 'ACTIVE' && String(row.lifecycle) !== 'ACTIVE') {
+        await this.assertPosMenuActivationReady(client, eventId, organisationId);
+      }
       const result = await client.query<EventRecord & QueryResultRow>(
         `UPDATE events
          SET name = $2, timezone = $3, starts_at = $4, ends_at = $5,

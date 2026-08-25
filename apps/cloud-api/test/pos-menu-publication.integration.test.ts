@@ -177,6 +177,12 @@ describeIntegration('pre-open POS menu publication', () => {
     expect(rows[0]?.snapshot.checksum).toBe(first[0]?.checksum);
     expect(rows[1]?.snapshot.checksum).toBe(second[0]?.checksum);
 
+    await request(app.getHttpServer())
+      .patch(`/events/${event.id}`)
+      .set(organisationHeaders(organisation.id))
+      .send({ lifecycle: 'ACTIVE' })
+      .expect(409);
+
     const edge = await provisionSyncEdge(database, {
       edgeId: `publication-edge-${randomUUID()}`,
       organisationId: organisation.id,
