@@ -19,11 +19,14 @@ The report is bound to the runtime `RELEASE_COMMIT`, `EDGE_ID` and `PILOT_EVENT_
 - processed device-event count per device;
 - undelivered Edge-to-Cloud backlog count per device;
 - maximum delivery-attempt count among pending Cloud events;
-- unresolved reconciliation-exception count per device;
+- unresolved reconciliation-exception counts attributable to the pilot event;
+- a separate host-global count for unresolved reconciliation exceptions that have neither device nor event-instance attribution and therefore cannot honestly be assigned to one event;
 - last device-seen and last Cloud-delivery timestamps;
 - event inventory stock projection by inventory-location/SKU IDs and base-unit quantity;
 - open transfer and open stock-count totals;
 - unresolved `PENDING`/`UNKNOWN` payment-attempt counts and value by provider/status.
+
+The event-scoped unresolved-reconciliation total deliberately excludes the host-global unattributed count. Review the host-global count as a separate safety signal; do not silently attribute those rows to the pilot event or ignore them.
 
 The helper does **not** output event/envelope payloads, order contents, provider references, payment IDs, customer data, local-admin/cloud-sync credentials, PostgreSQL credentials, or raw reconciliation-exception details.
 
@@ -41,7 +44,8 @@ Correlate each POS device's `highestLocalSequence` and `acknowledgedThroughSeque
 
 - Edge `acceptedThroughSequence` must equal the POS register's highest durable local sequence;
 - processed-event counts must be consistent with the expected durable POS event count;
-- no unresolved reconciliation exception may be unexplained;
+- no unresolved pilot-event reconciliation exception may be unexplained;
+- any non-zero host-global unattributed reconciliation count must be investigated separately before relying on the Edge host as clean pilot evidence;
 - Edge Cloud backlog must drain to zero before declaring Cloud convergence, unless an explicit incident/reconciliation record remains open.
 
 At final event convergence, also confirm:
