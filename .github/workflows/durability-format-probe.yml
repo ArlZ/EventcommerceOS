@@ -1,0 +1,30 @@
+name: Disposable durability format probe
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/durability-evidence.mjs'
+      - '.github/workflows/durability-format-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  format-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
+      - run: pnpm install --frozen-lockfile
+      - name: Produce exact repository-formatted durability verifier
+        run: pnpm exec prettier --write scripts/durability-evidence.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
+        with:
+          name: exact-durability-prettier-${{ github.event.pull_request.head.sha }}
+          path: scripts/durability-evidence.mjs
+          if-no-files-found: error
+          retention-days: 1
