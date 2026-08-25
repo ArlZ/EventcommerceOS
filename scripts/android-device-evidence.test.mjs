@@ -35,7 +35,7 @@ function validManifest() {
   };
 }
 
-test('controlled-pilot manifest accepts only installable release provenance', () => {
+test('controlled-pilot manifest accepts installable release provenance', () => {
   assert.deepEqual(validateReleaseManifest(validManifest()), []);
 });
 
@@ -48,7 +48,7 @@ test('controlled-pilot manifest rejects validation-only or debuggable builds', (
   assert.ok(blockers.includes('apk.debuggable must be false.'));
 });
 
-test('controlled-pilot manifest rejects unexpected repository, app id, and signer metadata', () => {
+test('controlled-pilot manifest rejects invalid identity and signer metadata', () => {
   const manifest = validManifest();
   manifest.repository = 'someone/else';
   manifest.applicationId = 'com.example.other';
@@ -68,13 +68,20 @@ test('APK signer parser normalizes colon-delimited SHA-256 output', () => {
   assert.equal(parseApkSigner('Signer #1 certificate DN: CN=Example'), null);
 });
 
-test('ADB device parser retains readiness state and useful metadata', () => {
-  const devices = parseAdbDevices(`List of devices attached\nR58M123456A device product:foo model:Galaxy_A15 device:a15 transport_id:1\nemulator-5554 unauthorized transport_id:2\n\n`);
+test('ADB device parser retains readiness and metadata', () => {
+  const devices = parseAdbDevices(
+    `List of devices attached\nR58M123456A device product:foo model:Galaxy_A15 device:a15 transport_id:1\nemulator-5554 unauthorized transport_id:2\n\n`,
+  );
   assert.deepEqual(devices, [
     {
       serial: 'R58M123456A',
       state: 'device',
-      metadata: { product: 'foo', model: 'Galaxy_A15', device: 'a15', transport_id: '1' },
+      metadata: {
+        product: 'foo',
+        model: 'Galaxy_A15',
+        device: 'a15',
+        transport_id: '1',
+      },
     },
     {
       serial: 'emulator-5554',
@@ -85,7 +92,9 @@ test('ADB device parser retains readiness state and useful metadata', () => {
 });
 
 test('dumpsys package parser extracts installed release identity', () => {
-  const parsed = parseDumpsysPackage(`Packages:\n  Package [com.eventcommerce.pos] (123):\n    versionCode=1 minSdk=26 targetSdk=35\n    versionName=0.1.0\n    firstInstallTime=2026-08-25 17:00:00\n    lastUpdateTime=2026-08-25 17:10:00\n`);
+  const parsed = parseDumpsysPackage(
+    `Packages:\n  Package [com.eventcommerce.pos] (123):\n    versionCode=1 minSdk=26 targetSdk=35\n    versionName=0.1.0\n    firstInstallTime=2026-08-25 17:00:00\n    lastUpdateTime=2026-08-25 17:10:00\n`,
+  );
   assert.deepEqual(parsed, {
     versionName: '0.1.0',
     versionCode: '1',
