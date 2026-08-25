@@ -66,18 +66,33 @@ describeIntegration('operator sync device health', () => {
   });
 
   it('requires an operator bearer session and selected organisation', async () => {
-    await request(app.getHttpServer()).get('/sync/devices').expect(401);
+    await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set('x-organisation-id', organisationId)
+      .expect(401);
 
-    await request(app.getHttpServer()).get('/sync/devices').set(viewerHeaders).expect(200);
+    const viewer = await provisionOperator(database, {
+      actorId: randomUUID(),
+      memberships: [{ organisationId, role: 'VIEWER' }],
+    });
+    await request(app.getHttpServer()).get('/sync/devices').set(viewer.headers()).expect(401);
   });
 
   it('returns only device telemetry for the operator organisation', async () => {
-    const body = (
-      await request(app.getHttpServer()).get('/sync/devices').set(viewerHeaders).expect(200)
-    ).body as Array<{ deviceId: string; backlogCount: number }>;
+    const response = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(viewerHeaders)
+      .expect(200);
 
-    expect(body).toEqual([
-      expect.objectContaining({ deviceId: 'register-alpha', backlogCount: 1 }),
+    expect(response.body).toEqual([
+      {
+        deviceId: 'register-alpha',
+        lastSeenAt: '2026-08-21T05:00:00.000Z',
+        lastSequenceSeen: 18,
+        edgeAcceptedThroughSequence: 17,
+        edgeBacklogCount: 1,
+        lastCloudDeliveryAt: '2026-08-21T04:59:50.000Z',
+      },
     ]);
   });
 
@@ -89,13 +104,20 @@ describeIntegration('operator sync device health', () => {
   });
 
   it('allows a platform administrator to inspect a selected organisation', async () => {
-    const body = (
-      await request(app.getHttpServer())
-        .get('/sync/devices')
-        .set(platformHeaders(otherOrganisationId))
-        .expect(200)
-    ).body as Array<{ deviceId: string }>;
+    const response = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(platformHeaders(otherOrganisationId))
+      .expect(200);
 
-    expect(body).toEqual([expect.objectContaining({ deviceId: 'register-other' })]);
+    expect(response.body).toEqual([
+      {
+        deviceId: 'register-other',
+        lastSeenAt: '2026-08-21T05:01:00.000Z',
+        lastSequenceSeen: 9,
+        edgeAcceptedThroughSequence: 9,
+        edgeBacklogCount: 0,
+        lastCloudDeliveryAt: '2026-08-21T05:00:55.000Z',
+      },
+    ]);
   });
 });
