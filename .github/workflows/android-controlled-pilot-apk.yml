@@ -79,6 +79,39 @@ jobs:
             echo "POS_RELEASE_KEY_ALIAS=$KEY_ALIAS"
             echo "POS_RELEASE_KEY_PASSWORD=$KEY_PASSWORD"
           } >> "$GITHUB_ENV"
+      - name: Verify signing material before Gradle
+        run: |
+          set -euo pipefail
+          CHECK_STORE="$RUNNER_TEMP/pos-signing-preflight.p12"
+          CHECK_PASSWORD='event-commerce-signing-preflight-only'
+          rm -f "$CHECK_STORE"
+
+          keytool -list \
+            -keystore "$POS_RELEASE_KEYSTORE_PATH" \
+            -storetype JKS \
+            -storepass "$POS_RELEASE_KEYSTORE_PASSWORD" \
+            -alias "$POS_RELEASE_KEY_ALIAS" \
+            >/dev/null
+
+          keytool -importkeystore -noprompt \
+            -srckeystore "$POS_RELEASE_KEYSTORE_PATH" \
+            -srcstoretype JKS \
+            -srcstorepass "$POS_RELEASE_KEYSTORE_PASSWORD" \
+            -srcalias "$POS_RELEASE_KEY_ALIAS" \
+            -srckeypass "$POS_RELEASE_KEY_PASSWORD" \
+            -destkeystore "$CHECK_STORE" \
+            -deststoretype PKCS12 \
+            -deststorepass "$CHECK_PASSWORD" \
+            -destkeypass "$CHECK_PASSWORD" \
+            >/dev/null
+
+          keytool -list \
+            -keystore "$CHECK_STORE" \
+            -storetype PKCS12 \
+            -storepass "$CHECK_PASSWORD" \
+            -alias "$POS_RELEASE_KEY_ALIAS" \
+            | grep -q 'PrivateKeyEntry'
+          rm -f "$CHECK_STORE"
       - name: Test, lint and build signed release APK
         run: gradle -p apps/pos-android testDebugUnitTest lintRelease assembleRelease --stacktrace
       - name: Verify release signing and non-debuggable manifest
