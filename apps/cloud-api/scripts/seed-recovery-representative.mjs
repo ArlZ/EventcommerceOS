@@ -14,8 +14,7 @@ function required(name) {
 
 function orderCount() {
   const raw = process.env.RECOVERY_FIXTURE_ORDER_COUNT?.trim() || '250';
-  if (!/^\d+$/.test(raw))
-    throw new Error('RECOVERY_FIXTURE_ORDER_COUNT must be an integer');
+  if (!/^\d+$/.test(raw)) throw new Error('RECOVERY_FIXTURE_ORDER_COUNT must be an integer');
   const value = Number(raw);
   if (!Number.isSafeInteger(value) || value < MIN_ORDER_COUNT || value > MAX_ORDER_COUNT) {
     throw new Error(
@@ -67,9 +66,7 @@ async function assertDisposableEmpty(client) {
       (SELECT count(*) FROM public.operator_identities) AS operators
   `);
   const counts = result.rows[0] ?? {};
-  const populated = Object.entries(counts).filter(
-    ([, value]) => BigInt(value ?? 0) > 0n,
-  );
+  const populated = Object.entries(counts).filter(([, value]) => BigInt(value ?? 0) > 0n);
   if (populated.length > 0) {
     throw new Error(
       `representative recovery fixture requires an empty disposable database; found data in ${populated
@@ -287,18 +284,10 @@ async function verify(client, expectedOrders) {
     'audit_events',
   ]) {
     if (counts[table] !== expectedOrders) {
-      throw new Error(
-        `${table} fixture count ${counts[table]} did not equal ${expectedOrders}`,
-      );
+      throw new Error(`${table} fixture count ${counts[table]} did not equal ${expectedOrders}`);
     }
   }
-  for (const table of [
-    'organisations',
-    'events',
-    'close_reports',
-    'edge_clients',
-    'operators',
-  ]) {
+  for (const table of ['organisations', 'events', 'close_reports', 'edge_clients', 'operators']) {
     if (counts[table] < 1) throw new Error(`${table} fixture is empty`);
   }
   return counts;
@@ -314,9 +303,7 @@ async function main() {
   const acknowledgement = required('RECOVERY_FIXTURE_ACK');
   const expectedAcknowledgement = `SEED:${database}`;
   if (acknowledgement !== expectedAcknowledgement) {
-    throw new Error(
-      `RECOVERY_FIXTURE_ACK must exactly equal ${expectedAcknowledgement}`,
-    );
+    throw new Error(`RECOVERY_FIXTURE_ACK must exactly equal ${expectedAcknowledgement}`);
   }
 
   const count = orderCount();
