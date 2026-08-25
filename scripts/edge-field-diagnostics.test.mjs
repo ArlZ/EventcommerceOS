@@ -22,7 +22,9 @@ function fakeClient(overrides = {}) {
       }
       if (sql.includes('FROM edge_processed_device_events') && !sql.includes('JOIN')) {
         return {
-          rows: overrides.processed ?? [{ device_id: 'register-01', processed_count: '6' }],
+          rows: overrides.processed ?? [
+            { device_id: 'register-01', processed_count: '6' },
+          ],
         };
       }
       if (sql.includes('FROM edge_cloud_outbox')) {
@@ -34,7 +36,9 @@ function fakeClient(overrides = {}) {
       }
       if (sql.includes('FROM edge_reconciliation_exceptions')) {
         return {
-          rows: overrides.exceptions ?? [{ device_id: 'register-01', unresolved_count: '1' }],
+          rows: overrides.exceptions ?? [
+            { device_id: 'register-01', unresolved_count: '1' },
+          ],
         };
       }
       if (sql.includes('FROM edge_inventory_stock_projection')) {
@@ -145,86 +149,98 @@ test('edge field diagnostics reports event-scoped aggregate evidence', async () 
   }
 });
 
-test('edge field diagnostics includes revoked pilot devices without losing their evidence', async () => {
-  const report = await collectEdgeFieldDiagnostics(
-    fakeClient({
-      watermarks: [
-        {
-          device_id: 'register-retired',
-          device_status: 'REVOKED',
-          watermark_present: true,
-          accepted_through_sequence: '9',
-          highest_sequence_seen: '9',
-          last_seen_at: null,
-          last_cloud_delivery_at: null,
-        },
-      ],
-      processed: [{ device_id: 'register-retired', processed_count: '9' }],
-      backlog: [],
-      exceptions: [],
-      stock: [],
-      payments: [],
-    }),
-    env,
-  );
-
-  assert.equal(report.totals.deviceCount, 1);
-  assert.equal(report.totals.activeDeviceCount, 0);
-  assert.equal(report.totals.revokedDeviceCount, 1);
-  assert.equal(report.devices[0].deviceStatus, 'REVOKED');
-});
-
-test('edge field diagnostics includes unattributed reconciliation exceptions in totals', async () => {
-  const report = await collectEdgeFieldDiagnostics(
-    fakeClient({
-      exceptions: [
-        { device_id: null, unresolved_count: '2' },
-        { device_id: 'register-01', unresolved_count: '1' },
-      ],
-    }),
-    env,
-  );
-
-  assert.equal(report.totals.unresolvedReconciliationExceptionCount, 3);
-  assert.equal(report.totals.unattributedReconciliationExceptionCount, 2);
-  assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
-});
-
-test('edge field diagnostics fails closed if a registered device has events without a watermark', async () => {
-  await assert.rejects(
-    collectEdgeFieldDiagnostics(
+test(
+  'edge field diagnostics includes revoked pilot devices without losing their evidence',
+  async () => {
+    const report = await collectEdgeFieldDiagnostics(
       fakeClient({
         watermarks: [
           {
-            device_id: 'register-01',
-            device_status: 'ACTIVE',
-            watermark_present: false,
-            accepted_through_sequence: '0',
-            highest_sequence_seen: '0',
+            device_id: 'register-retired',
+            device_status: 'REVOKED',
+            watermark_present: true,
+            accepted_through_sequence: '9',
+            highest_sequence_seen: '9',
             last_seen_at: null,
             last_cloud_delivery_at: null,
           },
         ],
-      }),
-      env,
-    ),
-    /has processed events without a device watermark/,
-  );
-});
-
-test('edge field diagnostics fails closed if pilot events exist for an unregistered device', async () => {
-  await assert.rejects(
-    collectEdgeFieldDiagnostics(
-      fakeClient({
-        watermarks: [],
-        processed: [{ device_id: 'register-orphan', processed_count: '1' }],
+        processed: [{ device_id: 'register-retired', processed_count: '9' }],
         backlog: [],
         exceptions: [],
         stock: [],
         payments: [],
       }),
       env,
-    ),
-    /pilot event has processed device events without a registered pilot device/,
-  );
-});
+    );
+
+    assert.equal(report.totals.deviceCount, 1);
+    assert.equal(report.totals.activeDeviceCount, 0);
+    assert.equal(report.totals.revokedDeviceCount, 1);
+    assert.equal(report.devices[0].deviceStatus, 'REVOKED');
+  },
+);
+
+test(
+  'edge field diagnostics includes unattributed reconciliation exceptions in totals',
+  async () => {
+    const report = await collectEdgeFieldDiagnostics(
+      fakeClient({
+        exceptions: [
+          { device_id: null, unresolved_count: '2' },
+          { device_id: 'register-01', unresolved_count: '1' },
+        ],
+      }),
+      env,
+    );
+
+    assert.equal(report.totals.unresolvedReconciliationExceptionCount, 3);
+    assert.equal(report.totals.unattributedReconciliationExceptionCount, 2);
+    assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
+  },
+);
+
+test(
+  'edge field diagnostics fails closed if a registered device has events without a watermark',
+  async () => {
+    await assert.rejects(
+      collectEdgeFieldDiagnostics(
+        fakeClient({
+          watermarks: [
+            {
+              device_id: 'register-01',
+              device_status: 'ACTIVE',
+              watermark_present: false,
+              accepted_through_sequence: '0',
+              highest_sequence_seen: '0',
+              last_seen_at: null,
+              last_cloud_delivery_at: null,
+            },
+          ],
+        }),
+        env,
+      ),
+      /has processed events without a device watermark/,
+    );
+  },
+);
+
+test(
+  'edge field diagnostics fails closed if pilot events exist for an unregistered device',
+  async () => {
+    await assert.rejects(
+      collectEdgeFieldDiagnostics(
+        fakeClient({
+          watermarks: [],
+          processed: [{ device_id: 'register-orphan', processed_count: '1' }],
+          backlog: [],
+          exceptions: [],
+          stock: [],
+          payments: [],
+        }),
+        env,
+      ),
+      /pilot event has processed device events without a registered pilot device/,
+    );
+  },
+);
