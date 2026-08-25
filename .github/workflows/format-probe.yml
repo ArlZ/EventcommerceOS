@@ -19,10 +19,6 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v4
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v4
-        with:
-          node-version: '22'
-          cache: false
       - run: pnpm install --frozen-lockfile
       - name: Produce exact repository-formatted file
         run: pnpm exec prettier --write scripts/edge-field-diagnostics.test.mjs
