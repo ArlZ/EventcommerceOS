@@ -82,6 +82,7 @@ services:
       - '3002'
     volumes:
       - ./bootstrap.mjs:/pilot/bootstrap.mjs:ro
+      - ./field-diagnostics.mjs:/pilot/field-diagnostics.mjs:ro
       - ./rehearsal.mjs:/pilot/rehearsal.mjs:ro
       - ./verify-lan-https.mjs:/pilot/verify-lan-https.mjs:ro
     networks:
