@@ -60,7 +60,8 @@ test('controlled-pilot manifest rejects invalid identity and signer metadata', (
 });
 
 test('APK signer parser normalizes colon-delimited SHA-256 output', () => {
-  const digest = '12:D1:C1:1A:FF:F7:F2:B5:89:BC:CA:FA:4D:B7:EF:51:47:F7:C9:C1:22:5B:4F:07:28:FC:DD:3A:A5:B7:64:2F';
+  const digest =
+    '12:D1:C1:1A:FF:F7:F2:B5:89:BC:CA:FA:4D:B7:EF:51:47:F7:C9:C1:22:5B:4F:07:28:FC:DD:3A:A5:B7:64:2F';
   assert.equal(
     parseApkSigner(`Signer #1 certificate SHA-256 digest: ${digest}\n`),
     '12d1c11afff7f2b589bccafa4db7ef5147f7c9c1225b4f0728fcdd3aa5b7642f',

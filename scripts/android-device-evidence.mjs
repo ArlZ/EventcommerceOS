@@ -1,13 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -231,7 +224,9 @@ function selectDevice(adb, requestedSerial) {
   if (ready.length !== 1) {
     const summary = devices.map((device) => `${device.serial}:${device.state}`).join(', ');
     const detail = summary || 'none';
-    fail(`Exactly one authorized ADB device is required unless --serial is supplied; found ${detail}.`);
+    fail(
+      `Exactly one authorized ADB device is required unless --serial is supplied; found ${detail}.`,
+    );
   }
   if (unauthorized.length > 0) {
     const detail = unauthorized.map((device) => `${device.serial}:${device.state}`).join(', ');
@@ -254,12 +249,7 @@ function batteryLevel(adb, serial) {
 }
 
 function verifyInstalledPackage(adb, serial, manifest) {
-  const packagePath = adbFor(adb, serial, [
-    'shell',
-    'pm',
-    'path',
-    APPLICATION_ID,
-  ]).trim();
+  const packagePath = adbFor(adb, serial, ['shell', 'pm', 'path', APPLICATION_ID]).trim();
   if (!packagePath.startsWith('package:')) {
     fail(`Installed ${APPLICATION_ID} package path was not found.`);
   }
@@ -286,11 +276,7 @@ function installCommand(artifact, options) {
   const adb = adbExecutable();
   const device = selectDevice(adb, options.serial);
 
-  const installOutput = adbFor(adb, device.serial, [
-    'install',
-    '-r',
-    artifact.apkPath,
-  ]).trim();
+  const installOutput = adbFor(adb, device.serial, ['install', '-r', artifact.apkPath]).trim();
   if (!/Success/i.test(installOutput)) {
     fail(`ADB install did not report Success: ${installOutput}`);
   }
