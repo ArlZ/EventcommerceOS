@@ -1,5 +1,6 @@
 package com.eventcommerce.pos
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -141,6 +142,16 @@ class MainActivity : ComponentActivity() {
               ) {
                 Text("Device settings")
               }
+              TextButton(
+                onClick = {
+                  lifecycleScope.launch {
+                    sharePilotDiagnostics()
+                  }
+                },
+                modifier = Modifier.padding(horizontal = 8.dp),
+              ) {
+                Text("Share pilot diagnostics")
+              }
               when {
                 legacyDevelopmentOrderBlocked -> Text(
                   "Production sales are blocked because this register contains an unfinished legacy development order. Preserve the register data and complete an explicit recovery/reset before using it live.",
@@ -163,5 +174,15 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  private suspend fun sharePilotDiagnostics() {
+    val snapshot = PilotDiagnosticsCollector(database, repository).snapshot()
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+      type = "application/json"
+      putExtra(Intent.EXTRA_SUBJECT, "Event Commerce POS pilot diagnostics")
+      putExtra(Intent.EXTRA_TEXT, snapshot.toJson())
+    }
+    startActivity(Intent.createChooser(shareIntent, "Share pilot diagnostics"))
   }
 }
