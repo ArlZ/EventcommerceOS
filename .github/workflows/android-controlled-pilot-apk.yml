@@ -15,11 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      RELEASE_COMMIT: ${{ github.sha }}
+      RELEASE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          ref: ${{ env.RELEASE_COMMIT }}
       - name: Verify exact checked-out release
         run: test "$RELEASE_COMMIT" = "$(git rev-parse HEAD)"
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
@@ -109,7 +110,7 @@ jobs:
           APK_SHA="$(sha256sum "$OUT/event-commerce-pos-controlled-pilot.apk" | awk '{print $1}')"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$APKSIGNER" verify --print-certs "$OUT/event-commerce-pos-controlled-pilot.apk" > "$RUNNER_TEMP/apksigner-certs.txt"
-          SIGNER_SHA="$(grep -m1 -E 'certificate SHA-256 digest:' "$RUNNER_TEMP/apksigner-certs.txt" | sed -E 's/.*digest:[[:space:]]*//' | tr -d '\r\n[:space:]' | tr '[:upper:]' '[:lower:]')"
+          SIGNER_SHA="$(grep -m1 -E 'certificate SHA-256 digest:' "$RUNNER_TEMP/apksigner-certs.txt" | sed -E 's/.*digest:[[:space:]]*//' | tr -d '\r\n[:space:]:' | tr '[:upper:]' '[:lower:]')"
           if ! [[ "$SIGNER_SHA" =~ ^[0-9a-f]{64}$ ]]; then
             echo '::error::Unable to extract a valid signer certificate SHA-256 digest'
             cat "$RUNNER_TEMP/apksigner-certs.txt"
@@ -184,7 +185,7 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
         with:
-          name: event-commerce-pos-signed-release-ci-${{ github.sha }}
+          name: event-commerce-pos-signed-release-ci-${{ env.RELEASE_COMMIT }}
           path: artifacts/controlled-pilot-apk/*
           if-no-files-found: error
           retention-days: 7
@@ -192,7 +193,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
         with:
-          name: event-commerce-pos-controlled-pilot-${{ github.sha }}
+          name: event-commerce-pos-controlled-pilot-${{ env.RELEASE_COMMIT }}
           path: artifacts/controlled-pilot-apk/*
           if-no-files-found: error
           retention-days: 30
