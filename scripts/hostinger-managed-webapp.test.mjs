@@ -13,6 +13,16 @@ const controlWebPackageJson = JSON.parse(
 );
 const controlWebConfig = readFileSync(resolve(root, 'apps/control-web/next.config.ts'), 'utf8');
 const controlWebHtaccess = readFileSync(resolve(root, 'apps/control-web/public/.htaccess'), 'utf8');
+const cloudHealth = readFileSync(
+  resolve(root, 'apps/cloud-api/src/system/health.controller.ts'),
+  'utf8',
+);
+const cloudRuntimeReleaseIdentity = readFileSync(
+  resolve(root, 'apps/cloud-api/src/system/release-identity.ts'),
+  'utf8',
+);
+const managedBuild = readFileSync(resolve(root, 'scripts/hostinger-aware-build.mjs'), 'utf8');
+const releaseIdentity = readFileSync(resolve(root, 'scripts/release-identity.mjs'), 'utf8');
 const supabaseHelper = readFileSync(resolve(root, 'apps/cloud-api/db.js'), 'utf8');
 const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
 const dockerfile = readFileSync(resolve(root, 'Dockerfile'), 'utf8');
@@ -67,6 +77,22 @@ test('managed build scripts do not depend on pnpm being on PATH', () => {
   assert.match(packageJson.scripts?.['hostinger:cloud-api:build'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:cloud-api:start'] ?? '', /^corepack pnpm /);
   assert.match(packageJson.scripts?.['hostinger:control-web:build'] ?? '', /^corepack pnpm /);
+});
+
+test('managed builds bake exact release identity automatically', () => {
+  assert.match(releaseIdentity, /spawnSync\('git', \['rev-parse', 'HEAD'\]/);
+  assert.match(releaseIdentity, /\['RELEASE_COMMIT', 'GITHUB_SHA'\]/);
+  assert.match(managedBuild, /resolveReleaseCommit\(\{ cwd: repoRoot \}\)/);
+  assert.match(managedBuild, /release-commit\.txt/);
+  assert.match(controlWebConfig, /execFileSync\('git', \['rev-parse', 'HEAD'\]/);
+  assert.match(controlWebConfig, /process\.env\.RELEASE_COMMIT = resolveManagedReleaseCommit\(\)/);
+  assert.match(cloudHealth, /runtimeReleaseCommit\(\)/);
+  assert.match(cloudRuntimeReleaseIdentity, /release-commit\.txt/);
+  assert.match(cloudRuntimeReleaseIdentity, /process\.env\.RELEASE_COMMIT/);
+  assert.match(apiEnv, /Only set this fallback when the managed/);
+  assert.match(controlEnv, /Only set this/);
+  assert.match(managedReadme, /releaseCommit/);
+  assert.match(managedReadme, /Managed deployment smoke/);
 });
 
 test('managed Event Control exports static files instead of requiring a Next runtime', () => {
