@@ -46,7 +46,20 @@ jobs:
           test -f out/index.html
           test -f out/.htaccess
           test -d out/_next/static
+          test -f out/api/health
           test ! -f out/server.js
+          EXPECTED_RELEASE_COMMIT="$(git -C ../.. rev-parse HEAD)" node - <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const health = JSON.parse(readFileSync('out/api/health', 'utf8'));
+          if (health.service !== 'control-web' || health.status !== 'ok') {
+            throw new Error(`unexpected Control Web health payload: ${JSON.stringify(health)}`);
+          }
+          if (health.releaseCommit !== process.env.EXPECTED_RELEASE_COMMIT) {
+            throw new Error(
+              `Control Web release identity mismatch: ${JSON.stringify(health.releaseCommit)}`,
+            );
+          }
+          NODE
           rm -rf out
           git checkout -- next-env.d.ts tsconfig.json
       - run: pnpm --filter @event-commerce/cloud-api db:migrate
@@ -103,7 +116,11 @@ jobs:
           pnpm --filter @event-commerce/cloud-api db:migrate
           pnpm --filter @event-commerce/event-edge db:migrate
           git diff --exit-code
-      - run: pnpm build
+      - name: Build workspace and verify baked Cloud release identity
+        run: |
+          pnpm build
+          test -f apps/cloud-api/dist/release-commit.txt
+          test "$(cat apps/cloud-api/dist/release-commit.txt)" = "$(git rev-parse HEAD)"
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
