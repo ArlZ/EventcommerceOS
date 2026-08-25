@@ -31,7 +31,7 @@ function observation(
     durationMs: Date.parse(completedAt) - Date.parse(startedAt),
     requestCount: rateLimitedCount + successCount,
     concurrency: 10,
-    statusCounts: { '200': successCount, '429': rateLimitedCount },
+    statusCounts: { 200: successCount, 429: rateLimitedCount },
     successCount,
     rateLimitedCount,
     transportErrorCount: 0,
@@ -91,7 +91,10 @@ test('bounded probe rejects production targets and insecure remote HTTP', () => 
     url: 'https://example.test/health',
   };
   assert.throws(() => normalizeProbeConfig({ ...base, environment: 'production' }), /environment/);
-  assert.throws(() => normalizeProbeConfig({ ...base, url: 'http://example.test/health' }), /HTTPS/);
+  assert.throws(
+    () => normalizeProbeConfig({ ...base, url: 'http://example.test/health' }),
+    /HTTPS/,
+  );
 });
 
 test('bounded probe uses secret headers but never serializes them into evidence', async () => {

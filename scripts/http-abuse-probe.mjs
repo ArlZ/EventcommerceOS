@@ -48,7 +48,9 @@ function readBody(config, configPath) {
 
 function buildHeaders(config) {
   if (config.headers !== undefined) {
-    throw new Error('Literal config.headers are prohibited; use headersFromEnv so secrets are not stored');
+    throw new Error(
+      'Literal config.headers are prohibited; use headersFromEnv so secrets are not stored',
+    );
   }
   const headers = {};
   const mapping = config.headersFromEnv ?? {};
@@ -59,10 +61,12 @@ function buildHeaders(config) {
     const name = nonEmpty(header, 'header name');
     const variable = nonEmpty(envName, `environment variable for ${name}`);
     const value = process.env[variable];
-    if (!value) throw new Error(`Required probe header environment variable is missing: ${variable}`);
+    if (!value)
+      throw new Error(`Required probe header environment variable is missing: ${variable}`);
     headers[name] = value;
   }
-  if (config.contentType) headers['Content-Type'] = nonEmpty(config.contentType, 'config.contentType');
+  if (config.contentType)
+    headers['Content-Type'] = nonEmpty(config.contentType, 'config.contentType');
   return headers;
 }
 
@@ -77,7 +81,8 @@ export function normalizeProbeConfig(config) {
   }
   const scenarioId = nonEmpty(config.scenarioId, 'config.scenarioId');
   const targetRole = nonEmpty(config.targetRole, 'config.targetRole');
-  if (!TARGET_ROLES.has(targetRole)) throw new Error(`Unsupported config.targetRole: ${targetRole}`);
+  if (!TARGET_ROLES.has(targetRole))
+    throw new Error(`Unsupported config.targetRole: ${targetRole}`);
   const environment = nonEmpty(config.environment, 'config.environment');
   if (!TEST_ENVIRONMENTS.has(environment)) {
     throw new Error('config.environment must be local, sandbox or controlled-pilot');
@@ -86,7 +91,9 @@ export function normalizeProbeConfig(config) {
     throw new Error('config.targetOwnershipAcknowledged must be true for a controlled test target');
   }
   const url = validateUrl(config.url);
-  const method = String(config.method ?? 'GET').trim().toUpperCase();
+  const method = String(config.method ?? 'GET')
+    .trim()
+    .toUpperCase();
   if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
     throw new Error(`Unsupported config.method: ${method}`);
   }
@@ -101,7 +108,12 @@ export function normalizeProbeConfig(config) {
     method,
     totalRequests: integer(config.totalRequests ?? 60, 'config.totalRequests', 1, 2000),
     concurrency: integer(config.concurrency ?? 10, 'config.concurrency', 1, 128),
-    requestTimeoutMs: integer(config.requestTimeoutMs ?? 5000, 'config.requestTimeoutMs', 250, 30000),
+    requestTimeoutMs: integer(
+      config.requestTimeoutMs ?? 5000,
+      'config.requestTimeoutMs',
+      250,
+      30000,
+    ),
     recovery: config.recovery !== false,
   };
 }
@@ -206,7 +218,9 @@ export async function runAbuseProbe(config, options = {}) {
   const body = options.body ?? readBody(config, options.configFilePath ?? configPath);
   const headers = options.headers ?? buildHeaders(config);
   const fetchImpl = options.fetchImpl ?? fetch;
-  const sleep = options.sleep ?? ((milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds)));
+  const sleep =
+    options.sleep ??
+    ((milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds)));
   const requestOptions = {
     fetchImpl,
     url: normalized.url,
@@ -228,7 +242,9 @@ export async function runAbuseProbe(config, options = {}) {
     }
   }
   await Promise.all(
-    Array.from({ length: Math.min(normalized.concurrency, normalized.totalRequests) }, () => worker()),
+    Array.from({ length: Math.min(normalized.concurrency, normalized.totalRequests) }, () =>
+      worker(),
+    ),
   );
 
   let recovery = { attempted: false, delayMs: 0, status: null, errorCode: null };
@@ -238,7 +254,10 @@ export async function runAbuseProbe(config, options = {}) {
       0,
       300,
     );
-    const delayMs = Math.min((retryValues.at(-1) ?? (results.some((entry) => entry.status === 429) ? 1 : 0)) * 1000 + 250, 30000);
+    const delayMs = Math.min(
+      (retryValues.at(-1) ?? (results.some((entry) => entry.status === 429) ? 1 : 0)) * 1000 + 250,
+      30000,
+    );
     if (delayMs > 0) await sleep(delayMs);
     const recoveryResult = await oneRequest(requestOptions);
     recovery = {
@@ -267,7 +286,9 @@ async function main() {
   const absoluteConfig = resolve(configFilePath);
   const config = JSON.parse(readFileSync(absoluteConfig, 'utf8'));
   const report = await runAbuseProbe(config, { configFilePath: absoluteConfig });
-  const outputPath = resolve(process.argv[3] ?? `artifacts/pilot/abuse-${config.scenarioId ?? Date.now()}.json`);
+  const outputPath = resolve(
+    process.argv[3] ?? `artifacts/pilot/abuse-${config.scenarioId ?? Date.now()}.json`,
+  );
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   console.log(

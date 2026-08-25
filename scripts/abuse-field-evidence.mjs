@@ -35,7 +35,9 @@ function canonical(value) {
 }
 
 function digest(value) {
-  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(value)))
+    .digest('hex');
 }
 
 function validTime(value) {
@@ -46,7 +48,10 @@ function overlaps(left, right) {
   if (![left.startedAt, left.completedAt, right.startedAt, right.completedAt].every(validTime)) {
     return false;
   }
-  return Date.parse(left.startedAt) <= Date.parse(right.completedAt) && Date.parse(right.startedAt) <= Date.parse(left.completedAt);
+  return (
+    Date.parse(left.startedAt) <= Date.parse(right.completedAt) &&
+    Date.parse(right.startedAt) <= Date.parse(left.completedAt)
+  );
 }
 
 function validateObservation(observation, label, releaseCommit, expectedRole) {
@@ -82,15 +87,19 @@ function validateObservation(observation, label, releaseCommit, expectedRole) {
 }
 
 function recovered(observation) {
-  return observation.recovery?.attempted === true &&
+  return (
+    observation.recovery?.attempted === true &&
     Number.isSafeInteger(observation.recovery.status) &&
     observation.recovery.status >= 200 &&
-    observation.recovery.status < 300;
+    observation.recovery.status < 300
+  );
 }
 
 function expectedPolicy(observation, policy) {
-  return Array.isArray(observation.observedRateLimitPolicies) &&
-    observation.observedRateLimitPolicies.includes(policy);
+  return (
+    Array.isArray(observation.observedRateLimitPolicies) &&
+    observation.observedRateLimitPolicies.includes(policy)
+  );
 }
 
 export function verifyAbuseFieldEvidence({
@@ -172,7 +181,8 @@ export function verifyAbuseFieldEvidence({
     checks.push(
       check(
         'cloud:operator-rate-limit-engaged',
-        operatorReadBurst.rateLimitedCount > 0 && expectedPolicy(operatorReadBurst, 'OPERATOR_READ'),
+        operatorReadBurst.rateLimitedCount > 0 &&
+          expectedPolicy(operatorReadBurst, 'OPERATOR_READ'),
         `429=${operatorReadBurst.rateLimitedCount}; policies=${operatorReadBurst.observedRateLimitPolicies.join(',') || 'none'}`,
       ),
     );
@@ -301,7 +311,10 @@ async function main() {
     manifest,
     cloudPublicBurst: readJson(resolve(manifestDir, manifest.cloudPublicBurst), 'cloudPublicBurst'),
     cloudConcurrency: readJson(resolve(manifestDir, manifest.cloudConcurrency), 'cloudConcurrency'),
-    operatorReadBurst: readJson(resolve(manifestDir, manifest.operatorReadBurst), 'operatorReadBurst'),
+    operatorReadBurst: readJson(
+      resolve(manifestDir, manifest.operatorReadBurst),
+      'operatorReadBurst',
+    ),
     edgeRunaway: readJson(resolve(manifestDir, manifest.edgeRunaway), 'edgeRunaway'),
     edgeHealthyPeer: readJson(resolve(manifestDir, manifest.edgeHealthyPeer), 'edgeHealthyPeer'),
     providerCallbackBurst: readJson(
