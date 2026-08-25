@@ -148,7 +148,7 @@ async function seed(client, count, ids) {
        $1,
        $2,
        jsonb_build_array(jsonb_build_object(
-         'skuId', $3,
+         'skuId', $3::text,
          'quantity', 1,
          'unitPriceMinor', 50000 + (i % 7) * 5000
        )),
@@ -251,7 +251,7 @@ async function seed(client, count, ids) {
        ($1, $2, $3, 1, 'recovery-fixture-v1',
         json_build_object(
           'fixture', true,
-          'orderCount', $4,
+          'orderCount', $4::integer,
           'currency', 'KES',
           'closedAt', now()
         ),
