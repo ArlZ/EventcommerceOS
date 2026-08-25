@@ -12,6 +12,8 @@ on:
       - 'plans/reliability-backup-restore-evidence.md'
       - 'plans/reliability-backup-restore-smoke-ci.md'
       - '.github/workflows/recovery-smoke.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,6 +22,7 @@ permissions:
 jobs:
   backup-restore-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5432/event_commerce_test
       RESTORE_DATABASE_URL: postgresql://event_commerce:event_commerce@localhost:5433/event_commerce_restore
@@ -27,7 +30,7 @@ jobs:
       RECOVERY_FIXTURE_ACK: SEED:event_commerce_test
       RECOVERY_FIXTURE_ORDER_COUNT: '250'
       BACKUP_OPERATOR: ci-representative-recovery-drill
-      RELEASE_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      RELEASE_COMMIT_SHA: ${{ github.sha }}
       BACKUP_RPO_TARGET_MINUTES: '60'
       BACKUP_RTO_TARGET_MINUTES: '10'
       BACKUP_REQUIRE_REPRESENTATIVE_DATA: 'true'
@@ -64,6 +67,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Verify exact checked-out release
+        run: test "$RELEASE_COMMIT_SHA" = "$(git rev-parse HEAD)"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -84,7 +89,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
         if: always()
         with:
-          name: backup-restore-smoke-evidence
+          name: backup-restore-smoke-evidence-${{ github.sha }}
           path: apps/cloud-api/artifacts/backup-restore-smoke/**
           if-no-files-found: warn
           retention-days: 30

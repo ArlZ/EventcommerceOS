@@ -9,11 +9,6 @@ on:
       - '.github/workflows/edge-pilot.yml'
   push:
     branches: [main]
-    paths:
-      - 'Dockerfile'
-      - 'apps/event-edge/**'
-      - 'infra/edge-pilot/**'
-      - '.github/workflows/edge-pilot.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,10 +17,15 @@ permissions:
 jobs:
   validate-compose:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+      - name: Verify exact checked-out release
+        run: test "$RELEASE_COMMIT" = "$(git rev-parse HEAD)"
       - name: Validate pilot helper syntax
         shell: pwsh
         run: |
@@ -87,7 +87,6 @@ jobs:
           fi
       - name: Validate venue Compose configuration
         env:
-          RELEASE_COMMIT: 1111111111111111111111111111111111111111
           CLOUD_API_URL: https://cloud-pilot.invalid
           EDGE_ID: edge-ci-placeholder
           EDGE_CLOUD_SYNC_TOKEN: edge-cloud-test-token-placeholder-0000
@@ -105,3 +104,53 @@ jobs:
           PILOT_OPENING_STOCK_BASE: '100'
           PILOT_OPENING_STOCK_OCCURRED_AT: '2026-08-26T17:00:00+03:00'
         run: docker compose -f infra/edge-pilot/compose.yml config --quiet
+      - name: Stage exact-release Edge pilot validation evidence
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/edge-pilot
+          sha256sum \
+            infra/edge-pilot/.env.example \
+            infra/edge-pilot/Caddyfile \
+            infra/edge-pilot/README.md \
+            infra/edge-pilot/bootstrap.mjs \
+            infra/edge-pilot/compose.yml \
+            infra/edge-pilot/prepare-lan-https.ps1 \
+            infra/edge-pilot/rehearsal.mjs \
+            infra/edge-pilot/verify-lan-https.mjs \
+            > artifacts/edge-pilot/bundle-files.sha256
+          node <<'NODE'
+          import { writeFileSync } from 'node:fs';
+
+          const releaseCommit = process.env.RELEASE_COMMIT;
+          if (!/^[0-9a-f]{40}$/.test(releaseCommit ?? '')) {
+            throw new Error('RELEASE_COMMIT must be a lowercase 40-character Git SHA');
+          }
+
+          const evidence = {
+            schemaVersion: 1,
+            releaseCommit,
+            workflowRunId: process.env.GITHUB_RUN_ID,
+            repository: process.env.GITHUB_REPOSITORY,
+            checks: [
+              'exact-checkout',
+              'helper-syntax',
+              'caddy-config',
+              'no-sni-lan-ip-certificate',
+              'compose-config',
+            ],
+            result: 'PASS',
+            validatedAt: new Date().toISOString(),
+          };
+          writeFileSync(
+            'artifacts/edge-pilot/release-manifest.json',
+            `${JSON.stringify(evidence, null, 2)}\n`,
+            { mode: 0o600 },
+          );
+          NODE
+      - name: Upload Edge pilot validation evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v6
+        with:
+          name: event-edge-pilot-validation-${{ github.sha }}
+          path: artifacts/edge-pilot/*
+          if-no-files-found: error
+          retention-days: 30
