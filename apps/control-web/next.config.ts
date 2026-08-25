@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import type { NextConfig } from 'next';
 
@@ -25,6 +26,10 @@ export const managedStaticExport =
   process.env.HOSTINGER_APP_TARGET === undefined ||
   process.env.HOSTINGER_APP_TARGET === 'control-web';
 
+if (managedStaticExport) {
+  process.env.RELEASE_COMMIT = resolveManagedReleaseCommit();
+}
+
 const nextConfig: NextConfig = managedStaticExport
   ? {
       output: 'export',
@@ -47,3 +52,33 @@ const nextConfig: NextConfig = managedStaticExport
     };
 
 export default nextConfig;
+
+function resolveManagedReleaseCommit(): string {
+  const fullGitSha = /^[0-9a-f]{40}$/;
+  const repoRoot = resolve(process.cwd(), '../..');
+
+  try {
+    const gitSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (fullGitSha.test(gitSha)) return gitSha;
+  } catch {
+    // Managed hosts may provide source without Git metadata. Fall back to an
+    // explicitly supplied exact release identity in that case.
+  }
+
+  for (const name of ['RELEASE_COMMIT', 'GITHUB_SHA']) {
+    const value = process.env[name]?.trim() ?? '';
+    if (!value) continue;
+    if (!fullGitSha.test(value)) {
+      throw new Error(`${name} must be a lowercase 40-character Git SHA`);
+    }
+    return value;
+  }
+
+  throw new Error(
+    'Managed Control Web build requires Git metadata or RELEASE_COMMIT/GITHUB_SHA release identity',
+  );
+}
