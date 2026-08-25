@@ -67,14 +67,17 @@ export function PosMenuPublicationControl() {
     setTone('warning');
     setMessage('Publishing immutable POS menu snapshots…');
     try {
-      const response = await fetch(`${apiBase}/events/${publicationEventId}/pos-menu-publications`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'content-type': 'application/json',
-          'x-organisation-id': publicationOrganisationId,
+      const response = await fetch(
+        `${apiBase}/events/${publicationEventId}/pos-menu-publications`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'content-type': 'application/json',
+            'x-organisation-id': publicationOrganisationId,
+          },
         },
-      });
+      );
       if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
       const publications = (await response.json()) as Publication[];
       if (contextVersion.current !== version) return;
