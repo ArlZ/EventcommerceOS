@@ -58,12 +58,14 @@ This workflow does not claim Google Play/App Signing enrollment. The controlled 
    - signer certificate SHA-256;
    - `debuggable: false`;
    - application id/version.
-7. Verify the APK checksum again after copying it to the venue deployment machine.
-8. Install only that reviewed APK on controlled-pilot POS devices.
-9. Capture installed package/version and device asset IDs in the pilot evidence pack.
+7. Verify the APK checksum and signer again after copying it to the deployment machine.
+8. Install only that reviewed APK on controlled-pilot POS devices using the fail-closed procedure in `docs/ANDROID_DEVICE_PROVISIONING.md`.
+9. Retain the generated machine-readable installed-package/device evidence with the pilot evidence pack.
+
+The repository commands `pnpm pilot:android:verify -- --artifact-dir <dir>` and `pnpm pilot:android:install -- --artifact-dir <dir> --asset-id <id>` perform the artifact and device checks documented in `docs/ANDROID_DEVICE_PROVISIONING.md`.
 
 Do not rebuild the same release casually from a different key or distribute an APK whose digest is not the reviewed digest.
 
 ## Relationship to the pilot gates
 
-A signed, non-debuggable APK closes only the **binary provenance** portion of Android deployment readiness. It does not satisfy the real hardware/network, offline durability, payment fault, abuse/flood, inventory-close or controlled-pilot-close gates in `docs/PILOT_RUNBOOK.md`.
+A signed, non-debuggable APK closes only the **binary provenance** portion of Android deployment readiness. A successful device installation additionally proves that a specific controlled device received the reviewed package/version, but it still does not satisfy the real hardware/network, offline durability, payment fault, abuse/flood, inventory-close or controlled-pilot-close gates in `docs/PILOT_RUNBOOK.md`.
