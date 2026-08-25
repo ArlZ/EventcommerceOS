@@ -53,6 +53,8 @@ NEXT_PUBLIC_CLOUD_API_URL=https://api-event.nairobuy.com
 
 `HOSTINGER_APP_TARGET` is not required for the managed Event Control build. When no explicit target is available during the build, `apps/control-web/next.config.ts` selects `output: 'export'`. Explicit non-managed targets such as Docker use the existing standalone Next.js server build.
 
+For managed static builds, Event Control derives the full release SHA from the checked-out Git commit and bakes it into the exported `/api/health` response. `RELEASE_COMMIT` remains only a strict fallback for a managed source bundle that genuinely lacks Git metadata; do not maintain it manually per deployment when the checkout is available.
+
 The static export carries a `.htaccess` file with the baseline Control Web security headers. Hostinger supports `.htaccess` rules on web and cloud hosting.
 
 The expected managed output is:
@@ -99,6 +101,8 @@ MPESA_CALLBACK_URL=https://api-event.nairobuy.com/payments/providers/mpesa/callb
 
 It also requires `DATABASE_URL`, stored only in Hostinger's environment/secret UI. The live pilot uses the dedicated `Event Commerce OS` Supabase project in `eu-central-1` via the direct PostgreSQL endpoint with TLS. Hostinger's Supabase integration does not substitute for `DATABASE_URL`.
 
+The repo-root managed build resolves the checked-out full Git SHA and writes it into `apps/cloud-api/dist/release-commit.txt`. Cloud health reads that baked identity first and uses `RELEASE_COMMIT` only as a strict fallback. This keeps exact deployment identity attached to the source artifact instead of relying on a manually maintained hPanel value.
+
 The database schema is already provisioned and the application migration ledger contains exact SHA-256 checksums for all repository migrations. A future runtime with a safe migration hook should run `pnpm run db:migrate` before startup, but the current managed Hostinger deployment does not expose such a hook.
 
 The Supabase Data API is intentionally not the application boundary. RLS is enabled without browser-facing policies on Event Commerce tables. The authoritative health check is the NestJS endpoint because it performs a real PostgreSQL query through `DATABASE_URL`:
@@ -107,7 +111,7 @@ The Supabase Data API is intentionally not the application boundary. RLS is enab
 GET https://api-event.nairobuy.com/health
 ```
 
-HTTP 200 proves the API process and PostgreSQL round-trip are both healthy.
+HTTP 200 proves the API process and PostgreSQL round-trip are both healthy. A controlled release also requires the health payload's `releaseCommit` to be the exact promoted full Git SHA.
 
 Keep `MPESA_BASE_URL=https://sandbox.safaricom.co.ke` for the controlled pilot. Do not load live-money credentials merely because the managed deployment is internet-accessible.
 
@@ -132,11 +136,12 @@ Set:
 2. Provision the dedicated Supabase PostgreSQL database and apply repository migrations.
 3. Deploy the Cloud API from repo root with framework preset `Other` and entry `apps/cloud-api/dist/main.js`.
 4. Add API environment variables, including `DATABASE_URL`.
-5. Verify `https://api-event.nairobuy.com/health` returns HTTP 200.
-6. Redeploy Event Control with `NEXT_PUBLIC_CLOUD_API_URL=https://api-event.nairobuy.com`.
+5. Verify `https://api-event.nairobuy.com/health` returns HTTP 200 with the promoted full release SHA.
+6. Redeploy Event Control with `NEXT_PUBLIC_CLOUD_API_URL=https://api-event.nairobuy.com` and verify `https://event.nairobuy.com/api/health` reports the same release SHA.
 7. Verify browser requests from Event Control reach the Cloud API without CORS errors.
-8. Create an operator and exercise login, configuration, inventory and dashboard flows.
-9. Add M-PESA sandbox credentials only when the provider test matrix is ready.
+8. Retain the `Managed deployment smoke` GitHub Actions evidence for the exact `main` release; the workflow waits for both Hostinger deployments to converge to the pushed SHA and verifies the canonical CORS origin.
+9. Create an operator and exercise login, configuration, inventory and dashboard flows.
+10. Add M-PESA sandbox credentials only when the provider test matrix is ready.
 
 ## Operational notes
 
