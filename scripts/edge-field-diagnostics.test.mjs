@@ -11,6 +11,7 @@ function fakeClient(overrides = {}) {
             {
               device_id: 'register-01',
               device_status: 'ACTIVE',
+              watermark_present: true,
               accepted_through_sequence: '3',
               highest_sequence_seen: '6',
               last_seen_at: new Date('2026-08-25T09:00:00Z'),
@@ -111,6 +112,7 @@ test('edge field diagnostics reports event-scoped aggregate evidence', async () 
   assert.deepEqual(report.devices[0], {
     deviceId: 'register-01',
     deviceStatus: 'ACTIVE',
+    watermarkPresent: true,
     acceptedThroughSequence: '3',
     highestSequenceSeen: '6',
     processedEventCount: 6,
@@ -150,6 +152,7 @@ test('edge field diagnostics includes revoked pilot devices without losing their
         {
           device_id: 'register-retired',
           device_status: 'REVOKED',
+          watermark_present: true,
           accepted_through_sequence: '9',
           highest_sequence_seen: '9',
           last_seen_at: null,
@@ -185,6 +188,28 @@ test('edge field diagnostics includes unattributed reconciliation exceptions in 
   assert.equal(report.totals.unresolvedReconciliationExceptionCount, 3);
   assert.equal(report.totals.unattributedReconciliationExceptionCount, 2);
   assert.equal(report.devices[0].unresolvedReconciliationExceptionCount, 1);
+});
+
+test('edge field diagnostics fails closed if a registered device has events without a watermark', async () => {
+  await assert.rejects(
+    collectEdgeFieldDiagnostics(
+      fakeClient({
+        watermarks: [
+          {
+            device_id: 'register-01',
+            device_status: 'ACTIVE',
+            watermark_present: false,
+            accepted_through_sequence: '0',
+            highest_sequence_seen: '0',
+            last_seen_at: null,
+            last_cloud_delivery_at: null,
+          },
+        ],
+      }),
+      env,
+    ),
+    /has processed events without a device watermark/,
+  );
 });
 
 test('edge field diagnostics fails closed if pilot events exist for an unregistered device', async () => {
