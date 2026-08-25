@@ -105,15 +105,25 @@ jobs:
               file === '.github/workflows/android-controlled-pilot-apk.yml',
           );
 
+          const edgePilotRelevant = files.some(
+            (file) =>
+              file === 'Dockerfile' ||
+              file.startsWith('apps/event-edge/') ||
+              file.startsWith('infra/edge-pilot/') ||
+              file === '.github/workflows/edge-pilot.yml',
+          );
+
           const required = ['typescript', 'android', 'sca', 'gitleaks'];
           if (runtimeRelevant) required.push('build-runtime-images');
           if (recoveryRelevant) required.push('backup-restore-smoke');
           if (androidReleaseRelevant) required.push('build-signed-release');
+          if (edgePilotRelevant) required.push('validate-compose');
 
           console.log(`Changed files: ${files.length}`);
           console.log(`Runtime gate required: ${runtimeRelevant}`);
           console.log(`Backup/restore gate required: ${recoveryRelevant}`);
           console.log(`Signed Android release gate required: ${androidReleaseRelevant}`);
+          console.log(`Event Edge pilot gate required: ${edgePilotRelevant}`);
           console.log(`Required checks: ${required.join(', ')}`);
 
           const deadline = Date.now() + 30 * 60 * 1000;

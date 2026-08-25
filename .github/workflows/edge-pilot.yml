@@ -30,6 +30,7 @@ jobs:
         shell: pwsh
         run: |
           node --check infra/edge-pilot/bootstrap.mjs
+          node --check infra/edge-pilot/field-diagnostics.mjs
           node --check infra/edge-pilot/rehearsal.mjs
           node --check infra/edge-pilot/verify-lan-https.mjs
           $tokens = $null
@@ -114,6 +115,7 @@ jobs:
             infra/edge-pilot/README.md \
             infra/edge-pilot/bootstrap.mjs \
             infra/edge-pilot/compose.yml \
+            infra/edge-pilot/field-diagnostics.mjs \
             infra/edge-pilot/prepare-lan-https.ps1 \
             infra/edge-pilot/rehearsal.mjs \
             infra/edge-pilot/verify-lan-https.mjs \
