@@ -52,7 +52,9 @@ export function validateReleaseManifest(manifest) {
   if (manifest.signingKeyClass !== 'controlled-pilot-secret') {
     blockers.push('signingKeyClass must be controlled-pilot-secret.');
   }
-  if (manifest.warning !== null) blockers.push('warning must be null for a controlled-pilot build.');
+  if (manifest.warning !== null) {
+    blockers.push('warning must be null for a controlled-pilot build.');
+  }
 
   const apk = manifest.apk;
   if (!apk || typeof apk !== 'object' || Array.isArray(apk)) {
@@ -109,12 +111,11 @@ function run(command, args, options = {}) {
     windowsHide: true,
     ...options,
   });
-  if (result.error) fail(`${basename(command)} could not be started: ${result.error.message}`);
+  if (result.error) {
+    fail(`${basename(command)} could not be started: ${result.error.message}`);
+  }
   if (result.status !== 0) {
-    const detail = [result.stdout, result.stderr]
-      .filter(nonEmpty)
-      .join('\n')
-      .trim();
+    const detail = [result.stdout, result.stderr].filter(nonEmpty).join('\n').trim();
     fail(`${basename(command)} failed${detail ? `: ${detail}` : '.'}`);
   }
   return result.stdout ?? '';
@@ -124,7 +125,8 @@ function sdkExecutable(name) {
   const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
   if (!sdk) return null;
   if (name === 'adb') {
-    const candidate = join(sdk, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb');
+    const executable = process.platform === 'win32' ? 'adb.exe' : 'adb';
+    const candidate = join(sdk, 'platform-tools', executable);
     return existsSync(candidate) ? candidate : null;
   }
   if (name === 'apksigner') {
@@ -152,7 +154,9 @@ function apksignerExecutable() {
 
 function parseArgs(argv) {
   const command = argv[0];
-  if (!['verify', 'install'].includes(command)) return { command: null, options: {} };
+  if (!['verify', 'install'].includes(command)) {
+    return { command: null, options: {} };
+  }
   const options = {};
   for (let index = 1; index < argv.length; index += 1) {
     const token = argv[index];
@@ -177,19 +181,29 @@ function loadReviewedArtifact(artifactDir) {
   try {
     manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   } catch (error) {
-    fail(`Unable to parse ${MANIFEST_NAME}: ${error instanceof Error ? error.message : String(error)}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    fail(`Unable to parse ${MANIFEST_NAME}: ${detail}`);
   }
 
   const blockers = validateReleaseManifest(manifest);
-  if (blockers.length > 0) fail(`Controlled-pilot manifest is not installable:\n- ${blockers.join('\n- ')}`);
+  if (blockers.length > 0) {
+    fail(`Controlled-pilot manifest is not installable:\n- ${blockers.join('\n- ')}`);
+  }
 
   const actualApkSha = sha256File(apkPath);
   if (actualApkSha !== manifest.apk.sha256) {
     fail(`APK SHA-256 mismatch: manifest=${manifest.apk.sha256} actual=${actualApkSha}`);
   }
 
-  const signerOutput = run(apksignerExecutable(), ['verify', '--verbose', '--print-certs', apkPath]);
-  if (!/Verifies/i.test(signerOutput)) fail('apksigner did not report a successful verification.');
+  const signerOutput = run(apksignerExecutable(), [
+    'verify',
+    '--verbose',
+    '--print-certs',
+    apkPath,
+  ]);
+  if (!/Verifies/i.test(signerOutput)) {
+    fail('apksigner did not report a successful verification.');
+  }
   const actualSigner = parseApkSigner(signerOutput);
   if (!actualSigner) fail('Unable to extract APK signer certificate SHA-256.');
   if (actualSigner !== manifest.apk.signerCertificateSha256) {
@@ -212,17 +226,16 @@ function selectDevice(adb, requestedSerial) {
     }
     return selected;
   }
+
   const ready = devices.filter((device) => device.state === 'device');
   if (ready.length !== 1) {
-    const detail = devices.map((device) => `${device.serial}:${device.state}`).join(', ') || 'none';
+    const summary = devices.map((device) => `${device.serial}:${device.state}`).join(', ');
+    const detail = summary || 'none';
     fail(`Exactly one authorized ADB device is required unless --serial is supplied; found ${detail}.`);
   }
   if (unauthorized.length > 0) {
-    console.warn(
-      `Warning: ignoring non-ready ADB device(s): ${unauthorized
-        .map((device) => `${device.serial}:${device.state}`)
-        .join(', ')}`,
-    );
+    const detail = unauthorized.map((device) => `${device.serial}:${device.state}`).join(', ');
+    console.warn(`Warning: ignoring non-ready ADB device(s): ${detail}`);
   }
   return ready[0];
 }
@@ -241,8 +254,15 @@ function batteryLevel(adb, serial) {
 }
 
 function verifyInstalledPackage(adb, serial, manifest) {
-  const packagePath = adbFor(adb, serial, ['shell', 'pm', 'path', APPLICATION_ID]).trim();
-  if (!packagePath.startsWith('package:')) fail(`Installed ${APPLICATION_ID} package path was not found.`);
+  const packagePath = adbFor(adb, serial, [
+    'shell',
+    'pm',
+    'path',
+    APPLICATION_ID,
+  ]).trim();
+  if (!packagePath.startsWith('package:')) {
+    fail(`Installed ${APPLICATION_ID} package path was not found.`);
+  }
   const packageInfo = parseDumpsysPackage(
     adbFor(adb, serial, ['shell', 'dumpsys', 'package', APPLICATION_ID]),
   );
@@ -260,12 +280,20 @@ function verifyInstalledPackage(adb, serial, manifest) {
 }
 
 function installCommand(artifact, options) {
-  if (!nonEmpty(options['asset-id'])) fail('install requires --asset-id <controlled-device-asset-id>.');
+  if (!nonEmpty(options['asset-id'])) {
+    fail('install requires --asset-id <controlled-device-asset-id>.');
+  }
   const adb = adbExecutable();
   const device = selectDevice(adb, options.serial);
 
-  const installOutput = adbFor(adb, device.serial, ['install', '-r', artifact.apkPath]).trim();
-  if (!/Success/i.test(installOutput)) fail(`ADB install did not report Success: ${installOutput}`);
+  const installOutput = adbFor(adb, device.serial, [
+    'install',
+    '-r',
+    artifact.apkPath,
+  ]).trim();
+  if (!/Success/i.test(installOutput)) {
+    fail(`ADB install did not report Success: ${installOutput}`);
+  }
 
   const installed = verifyInstalledPackage(adb, device.serial, artifact.manifest);
   const evidence = {
@@ -305,14 +333,12 @@ function installCommand(artifact, options) {
     },
   };
 
-  const defaultOutput = join(
-    artifact.root,
-    `device-evidence-${options['asset-id'].replaceAll(/[^a-zA-Z0-9._-]/g, '_')}.json`,
-  );
+  const safeAssetId = options['asset-id'].replaceAll(/[^a-zA-Z0-9._-]/g, '_');
+  const defaultOutput = join(artifact.root, `device-evidence-${safeAssetId}.json`);
   const outputPath = resolve(options.output || defaultOutput);
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
-  console.log(`Controlled-pilot device installation: PASS`);
+  console.log('Controlled-pilot device installation: PASS');
   console.log(`Release: ${artifact.manifest.releaseCommit}`);
   console.log(`APK SHA-256: ${artifact.actualApkSha}`);
   console.log(`Signer SHA-256: ${artifact.actualSigner}`);
@@ -325,14 +351,15 @@ function verifyCommand(artifact) {
   console.log(`Release: ${artifact.manifest.releaseCommit}`);
   console.log(`APK SHA-256: ${artifact.actualApkSha}`);
   console.log(`Signer SHA-256: ${artifact.actualSigner}`);
-  console.log(`Application: ${APPLICATION_ID} ${artifact.manifest.versionName} (${artifact.manifest.versionCode})`);
+  const version = `${artifact.manifest.versionName} (${artifact.manifest.versionCode})`;
+  console.log(`Application: ${APPLICATION_ID} ${version}`);
 }
 
 function usage() {
   console.log('Usage:');
-  console.log('  node scripts/android-device-evidence.mjs verify --artifact-dir <extracted-artifact-dir>');
+  console.log('  node scripts/android-device-evidence.mjs verify --artifact-dir <dir>');
   console.log(
-    '  node scripts/android-device-evidence.mjs install --artifact-dir <extracted-artifact-dir> --asset-id <id> [--serial <adb-serial>] [--output <evidence.json>]',
+    '  node scripts/android-device-evidence.mjs install --artifact-dir <dir> --asset-id <id> [--serial <adb-serial>] [--output <evidence.json>]',
   );
   console.log('');
   console.log('Environment overrides: ADB, APKSIGNER, ANDROID_HOME, ANDROID_SDK_ROOT.');
@@ -350,9 +377,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       else installCommand(artifact, options);
     }
   } catch (error) {
-    console.error(
-      `Android controlled-pilot device evidence failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`Android controlled-pilot device evidence failed: ${detail}`);
     process.exitCode = 1;
   }
 }
