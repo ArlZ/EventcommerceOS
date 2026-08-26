@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-const sourceUrl = new URL('../src/app/command-centre/command-centre-client.tsx', import.meta.url);
+const sourceUrl = new URL(
+  '../src/app/command-centre/command-centre-client.tsx',
+  import.meta.url,
+);
 
 describe('command centre browser authentication', () => {
   it('uses the operator cookie session for snapshot, stream and actions', async () => {
