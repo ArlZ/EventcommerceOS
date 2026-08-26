@@ -3,6 +3,7 @@ import { ShutdownSignal } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { runManagedCloudApiStartup } from './system/managed-hostinger-migration';
 import { controlWebOrigin } from './system/runtime-origin';
 
 function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
@@ -93,4 +94,7 @@ async function bootstrap(): Promise<void> {
   server.maxHeadersCount = boundedInteger('HTTP_MAX_HEADERS_COUNT', 100, 20, 200);
 }
 
-void bootstrap();
+void runManagedCloudApiStartup(bootstrap).catch((error: unknown) => {
+  console.error('Cloud API startup failed', error);
+  process.exit(1);
+});

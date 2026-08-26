@@ -82,7 +82,7 @@ Output directory: <empty>
 Entry file: apps/cloud-api/dist/main.js
 ```
 
-Hostinger's custom build-command field only supports the package-manager build script rather than arbitrary shell chaining. The API therefore cannot depend on a Hostinger pre-start migration hook.
+Hostinger's custom build-command field only supports the package-manager build script rather than arbitrary shell chaining. The API therefore cannot depend on a Hostinger pre-start migration hook. Instead, the configured `dist/main.js` entry performs a managed-only migration preflight when `HOSTINGER_APP_TARGET=cloud-api`: it runs the repository migration script synchronously and refuses to bootstrap Nest if migration execution fails. Other runtimes are unchanged.
 
 The live API environment includes:
 
@@ -103,7 +103,7 @@ It also requires `DATABASE_URL`, stored only in Hostinger's environment/secret U
 
 The repo-root managed build resolves the checked-out full Git SHA and writes it into `apps/cloud-api/dist/release-commit.txt`. Cloud health reads that baked identity first and uses `RELEASE_COMMIT` only as a strict fallback. This keeps exact deployment identity attached to the source artifact instead of relying on a manually maintained hPanel value.
 
-The database schema is already provisioned and the application migration ledger contains exact SHA-256 checksums for all repository migrations. A future runtime with a safe migration hook should run `pnpm run db:migrate` before startup, but the current managed Hostinger deployment does not expose such a hook.
+The application migration ledger stores exact SHA-256 checksums for all repository migrations. On managed Hostinger startup, pending migrations are applied under the migration advisory lock before the API begins listening. `/health` independently checks that the complete live migration ledger exactly matches the packaged migration inventory and checksums, so a stale or drifted database remains unready even if the Node process can otherwise connect.
 
 The Supabase Data API is intentionally not the application boundary. RLS is enabled without browser-facing policies on Event Commerce tables. The authoritative health check is the NestJS endpoint because it performs a real PostgreSQL query through `DATABASE_URL`:
 
@@ -111,7 +111,7 @@ The Supabase Data API is intentionally not the application boundary. RLS is enab
 GET https://api-event.nairobuy.com/health
 ```
 
-HTTP 200 proves the API process and PostgreSQL round-trip are both healthy. A controlled release also requires the health payload's `releaseCommit` to be the exact promoted full Git SHA.
+HTTP 200 proves the API process, PostgreSQL round-trip, and packaged migration readiness are healthy. A controlled release also requires the health payload's `releaseCommit` to be the exact promoted full Git SHA.
 
 Keep `MPESA_BASE_URL=https://sandbox.safaricom.co.ke` for the controlled pilot. Do not load live-money credentials merely because the managed deployment is internet-accessible.
 
@@ -133,8 +133,8 @@ Set:
 ## Deployment order
 
 1. Deploy Event Control with framework preset `React` and output directory `out`.
-2. Provision the dedicated Supabase PostgreSQL database and apply repository migrations.
-3. Deploy the Cloud API from repo root with framework preset `Other` and entry `apps/cloud-api/dist/main.js`.
+2. Provision the dedicated Supabase PostgreSQL database and establish the repository migration ledger.
+3. Deploy the Cloud API from repo root with framework preset `Other` and entry `apps/cloud-api/dist/main.js`; the managed entry applies any pending repository migrations before Nest bootstrap.
 4. Add API environment variables, including `DATABASE_URL`.
 5. Verify `https://api-event.nairobuy.com/health` returns HTTP 200 with the promoted full release SHA.
 6. Redeploy Event Control with `NEXT_PUBLIC_CLOUD_API_URL=https://api-event.nairobuy.com` and verify `https://event.nairobuy.com/api/health` reports the same release SHA.
