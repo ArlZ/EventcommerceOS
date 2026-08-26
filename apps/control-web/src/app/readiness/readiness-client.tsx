@@ -109,8 +109,8 @@ export function ReadinessClient() {
             <p className="ec-eyebrow">Configuration preflight</p>
             <h2>{readiness.event?.name ?? 'Selected event'}</h2>
             <p>
-              This is a product-level preflight, not a live-money approval. Hardware, M-PESA
-              sandbox, offline durability, recovery and Event Close evidence remain separate gates.
+              This is a product-level preflight, not a live-money approval. Hardware, M-PESA sandbox,
+              offline durability, recovery and Event Close evidence remain separate gates.
             </p>
           </div>
           <span className="ec-status-pill" data-tone={readiness.ready ? 'success' : 'warning'}>
@@ -183,8 +183,7 @@ export function ReadinessClient() {
             <div>
               <strong>Offline & close</strong>
               <p>
-                Committed-order durability, cloud convergence, stock counts and Event Close
-                evidence.
+                Committed-order durability, cloud convergence, stock counts and Event Close evidence.
               </p>
             </div>
           </div>
