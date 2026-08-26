@@ -29,6 +29,13 @@ const eventLifecycle = [
     action: 'Open event setup',
   },
   {
+    href: '/readiness',
+    title: 'Check pilot readiness',
+    description:
+      'Turn the selected event configuration into an explicit preflight before field testing.',
+    action: 'Run preflight',
+  },
+  {
     href: '/event-close',
     title: 'Close & reconcile',
     description: 'Review payment, stock and close evidence before finalising the event.',
