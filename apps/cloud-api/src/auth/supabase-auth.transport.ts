@@ -222,7 +222,7 @@ export class SupabaseAuthTransport {
 
     let response: Response;
     try {
-      response = await fetch(`${authUrl}/auth/v1/settings`, {
+      response = await fetch(`${authUrl}/auth/v1/health`, {
         method: 'GET',
         headers: { apikey: key, accept: 'application/json' },
         signal: AbortSignal.timeout(5_000),
