@@ -1,12 +1,19 @@
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { makeHealthResponse, type HealthResponse } from '@event-commerce/contracts';
+import {
+  SupabaseAuthTransport,
+  type SupabaseAuthDependencyProbe,
+} from '../auth/supabase-auth.transport';
 import { DatabaseService } from '../database/database.service';
 import { migrationLedgerIsCurrent, type MigrationLedgerEntry } from './migration-readiness';
 import { runtimeReleaseCommit } from './release-identity';
 
 @Controller('health')
 export class HealthController {
-  constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
+  constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(SupabaseAuthTransport) private readonly supabaseAuth: SupabaseAuthTransport,
+  ) {}
 
   @Get()
   async getHealth(): Promise<HealthResponse> {
@@ -24,5 +31,14 @@ export class HealthController {
       throw new ServiceUnavailableException('service not ready');
     }
     return makeHealthResponse('cloud-api', new Date(), runtimeReleaseCommit());
+  }
+
+  @Get('operator-auth')
+  async getOperatorAuthHealth(): Promise<SupabaseAuthDependencyProbe> {
+    const probe = await this.supabaseAuth.dependencyProbe();
+    if (probe.status !== 'ok') {
+      throw new ServiceUnavailableException(probe);
+    }
+    return probe;
   }
 }
