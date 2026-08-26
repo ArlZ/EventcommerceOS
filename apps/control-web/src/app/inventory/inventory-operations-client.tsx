@@ -2,7 +2,7 @@
 
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import { useEffect, useMemo, useState } from 'react';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
 
 type StockRow = {
   inventoryLocationId: string;
@@ -77,7 +77,6 @@ function updatedLabel(value: number | null): string {
 }
 
 export function InventoryOperationsClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [organisationName, setOrganisationName] = useState('');
   const [eventId, setEventId] = useState('');
@@ -86,39 +85,55 @@ export function InventoryOperationsClient() {
   const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [contextHydrated, setContextHydrated] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.organisationName) setOrganisationName(context.organisationName);
-    if (context.eventId) setEventId(context.eventId);
-    if (context.eventName) setEventName(context.eventName);
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setOrganisationId(context.organisationId ?? '');
+      setOrganisationName(context.organisationName ?? '');
+      setEventId(context.eventId ?? '');
+      setEventName(context.eventName ?? '');
+      setOperations(null);
+      setConfiguration(null);
+      setError(null);
+      setLastUpdatedAt(null);
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   useEffect(() => {
-    if (!contextHydrated || !eventId.trim()) return;
-    void refresh();
-  }, [contextHydrated]);
+    if (!organisationId.trim() || !eventId.trim()) return;
+    void refresh(organisationId, eventId);
+  }, [organisationId, eventId]);
 
-  async function refresh() {
-    const selectedEventId = eventId.trim();
-    if (!selectedEventId) {
-      setError('Enter an event ID.');
+  async function refresh(
+    selectedOrganisationId = organisationId,
+    selectedEventId = eventId,
+  ): Promise<void> {
+    const scopedOrganisationId = selectedOrganisationId.trim();
+    const scopedEventId = selectedEventId.trim();
+    if (!scopedOrganisationId || !scopedEventId) {
+      setError('Select an organisation and event from Event Control.');
       return;
     }
+
     setLoading(true);
     try {
       const requestHeaders: Record<string, string> = {
-        'x-actor-id': actorId,
-        'x-role': 'ADMIN',
-        ...(organisationId.trim() ? { 'x-organisation-id': organisationId.trim() } : {}),
+        'x-event-control-request': 'browser',
+        'x-organisation-id': scopedOrganisationId,
       };
       const operationsResponse = await fetch(
-        `${apiBase}/inventory/events/${encodeURIComponent(selectedEventId)}/operations`,
-        { cache: 'no-store', headers: requestHeaders },
+        `${apiBase}/inventory/events/${encodeURIComponent(scopedEventId)}/operations`,
+        {
+          cache: 'no-store',
+          credentials: 'include',
+          headers: requestHeaders,
+        },
       );
       if (!operationsResponse.ok) {
         throw new Error(`Cloud API returned ${operationsResponse.status}`);
@@ -126,50 +141,35 @@ export function InventoryOperationsClient() {
       const nextOperations = (await operationsResponse.json()) as Operations;
       setOperations(nextOperations);
 
-      let nextConfiguration: EventConfigurationView | null = null;
-      const selectedOrganisationId = organisationId.trim();
-      if (selectedOrganisationId) {
-        try {
-          const configurationResponse = await fetch(
-            `${apiBase}/organisations/${encodeURIComponent(selectedOrganisationId)}/configuration`,
-            {
-              cache: 'no-store',
-              headers: {
-                ...requestHeaders,
-                'content-type': 'application/json',
-              },
+      try {
+        const configurationResponse = await fetch(
+          `${apiBase}/organisations/${encodeURIComponent(scopedOrganisationId)}/configuration`,
+          {
+            cache: 'no-store',
+            credentials: 'include',
+            headers: {
+              ...requestHeaders,
+              'content-type': 'application/json',
             },
+          },
+        );
+        if (configurationResponse.ok) {
+          const nextConfiguration = (await configurationResponse.json()) as EventConfigurationView;
+          setConfiguration(nextConfiguration);
+          setOrganisationName(nextConfiguration.organisation.name);
+          const selectedEvent = nextConfiguration.events.find(
+            (candidate) => candidate.id === scopedEventId,
           );
-          if (configurationResponse.ok) {
-            nextConfiguration = (await configurationResponse.json()) as EventConfigurationView;
-            setConfiguration(nextConfiguration);
-            setOrganisationName(nextConfiguration.organisation.name);
-            const selectedEvent = nextConfiguration.events.find(
-              (candidate) => candidate.id === selectedEventId,
-            );
-            if (selectedEvent) setEventName(selectedEvent.name);
-          }
-        } catch {
-          // Inventory truth remains usable when optional configuration labels are unavailable.
+          if (selectedEvent) setEventName(selectedEvent.name);
         }
+      } catch {
+        // Inventory truth remains usable when optional configuration labels are unavailable.
       }
 
-      const selectedEventName =
-        nextConfiguration?.events.find((candidate) => candidate.id === selectedEventId)?.name ??
-        eventName;
-      writeEventControlContext({
-        ...(selectedOrganisationId ? { organisationId: selectedOrganisationId } : {}),
-        ...(nextConfiguration?.organisation.name
-          ? { organisationName: nextConfiguration.organisation.name }
-          : organisationName
-            ? { organisationName }
-            : {}),
-        eventId: selectedEventId,
-        ...(selectedEventName ? { eventName: selectedEventName } : {}),
-      });
       setLastUpdatedAt(Date.now());
       setError(null);
     } catch (failure) {
+      setOperations(null);
       setError(failure instanceof Error ? failure.message : 'Unable to load inventory operations');
     } finally {
       setLoading(false);
@@ -221,6 +221,8 @@ export function InventoryOperationsClient() {
       .join(' • ');
   }
 
+  const hasContext = Boolean(organisationId.trim() && eventId.trim());
+
   return (
     <section
       className="ec-operations-stack"
@@ -228,51 +230,19 @@ export function InventoryOperationsClient() {
       aria-busy={loading}
       aria-live="polite"
     >
-      {operations ? (
-        <details className="ec-context-switcher">
-          <summary>Change event context</summary>
-          <div
-            className="ec-context-loader ec-context-loader--embedded"
-            style={{ gridTemplateColumns: '1fr auto' }}
-          >
-            <input
-              value={eventId}
-              onChange={(event) => {
-                setEventId(event.target.value);
-                setEventName('');
-              }}
-              placeholder="Event ID"
-              aria-label="Event ID"
-            />
-            <button type="button" onClick={() => void refresh()} disabled={loading}>
-              {loading ? 'Loading…' : 'Load event'}
-            </button>
-          </div>
-        </details>
-      ) : (
-        <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
-          <input
-            value={eventId}
-            onChange={(event) => {
-              setEventId(event.target.value);
-              setEventName('');
-            }}
-            placeholder="Event ID"
-            aria-label="Event ID"
-          />
-          <button type="button" onClick={() => void refresh()} disabled={loading}>
-            {loading ? 'Loading…' : 'Load inventory'}
-          </button>
+      {!hasContext ? (
+        <div className="ec-callout">
+          <strong>Select an event above.</strong> Inventory operations only load for organisations
+          and events available to the signed-in operator.
         </div>
-      )}
+      ) : null}
 
       {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
 
-      {!operations && !error ? (
+      {hasContext && !operations && !error ? (
         <div className="ec-callout">
-          <strong>Start with the event.</strong> Active stock risks and transfers will appear before
-          the location-by-location stock view. If you already selected this event elsewhere in Event
-          Control, its context is carried into this screen for the current browser tab.
+          <strong>{loading ? 'Loading inventory…' : 'Inventory is ready to load.'}</strong> Active
+          stock risks and transfers appear before the location-by-location stock view.
         </div>
       ) : null}
 
