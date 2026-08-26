@@ -29,7 +29,9 @@ describe('Supabase Auth readiness diagnostics', () => {
       ServiceUnavailableException,
     );
     expect(
-      supabasePublishableKey({ SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_example_value' } as NodeJS.ProcessEnv),
+      supabasePublishableKey({
+        SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_example_value',
+      } as NodeJS.ProcessEnv),
     ).toBe('sb_publishable_example_value');
   });
 
