@@ -31,7 +31,8 @@ const eventLifecycle = [
   {
     href: '/readiness',
     title: 'Check pilot readiness',
-    description: 'Turn the selected event configuration into an explicit preflight before field testing.',
+    description:
+      'Turn the selected event configuration into an explicit preflight before field testing.',
     action: 'Run preflight',
   },
   {
