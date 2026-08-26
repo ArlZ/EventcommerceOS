@@ -3,7 +3,11 @@
 import type { FormEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import {
+  eventControlContextChangedEvent,
+  readEventControlContext,
+  writeEventControlContext,
+} from '../event-context';
 import { canEditEventConfiguration } from './event-configuration';
 import { priceToMinorUnits } from './pricing';
 
@@ -26,16 +30,15 @@ const formStyle: React.CSSProperties = {
 async function api<T>(
   path: string,
   method: Method,
-  actorId: string,
   organisationId?: string,
   body?: Json,
 ): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     method,
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      'x-actor-id': actorId,
-      'x-role': 'ADMIN',
+      'x-event-control-request': 'browser',
       ...(organisationId ? { 'x-organisation-id': organisationId } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -178,7 +181,6 @@ function ItemActions({
 }
 
 export function ConfigurationClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [productId, setProductId] = useState('');
@@ -192,16 +194,31 @@ export function ConfigurationClient() {
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.eventId) setEventId(context.eventId);
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setOrganisationId(context.organisationId ?? '');
+      setEventId(context.eventId ?? '');
+      setMenuId('');
+      setMenuItemId('');
+      setConfiguration(null);
+      setStatusTone('warning');
+      setStatus(
+        context.organisationId
+          ? 'Loading the selected organisation…'
+          : 'Select an organisation from Event Control.',
+      );
+      setContextHydrated(true);
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim()) return;
     void refresh(organisationId);
-  }, [contextHydrated]);
+  }, [contextHydrated, organisationId]);
 
   async function refresh(id = organisationId): Promise<void> {
     if (!id) return;
@@ -211,9 +228,7 @@ export function ConfigurationClient() {
     try {
       const view = await api<EventConfigurationView>(
         `/organisations/${id}/configuration`,
-        'GET',
-        actorId,
-        id,
+        'GET', id,
       );
       setConfiguration(view);
       const currentEvent = view.events.find(
@@ -264,13 +279,13 @@ export function ConfigurationClient() {
     field: 'name' | 'displayName' = 'name',
   ): Promise<void> {
     await run(async () => {
-      await api(path, 'PATCH', actorId, organisationId, { [field]: nextName });
+      await api(path, 'PATCH', organisationId, { [field]: nextName });
     }, 'Name updated');
   }
 
   async function archive(path: string): Promise<void> {
     await run(async () => {
-      await api(path, 'PATCH', actorId, organisationId, { lifecycle: 'ARCHIVED' });
+      await api(path, 'PATCH', organisationId, { lifecycle: 'ARCHIVED' });
     }, 'Item archived');
   }
 
@@ -280,7 +295,7 @@ export function ConfigurationClient() {
     setBusy(true);
     setStatus('Creating organisation…');
     try {
-      const created = await api<{ id: string }>('/organisations', 'POST', actorId, undefined, {
+      const created = await api<{ id: string }>('/organisations', 'POST', undefined, {
         name: form.get('name'),
       });
       setOrganisationId(created.id);
@@ -299,7 +314,7 @@ export function ConfigurationClient() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      const created = await api<{ id: string }>('/events', 'POST', actorId, organisationId, {
+      const created = await api<{ id: string }>('/events', 'POST', organisationId, {
         organisationId,
         name: form.get('name'),
         timezone: form.get('timezone'),
@@ -399,9 +414,8 @@ export function ConfigurationClient() {
             <div>
               <h2>Open an organisation</h2>
               <p>
-                Create a new pilot operator or load an existing organisation by its setup ID. When
-                Event Control already has an organisation selected, its setup loads automatically;
-                use the ID field below only to switch or retry.
+                Select an organisation through the authenticated Event Control context, or create a
+                new pilot operator if your account has platform administration rights.
               </p>
             </div>
           </div>
@@ -412,25 +426,7 @@ export function ConfigurationClient() {
                 Create organisation
               </ActionButton>
             </form>
-            <form
-              style={formStyle}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void refresh(organisationId.trim());
-              }}
-            >
-              <Input
-                value={organisationId}
-                onChange={(event) => setOrganisationId(event.target.value)}
-                placeholder="Existing organisation ID"
-                aria-label="Existing organisation ID"
-                required
-                disabled={busy}
-              />
-              <ActionButton type="submit" disabled={busy || !organisationId.trim()}>
-                {busy ? 'Loading…' : 'Load existing organisation'}
-              </ActionButton>
-            </form>
+
           </div>
         </section>
       ) : null}
@@ -578,9 +574,7 @@ export function ConfigurationClient() {
                     void run(async () => {
                       await api(
                         `/events/${eventId}/sales-locations`,
-                        'POST',
-                        actorId,
-                        organisationId,
+                        'POST', organisationId,
                         {
                           name: form.get('name'),
                           type: 'BAR',
@@ -625,9 +619,7 @@ export function ConfigurationClient() {
                     void run(async () => {
                       await api(
                         `/events/${eventId}/inventory-locations`,
-                        'POST',
-                        actorId,
-                        organisationId,
+                        'POST', organisationId,
                         { name: form.get('name'), type: form.get('type') },
                       );
                     }, 'Inventory location added');
@@ -684,9 +676,7 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       '/products',
-                      'POST',
-                      actorId,
-                      organisationId,
+                      'POST', organisationId,
                       {
                         organisationId,
                         name: form.get('name'),
@@ -713,9 +703,7 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/products/${productId}/skus`,
-                      'POST',
-                      actorId,
-                      organisationId,
+                      'POST', organisationId,
                       {
                         name: form.get('name'),
                         code: form.get('code'),
@@ -813,9 +801,7 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/events/${eventId}/menus`,
-                      'POST',
-                      actorId,
-                      organisationId,
+                      'POST', organisationId,
                       { name: form.get('name') },
                     );
                     setMenuId(created.id);
@@ -855,7 +841,7 @@ export function ConfigurationClient() {
                   event.preventDefault();
                   const form = new FormData(event.currentTarget);
                   void run(async () => {
-                    await api(`/menus/${menuId}/assignments`, 'POST', actorId, organisationId, {
+                    await api(`/menus/${menuId}/assignments`, 'POST', organisationId, {
                       salesLocationId: form.get('salesLocationId'),
                     });
                   }, 'Menu assigned to sales location');
@@ -925,9 +911,7 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/menus/${menuId}/items`,
-                      'POST',
-                      actorId,
-                      organisationId,
+                      'POST', organisationId,
                       { skuId, displayName: form.get('displayName'), sortOrder: 10 },
                     );
                     setMenuItemId(created.id);
@@ -973,7 +957,7 @@ export function ConfigurationClient() {
                     .toUpperCase();
                   const displayAmount = String(form.get('amount') ?? '').trim();
                   void run(async () => {
-                    await api(`/menu-items/${menuItemId}/prices`, 'PUT', actorId, organisationId, {
+                    await api(`/menu-items/${menuItemId}/prices`, 'PUT', organisationId, {
                       salesLocationId: salesLocationId || null,
                       amountMinor: priceToMinorUnits(displayAmount, currency),
                       currency,
