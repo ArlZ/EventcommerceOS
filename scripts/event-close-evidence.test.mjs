@@ -177,7 +177,10 @@ test('passes a clean exact-release close with resolved finance and inventory', (
   assert.equal(report.controlledPilotCloseSatisfied, true);
   assert.equal(report.inventoryCloseReconciliationSatisfied, true);
   assert.equal(report.liveMoneyApproved, false);
-  assert.equal(report.checks.every((item) => item.status === 'PASS'), true);
+  assert.equal(
+    report.checks.every((item) => item.status === 'PASS'),
+    true,
+  );
 });
 
 test('fails closed when a stored report no longer matches its immutable SHA-256', () => {
@@ -243,10 +246,7 @@ test('fails on sales-to-tender variance and missing cash declaration', () => {
     report.checks.find((item) => item.id === 'financial:sales-to-tender').status,
     'FAIL',
   );
-  assert.equal(
-    report.checks.find((item) => item.id === 'cash:scope-declarations').status,
-    'FAIL',
-  );
+  assert.equal(report.checks.find((item) => item.id === 'cash:scope-declarations').status, 'FAIL');
 });
 
 test('fails inventory gate on open transfer, critical alert, or unvalued non-zero variance', () => {
@@ -258,10 +258,7 @@ test('fails inventory gate on open transfer, critical alert, or unvalued non-zer
   variance.varianceQuantityBase = '-1';
   const report = verifyEventCloseEvidence(evidence, RELEASE);
   assert.equal(report.inventoryCloseReconciliationSatisfied, false);
-  assert.equal(
-    report.checks.find((item) => item.id === 'inventory:open-transfers').status,
-    'FAIL',
-  );
+  assert.equal(report.checks.find((item) => item.id === 'inventory:open-transfers').status, 'FAIL');
   assert.equal(
     report.checks.find((item) => item.id === 'inventory:critical-alerts').status,
     'FAIL',
