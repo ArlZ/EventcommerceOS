@@ -2,7 +2,7 @@
 
 import type { EventConfigurationView, EventRecord } from '@event-commerce/contracts';
 import type { FormEvent } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { readEventControlContext, writeEventControlContext } from '../event-context';
 import { canEditEventSchedule, validateEventSchedule } from './event-schedule';
 
@@ -24,7 +24,6 @@ const formStyle: React.CSSProperties = {
 async function api<T>(
   path: string,
   method: Method,
-  actorId: string,
   organisationId: string,
   body?: Json,
 ): Promise<T> {
@@ -32,10 +31,11 @@ async function api<T>(
     method,
     headers: {
       'content-type': 'application/json',
-      'x-actor-id': actorId,
-      'x-role': 'ADMIN',
+      'x-event-control-request': 'browser',
       'x-organisation-id': organisationId,
     },
+    credentials: 'include',
+    cache: 'no-store',
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
@@ -76,7 +76,6 @@ function durationLabel(startsAt: string, endsAt: string): string {
 }
 
 export function EventScheduleClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [configuration, setConfiguration] = useState<EventConfigurationView | null>(null);
   const [eventId, setEventId] = useState('');
@@ -155,7 +154,6 @@ export function EventScheduleClient() {
       const view = await api<EventConfigurationView>(
         `/organisations/${nextOrganisationId}/configuration`,
         'GET',
-        actorId,
         nextOrganisationId,
       );
       setOrganisationId(nextOrganisationId);
@@ -217,13 +215,7 @@ export function EventScheduleClient() {
     setStatusTone('warning');
     try {
       const schedule = validateEventSchedule({ timezone, startsAt, endsAt });
-      await api<EventRecord>(
-        `/events/${selectedEvent.id}`,
-        'PATCH',
-        actorId,
-        organisationId,
-        schedule,
-      );
+      await api<EventRecord>(`/events/${selectedEvent.id}`, 'PATCH', organisationId, schedule);
       await loadOrganisation(organisationId);
       setStatus('Event schedule updated through the Cloud API.');
       setStatusTone('success');
