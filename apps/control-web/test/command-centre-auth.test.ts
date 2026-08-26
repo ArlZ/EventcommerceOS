@@ -33,7 +33,7 @@ describe('command centre browser authentication', () => {
   it('does not send an assignee chosen by the browser', async () => {
     const source = await readFile(sourceUrl, 'utf8');
 
-    expect(source).toContain("body: JSON.stringify({ action })");
+    expect(source).toContain('body: JSON.stringify({ action })');
     expect(source).not.toContain('assignedActorId: actorId');
   });
 });
