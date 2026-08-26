@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { OperatorSessionControl, type OperatorSessionProfile } from './operator-session-control';
+import { isPublicControlRoute } from './public-route';
 
 type IconName = 'home' | 'pulse' | 'box' | 'device' | 'setup' | 'calendar' | 'close' | 'search';
 
@@ -152,7 +153,7 @@ function profileInitials(profile: OperatorSessionProfile | null): string {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const publicRoute = pathname === '/sign-in';
+  const publicRoute = isPublicControlRoute(pathname);
   const [profile, setProfile] = useState<OperatorSessionProfile | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authCheckVersion, setAuthCheckVersion] = useState(0);
@@ -198,6 +199,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       method: 'GET',
       credentials: 'include',
       headers: { 'x-event-control-request': 'browser' },
+      signal: AbortSignal.timeout(10_000),
     })
       .then(async (response) => {
         if (response.status === 401) {
