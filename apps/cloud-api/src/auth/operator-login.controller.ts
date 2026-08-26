@@ -8,9 +8,11 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { OperatorLoginProfile } from './operator-login.service';
-import { OperatorLoginService } from './operator-login.service';
 import { OperatorAuthService, type HeadersRecord } from './operator-auth.service';
+import {
+  OperatorContextService,
+  type OperatorControlContext,
+} from './operator-context.service';
 import {
   clearOperatorLoginCookie,
   clearOperatorSessionCookie,
@@ -19,6 +21,8 @@ import {
   operatorLoginCookie,
   operatorSessionCookie,
 } from './operator-cookie';
+import type { OperatorLoginProfile } from './operator-login.service';
+import { OperatorLoginService } from './operator-login.service';
 
 interface CookieResponse {
   setHeader(name: string, value: string | string[]): void;
@@ -29,6 +33,7 @@ export class OperatorLoginController {
   constructor(
     @Inject(OperatorLoginService) private readonly login: OperatorLoginService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
+    @Inject(OperatorContextService) private readonly operatorContext: OperatorContextService,
   ) {}
 
   @Post('login/password')
@@ -67,6 +72,11 @@ export class OperatorLoginController {
   async session(@Headers() headers: HeadersRecord): Promise<{ profile: OperatorLoginProfile }> {
     const identity = await this.operators.authenticate(headers);
     return { profile: await this.login.profile(identity.actorId) };
+  }
+
+  @Get('context')
+  context(@Headers() headers: HeadersRecord): Promise<OperatorControlContext> {
+    return this.operatorContext.context(headers);
   }
 
   @Post('logout')
