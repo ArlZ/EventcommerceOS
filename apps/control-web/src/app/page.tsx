@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { OperatorContextSwitcher } from './operator-context-switcher';
 
 const liveOperations = [
   {
@@ -59,6 +60,20 @@ export default function HomePage() {
           Controlled pilot
         </span>
       </header>
+
+      <section className="ec-panel ec-panel--priority" aria-labelledby="event-context-heading">
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Current operating context</p>
+            <h2 id="event-context-heading">Choose the event you are operating</h2>
+            <p>
+              Event Control only offers organisations and events available to your authenticated
+              operator account. The selection follows you through this browser tab.
+            </p>
+          </div>
+        </div>
+        <OperatorContextSwitcher />
+      </section>
 
       <section className="ec-section" aria-labelledby="live-operations-heading">
         <p className="ec-eyebrow">During trading</p>
