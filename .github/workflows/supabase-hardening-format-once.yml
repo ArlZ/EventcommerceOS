@@ -1,0 +1,51 @@
+name: Supabase hardening format once
+
+on:
+  push:
+    branches:
+      - agent/supabase-data-api-least-privilege
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: agent/supabase-data-api-least-privilege
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Apply exact Prettier output
+        run: |
+          pnpm exec prettier --write \
+            apps/cloud-api/src/system/migration-readiness.ts \
+            apps/cloud-api/src/system/health.controller.ts \
+            apps/cloud-api/test/migration-readiness.test.ts \
+            apps/cloud-api/test/health.e2e-spec.ts \
+            scripts/supabase-data-api-hardening.test.mjs
+          if git diff --quiet -- \
+            apps/cloud-api/src/system/migration-readiness.ts \
+            apps/cloud-api/src/system/health.controller.ts \
+            apps/cloud-api/test/migration-readiness.test.ts \
+            apps/cloud-api/test/health.e2e-spec.ts \
+            scripts/supabase-data-api-hardening.test.mjs; then
+            echo 'Already formatted.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            apps/cloud-api/src/system/migration-readiness.ts \
+            apps/cloud-api/src/system/health.controller.ts \
+            apps/cloud-api/test/migration-readiness.test.ts \
+            apps/cloud-api/test/health.e2e-spec.ts \
+            scripts/supabase-data-api-hardening.test.mjs
+          git commit -m 'Format database migration readiness guard'
+          git push origin HEAD:agent/supabase-data-api-least-privilege
