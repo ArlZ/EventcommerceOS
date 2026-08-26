@@ -33,7 +33,7 @@ BEGIN
     );
 
     -- Stop future application objects created by the migration owner from being
-    -- auto-exposed through Supabase's default privileges.
+    -- auto-exposed through Supabase's schema-specific default privileges.
     EXECUTE format(
       'ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM %I',
       migration_owner,
@@ -53,7 +53,8 @@ BEGIN
 END
 $$;
 
--- PostgreSQL grants EXECUTE on new functions to PUBLIC by default. Application
--- helper/trigger functions are not public RPC endpoints, so remove that path too.
+-- PostgreSQL grants EXECUTE on new functions to PUBLIC as a global built-in
+-- default. A schema-local default REVOKE cannot cancel a global default grant,
+-- so the future-function PUBLIC revoke deliberately has no IN SCHEMA clause.
 REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
