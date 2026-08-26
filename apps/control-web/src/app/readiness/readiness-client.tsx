@@ -131,10 +131,18 @@ export function ReadinessClient() {
               >
                 <div>
                   <div
-                    style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                    }}
                   >
                     <strong>{item.label}</strong>
-                    <span className="ec-status-pill" data-tone={item.complete ? 'success' : 'warning'}>
+                    <span
+                      className="ec-status-pill"
+                      data-tone={item.complete ? 'success' : 'warning'}
+                    >
                       {item.complete ? 'Ready' : 'Action needed'}
                     </span>
                   </div>
