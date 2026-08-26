@@ -13,7 +13,7 @@
     "start": "node server.js",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test && node --test scripts/admin-db-target.test.mjs scripts/android-device-evidence.test.mjs scripts/abuse-field-evidence.test.mjs scripts/cloud-convergence-evidence.test.mjs scripts/durability-evidence.test.mjs scripts/edge-field-diagnostics.test.mjs scripts/event-close-evidence.test.mjs scripts/migration-integrity.test.mjs scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs scripts/runtime-monitor.test.mjs scripts/aws-pilot-infra.test.mjs scripts/render-pilot-infra.test.mjs scripts/hostinger-pilot-infra.test.mjs scripts/hostinger-managed-webapp.test.mjs scripts/release-identity.test.mjs",
+    "test": "pnpm -r --if-present test && node --test scripts/admin-db-target.test.mjs scripts/android-device-evidence.test.mjs scripts/abuse-field-evidence.test.mjs scripts/cloud-convergence-evidence.test.mjs scripts/durability-evidence.test.mjs scripts/edge-field-diagnostics.test.mjs scripts/event-close-evidence.test.mjs scripts/migration-integrity.test.mjs scripts/pilot-evidence.test.mjs scripts/pilot-preflight.test.mjs scripts/runtime-monitor.test.mjs scripts/supabase-data-api-hardening.test.mjs scripts/aws-pilot-infra.test.mjs scripts/render-pilot-infra.test.mjs scripts/hostinger-pilot-infra.test.mjs scripts/hostinger-managed-webapp.test.mjs scripts/release-identity.test.mjs",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx}\" \"scripts/*.mjs\" eslint.config.mjs",
     "arch:check": "node scripts/check-architecture.mjs",
     "security:sca": "node scripts/sca-evidence.mjs",

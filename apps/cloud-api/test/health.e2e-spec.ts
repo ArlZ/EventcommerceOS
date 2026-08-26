@@ -29,6 +29,24 @@ describe('cloud-api health', () => {
     }
   });
 
+  it('returns 503 when the database migration ledger is stale', async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(DatabaseService)
+      .useValue({
+        query: async () => [],
+      })
+      .compile();
+    const app = moduleRef.createNestApplication();
+
+    try {
+      await app.init();
+      const response = await request(app.getHttpServer()).get('/health').expect(503);
+      expect(response.body.message).toBe('service not ready');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('returns 503 without leaking database errors when the database is unavailable', async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(DatabaseService)
