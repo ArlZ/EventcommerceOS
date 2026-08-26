@@ -86,8 +86,7 @@ export function OperatorContextSwitcher() {
   }, []);
 
   const selectedOrganisation = useMemo(
-    () =>
-      context?.organisations.find((organisation) => organisation.id === organisationId) ?? null,
+    () => context?.organisations.find((organisation) => organisation.id === organisationId) ?? null,
     [context, organisationId],
   );
 
