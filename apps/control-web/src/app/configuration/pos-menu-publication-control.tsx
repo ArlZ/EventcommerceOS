@@ -36,7 +36,10 @@ export function PosMenuPublicationControl() {
 
   const loadStatus = useCallback(
     async (selectedOrganisationId: string, selectedEventId: string, version: number) => {
-      const headers = { 'x-organisation-id': selectedOrganisationId };
+      const headers = {
+        'x-event-control-request': 'browser',
+        'x-organisation-id': selectedOrganisationId,
+      };
       const [configurationResponse, statusResponse] = await Promise.all([
         fetch(`${apiBase}/organisations/${selectedOrganisationId}/configuration`, {
           credentials: 'include',
@@ -123,6 +126,7 @@ export function PosMenuPublicationControl() {
         credentials: 'include',
         headers: {
           'content-type': 'application/json',
+          'x-event-control-request': 'browser',
           'x-organisation-id': selectedOrganisationId,
         },
         body: JSON.stringify({ lifecycle: 'ACTIVE' }),
@@ -158,6 +162,7 @@ export function PosMenuPublicationControl() {
           credentials: 'include',
           headers: {
             'content-type': 'application/json',
+            'x-event-control-request': 'browser',
             'x-organisation-id': publicationOrganisationId,
           },
         },
