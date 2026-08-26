@@ -39,9 +39,10 @@ test('future public application objects are opt-in for Supabase Data API roles',
   );
 });
 
-test('public function execution is denied now and by default', () => {
+test('public function execution is denied now and as a global future default', () => {
   assert.match(sql, /revoke execute on all functions in schema public from public/);
-  assert.match(
+  assert.match(sql, /alter default privileges revoke execute on functions from public/);
+  assert.doesNotMatch(
     sql,
     /alter default privileges in schema public revoke execute on functions from public/,
   );
