@@ -52,3 +52,11 @@ export function runManagedHostingerMigrations(options: ManagedMigrationOptions =
     throw new Error(`Managed Hostinger Cloud API migrations exited with status ${result.status}`);
   }
 }
+
+export async function runManagedCloudApiStartup(
+  bootstrap: () => Promise<void>,
+  options: ManagedMigrationOptions = {},
+): Promise<void> {
+  runManagedHostingerMigrations(options);
+  await bootstrap();
+}
