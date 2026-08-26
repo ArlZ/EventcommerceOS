@@ -28,7 +28,13 @@ RUN pnpm --filter @event-commerce/cloud-api --prod deploy --legacy /out/cloud-ap
 RUN pnpm --filter @event-commerce/event-edge --prod deploy --legacy /out/event-edge
 
 FROM ${NODE_IMAGE} AS runtime-base
-RUN rm -rf \
+# The pinned Node image predates Alpine's fix for CVE-2026-14456. Keep the
+# reproducible Node base while requiring the stable v3.24 OpenSSL libraries at
+# or above the vendor-fixed version before any runtime image can be produced.
+RUN apk add --no-cache --upgrade \
+  'libcrypto3>=3.5.8-r0' \
+  'libssl3>=3.5.8-r0' \
+  && rm -rf \
   /usr/local/lib/node_modules/npm \
   /usr/local/lib/node_modules/corepack \
   /usr/local/bin/npm \
