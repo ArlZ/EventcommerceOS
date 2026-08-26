@@ -4,6 +4,7 @@ import { DatabaseModule } from '../database/database.module';
 import { AbuseProtectionModule } from '../security/abuse-protection.module';
 import { GlobalSecurityGuard } from '../security/global-security.guard';
 import { OperatorAuthService } from './operator-auth.service';
+import { OperatorContextService } from './operator-context.service';
 import { OperatorIdentityGuard } from './operator-identity.guard';
 import { OperatorLoginController } from './operator-login.controller';
 import { OperatorLoginService } from './operator-login.service';
@@ -15,6 +16,7 @@ import { SupabaseAuthTransport } from './supabase-auth.transport';
   controllers: [OperatorLoginController],
   providers: [
     OperatorAuthService,
+    OperatorContextService,
     OperatorIdentityGuard,
     OperatorLoginService,
     SupabaseAuthTransport,
