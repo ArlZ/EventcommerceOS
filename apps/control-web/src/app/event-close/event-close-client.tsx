@@ -302,8 +302,7 @@ export function EventCloseClient() {
             <p className="ec-eyebrow">Event context</p>
             <h2>Select the event being closed</h2>
             <p>
-              Close controls only load organisations and events available to the signed-in
-              operator.
+              Close controls only load organisations and events available to the signed-in operator.
             </p>
           </div>
         </div>
