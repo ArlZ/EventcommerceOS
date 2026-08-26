@@ -9,7 +9,7 @@ import type {
   CommandCentreSnapshot,
 } from '@event-commerce/contracts';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   COMMAND_CENTRE_POLL_INTERVAL_MS,
   nextRealtimeMode,
@@ -24,26 +24,25 @@ const lifecycleSteps = ['DRAFT', 'CONFIGURED', 'READY', 'LIVE', 'CLOSING', 'RECO
 type ActiveEvent = { organisationId: string; eventId: string };
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 
-function requestHeaders(actorId: string, organisationId: string): Record<string, string> {
+function requestHeaders(organisationId: string): Record<string, string> {
   return {
     'content-type': 'application/json',
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
+    'x-event-control-request': 'browser',
     'x-organisation-id': organisationId,
   };
 }
 
 async function commandCentreRequest<T>(
   path: string,
-  actorId: string,
   organisationId: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(requestHeaders(actorId, organisationId));
+  const headers = new Headers(requestHeaders(organisationId));
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     headers,
+    credentials: 'include',
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
@@ -378,7 +377,6 @@ async function consumeSse(
 }
 
 export function CommandCentreClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [active, setActive] = useState<ActiveEvent | null>(null);
@@ -390,28 +388,24 @@ export function CommandCentreClient() {
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const fetchSnapshot = useCallback(
-    async (target: ActiveEvent): Promise<void> => {
-      const next = await commandCentreRequest<CommandCentreSnapshot>(
-        `/command-centre/events/${encodeURIComponent(target.eventId)}`,
-        actorId,
-        target.organisationId,
-      );
-      setSnapshot(next);
-      const currentContext = readEventControlContext();
-      writeEventControlContext({
-        organisationId: target.organisationId,
-        organisationName:
-          currentContext.organisationId === target.organisationId
-            ? (currentContext.organisationName ?? null)
-            : null,
-        eventId: target.eventId,
-        eventName: next.event.name,
-      });
-      setError(null);
-    },
-    [actorId],
-  );
+  const fetchSnapshot = useCallback(async (target: ActiveEvent): Promise<void> => {
+    const next = await commandCentreRequest<CommandCentreSnapshot>(
+      `/command-centre/events/${encodeURIComponent(target.eventId)}`,
+      target.organisationId,
+    );
+    setSnapshot(next);
+    const currentContext = readEventControlContext();
+    writeEventControlContext({
+      organisationId: target.organisationId,
+      organisationName:
+        currentContext.organisationId === target.organisationId
+          ? (currentContext.organisationName ?? null)
+          : null,
+      eventId: target.eventId,
+      eventName: next.event.name,
+    });
+    setError(null);
+  }, []);
 
   async function load(): Promise<void> {
     const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
@@ -457,7 +451,8 @@ export function CommandCentreClient() {
         const response = await fetch(
           `${apiBase}/command-centre/events/${encodeURIComponent(active.eventId)}/stream`,
           {
-            headers: requestHeaders(actorId, active.organisationId),
+            headers: requestHeaders(active.organisationId),
+            credentials: 'include',
             cache: 'no-store',
             signal: controller.signal,
           },
@@ -476,7 +471,7 @@ export function CommandCentreClient() {
       }
     })();
     return () => controller.abort();
-  }, [active, actorId, fetchSnapshot]);
+  }, [active, fetchSnapshot]);
 
   useEffect(() => {
     if (!active || mode !== 'POLLING') return;
@@ -498,14 +493,10 @@ export function CommandCentreClient() {
     try {
       await commandCentreRequest<CommandCentreInventoryAlertActionView>(
         `/command-centre/events/${encodeURIComponent(active.eventId)}/inventory-alerts/${encodeURIComponent(alertId)}/actions`,
-        actorId,
         active.organisationId,
         {
           method: 'POST',
-          body: JSON.stringify({
-            action,
-            ...(action === 'ASSIGN' ? { assignedActorId: actorId } : {}),
-          }),
+          body: JSON.stringify({ action }),
         },
       );
       await fetchSnapshot(active);
