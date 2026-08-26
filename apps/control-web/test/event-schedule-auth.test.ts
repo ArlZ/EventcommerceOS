@@ -22,7 +22,10 @@ describe('event schedule browser authentication', () => {
   });
 
   it('follows the authenticated Event Control context instead of accepting raw organisation IDs', async () => {
-    const [source, page] = await Promise.all([readFile(sourceUrl, 'utf8'), readFile(pageUrl, 'utf8')]);
+    const [source, page] = await Promise.all([
+      readFile(sourceUrl, 'utf8'),
+      readFile(pageUrl, 'utf8'),
+    ]);
 
     expect(source).toContain('eventControlContextChangedEvent');
     expect(source).toContain('readEventControlContext()');
