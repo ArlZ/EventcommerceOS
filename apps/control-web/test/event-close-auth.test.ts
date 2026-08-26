@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-const sourceUrl = new URL(
-  '../src/app/event-close/event-close-client.tsx',
-  import.meta.url,
-);
+const sourceUrl = new URL('../src/app/event-close/event-close-client.tsx', import.meta.url);
 
 describe('event close browser authentication', () => {
   it('uses the operator cookie session for close review, actions and exports', async () => {
