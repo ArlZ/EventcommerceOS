@@ -1,0 +1,29 @@
+name: Disposable migration ledger probe
+
+on:
+  push:
+    branches:
+      - agent/hostinger-cloud-migrate-before-bootstrap
+
+permissions:
+  contents: read
+
+jobs:
+  ledger-probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Emit exact migration ledger
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { readdirSync, readFileSync } from 'node:fs';
+          const dir = 'apps/cloud-api/migrations';
+          const rows = readdirSync(dir).filter((name) => name.endsWith('.sql')).sort().map((filename) => ({
+            filename,
+            checksum_sha256: createHash('sha256').update(readFileSync(`${dir}/${filename}`, 'utf8')).digest('hex'),
+          }));
+          console.log(JSON.stringify(rows));
+          NODE
