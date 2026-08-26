@@ -12,7 +12,6 @@ const organisationId = '11111111-1111-4111-8111-111111111111';
 const otherOrganisationId = '11111111-1111-4111-8111-222222222222';
 const eventId = '22222222-2222-4222-8222-222222222222';
 const actorId = '33333333-3333-4333-8333-333333333333';
-const assignedActorId = '44444444-4444-4444-8444-444444444444';
 const salesLocationId = '55555555-5555-4555-8555-555555555555';
 const inventoryLocationId = '66666666-6666-4666-8666-666666666666';
 const productId = '77777777-7777-4777-8777-777777777777';
@@ -197,7 +196,15 @@ describeIntegration('live event command centre', () => {
       .expect(403);
   });
 
-  it('audits acknowledge and assignment while Edge RESOLVED remains authoritative', async () => {
+  it('rejects caller-controlled alert assignees', async () => {
+    await request(app.getHttpServer())
+      .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
+      .set(adminHeaders(organisationId))
+      .send({ action: 'ASSIGN', assignedActorId: '44444444-4444-4444-8444-444444444444' })
+      .expect(400);
+  });
+
+  it('audits acknowledge and self-assignment while Edge RESOLVED remains authoritative', async () => {
     const acknowledge = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
       .set(adminHeaders(organisationId))
@@ -212,12 +219,13 @@ describeIntegration('live event command centre', () => {
     const assign = await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
       .set(adminHeaders(organisationId))
-      .send({ action: 'ASSIGN', assignedActorId })
+      .send({ action: 'ASSIGN' })
       .expect(201);
     expect(assign.body).toMatchObject({
       previousState: 'ACKNOWLEDGED',
       resultingState: 'ASSIGNED',
-      assignedActorId,
+      actorId,
+      assignedActorId: actorId,
     });
 
     const active = await request(app.getHttpServer())
@@ -226,7 +234,7 @@ describeIntegration('live event command centre', () => {
       .expect(200);
     expect(active.body.inventory.risks[0]).toMatchObject({
       state: 'ASSIGNED',
-      assignedActorId,
+      assignedActorId: actorId,
     });
 
     const audit = await database.query<{ count: string }>(
