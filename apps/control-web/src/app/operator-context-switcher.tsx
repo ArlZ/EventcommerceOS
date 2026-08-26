@@ -56,7 +56,9 @@ export function OperatorContextSwitcher() {
         );
         const fallbackOrganisation = storedOrganisation ?? payload.organisations[0];
         if (!fallbackOrganisation) return;
-        const storedEvent = fallbackOrganisation.events.find((event) => event.id === selected.eventId);
+        const storedEvent = fallbackOrganisation.events.find(
+          (event) => event.id === selected.eventId,
+        );
         const fallbackEvent = storedEvent ?? fallbackOrganisation.events[0];
         setOrganisationId(fallbackOrganisation.id);
         setEventId(fallbackEvent?.id ?? '');
@@ -84,7 +86,8 @@ export function OperatorContextSwitcher() {
   }, []);
 
   const selectedOrganisation = useMemo(
-    () => context?.organisations.find((organisation) => organisation.id === organisationId) ?? null,
+    () =>
+      context?.organisations.find((organisation) => organisation.id === organisationId) ?? null,
     [context, organisationId],
   );
 
@@ -95,7 +98,10 @@ export function OperatorContextSwitcher() {
   }
 
   return (
-    <div className="ec-context-loader ec-context-loader--embedded" style={{ gridTemplateColumns: 'minmax(150px, 1fr) minmax(170px, 1fr)' }}>
+    <div
+      className="ec-context-loader ec-context-loader--embedded"
+      style={{ gridTemplateColumns: 'minmax(150px, 1fr) minmax(170px, 1fr)' }}
+    >
       <select
         aria-label="Organisation"
         value={organisationId}
