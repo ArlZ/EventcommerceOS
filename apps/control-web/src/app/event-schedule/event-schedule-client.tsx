@@ -3,7 +3,11 @@
 import type { EventConfigurationView, EventRecord } from '@event-commerce/contracts';
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import {
+  eventControlContextChangedEvent,
+  readEventControlContext,
+  writeEventControlContext,
+} from '../event-context';
 import { canEditEventSchedule, validateEventSchedule } from './event-schedule';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -83,24 +87,36 @@ export function EventScheduleClient() {
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [busy, setBusy] = useState(false);
-  const [contextHydrated, setContextHydrated] = useState(false);
-  const [status, setStatus] = useState('Load an organisation to review its event schedule.');
+  const [status, setStatus] = useState(
+    'Select an event from the authenticated Event Control context.',
+  );
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.eventId) setEventId(context.eventId);
-    if (context.organisationName) {
-      setStatus(`Loading ${context.organisationName} schedules…`);
-    }
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      const nextOrganisationId = context.organisationId ?? '';
+      setOrganisationId(nextOrganisationId);
+      setEventId(context.eventId ?? '');
+      if (!nextOrganisationId) {
+        setConfiguration(null);
+        setStatus('Select an organisation and event above to review its schedule.');
+        setStatusTone('warning');
+      } else if (context.organisationName) {
+        setStatus(`Loading ${context.organisationName} schedules…`);
+        setStatusTone('warning');
+      }
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   useEffect(() => {
-    if (!contextHydrated || !organisationId.trim()) return;
+    if (!organisationId.trim()) return;
     void loadOrganisation(organisationId);
-  }, [contextHydrated]);
+  }, [organisationId]);
 
   const activeEvents =
     configuration?.events.filter((event) => event.lifecycle !== 'ARCHIVED') ?? [];
@@ -144,7 +160,7 @@ export function EventScheduleClient() {
     setStatusTone('success');
   }
 
-  async function loadOrganisation(id = organisationId): Promise<void> {
+  async function loadOrganisation(id: string): Promise<void> {
     const nextOrganisationId = id.trim();
     if (!nextOrganisationId) return;
     setBusy(true);
@@ -156,10 +172,12 @@ export function EventScheduleClient() {
         'GET',
         nextOrganisationId,
       );
-      setOrganisationId(nextOrganisationId);
       setConfiguration(view);
+      const context = readEventControlContext();
+      const preferredEventId =
+        context.organisationId === nextOrganisationId ? context.eventId : null;
       const previous = view.events.find(
-        (event) => event.id === eventId && event.lifecycle !== 'ARCHIVED',
+        (event) => event.id === preferredEventId && event.lifecycle !== 'ARCHIVED',
       );
       const nextEvent =
         previous ??
@@ -171,12 +189,14 @@ export function EventScheduleClient() {
         setTimezone(nextEvent.timezone);
         setStartsAt(nextEvent.startsAt);
         setEndsAt(nextEvent.endsAt);
-        writeEventControlContext({
-          organisationId: nextOrganisationId,
-          organisationName: view.organisation.name,
-          eventId: nextEvent.id,
-          eventName: nextEvent.name,
-        });
+        if (preferredEventId !== nextEvent.id) {
+          writeEventControlContext({
+            organisationId: nextOrganisationId,
+            organisationName: view.organisation.name,
+            eventId: nextEvent.id,
+            eventName: nextEvent.name,
+          });
+        }
       } else {
         selectEvent(null);
         writeEventControlContext({
@@ -189,6 +209,7 @@ export function EventScheduleClient() {
       setStatus(`Loaded ${view.organisation.name}.`);
       setStatusTone('success');
     } catch (error) {
+      setConfiguration(null);
       setStatus(error instanceof Error ? error.message : 'Unable to load event schedules');
       setStatusTone('danger');
     } finally {
@@ -231,74 +252,6 @@ export function EventScheduleClient() {
       <section className={`ec-banner ec-banner--${statusTone}`} aria-live="polite">
         <strong>{busy ? 'Working…' : 'Schedule status'}</strong> • {status}
       </section>
-
-      {configuration ? (
-        <details className="ec-context-switcher">
-          <summary>Change organisation</summary>
-          <form
-            className="ec-context-loader ec-context-loader--embedded"
-            style={{ gridTemplateColumns: '1fr auto' }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void loadOrganisation();
-            }}
-          >
-            <input
-              value={organisationId}
-              onChange={(event) => setOrganisationId(event.target.value)}
-              placeholder="Organisation ID"
-              aria-label="Organisation ID"
-              required
-              disabled={busy}
-              style={fieldStyle}
-            />
-            <button
-              type="submit"
-              disabled={busy || !organisationId.trim()}
-              style={{ padding: '9px 12px' }}
-            >
-              Load organisation
-            </button>
-          </form>
-        </details>
-      ) : (
-        <section className="ec-panel">
-          <div className="ec-panel-heading">
-            <div>
-              <p className="ec-eyebrow">Organisation</p>
-              <h2>Load event schedules</h2>
-              <p>
-                The organisation selected elsewhere in Event Control loads automatically. Use the
-                setup ID below only when you need to switch organisation or retry a failed load.
-              </p>
-            </div>
-          </div>
-          <form
-            style={formStyle}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void loadOrganisation();
-            }}
-          >
-            <input
-              value={organisationId}
-              onChange={(event) => setOrganisationId(event.target.value)}
-              placeholder="Organisation ID"
-              aria-label="Organisation ID"
-              required
-              disabled={busy}
-              style={fieldStyle}
-            />
-            <button
-              type="submit"
-              disabled={busy || !organisationId.trim()}
-              style={{ padding: '9px 12px' }}
-            >
-              Load organisation
-            </button>
-          </form>
-        </section>
-      )}
 
       {configuration ? (
         <section className="ec-panel">
