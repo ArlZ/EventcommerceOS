@@ -23,11 +23,16 @@ function executeMigration(
   appRoot: string,
   env: NodeJS.ProcessEnv,
 ): MigrationExecutionResult {
-  return spawnSync(process.execPath, [migrationScript], {
+  const result = spawnSync(process.execPath, [migrationScript], {
     cwd: appRoot,
     env,
     stdio: 'inherit',
   });
+
+  return {
+    status: result.status,
+    ...(result.error === undefined ? {} : { error: result.error }),
+  };
 }
 
 export function isManagedHostingerCloudApi(env: NodeJS.ProcessEnv = process.env): boolean {
