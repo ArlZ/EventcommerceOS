@@ -16,7 +16,10 @@ describe('managed Hostinger migration preflight', () => {
   it('runs the repository migration script before managed Cloud startup', () => {
     const execute = vi.fn(() => ({ status: 0 }));
     const appRoot = resolve('/workspace', 'apps', 'cloud-api');
-    const env = { HOSTINGER_APP_TARGET: 'cloud-api', DATABASE_URL: 'postgresql://example.invalid/db' };
+    const env = {
+      HOSTINGER_APP_TARGET: 'cloud-api',
+      DATABASE_URL: 'postgresql://example.invalid/db',
+    };
 
     runManagedHostingerMigrations({ env, appRoot, execute });
 
