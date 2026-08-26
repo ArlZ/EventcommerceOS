@@ -209,15 +209,22 @@ describeIntegration('live event command centre', () => {
       resultingState: 'ACKNOWLEDGED',
     });
 
-    const assign = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
       .set(adminHeaders(organisationId))
       .send({ action: 'ASSIGN', assignedActorId })
+      .expect(400);
+
+    const assign = await request(app.getHttpServer())
+      .post(`/command-centre/events/${eventId}/inventory-alerts/alert-1/actions`)
+      .set(adminHeaders(organisationId))
+      .send({ action: 'ASSIGN' })
       .expect(201);
     expect(assign.body).toMatchObject({
       previousState: 'ACKNOWLEDGED',
       resultingState: 'ASSIGNED',
-      assignedActorId,
+      assignedActorId: actorId,
+      actorId,
     });
 
     const active = await request(app.getHttpServer())
@@ -226,7 +233,7 @@ describeIntegration('live event command centre', () => {
       .expect(200);
     expect(active.body.inventory.risks[0]).toMatchObject({
       state: 'ASSIGNED',
-      assignedActorId,
+      assignedActorId: actorId,
     });
 
     const audit = await database.query<{ count: string }>(
