@@ -215,12 +215,7 @@ export function EventScheduleClient() {
     setStatusTone('warning');
     try {
       const schedule = validateEventSchedule({ timezone, startsAt, endsAt });
-      await api<EventRecord>(
-        `/events/${selectedEvent.id}`,
-        'PATCH',
-        organisationId,
-        schedule,
-      );
+      await api<EventRecord>(`/events/${selectedEvent.id}`, 'PATCH', organisationId, schedule);
       await loadOrganisation(organisationId);
       setStatus('Event schedule updated through the Cloud API.');
       setStatusTone('success');
