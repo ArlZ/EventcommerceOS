@@ -16,10 +16,7 @@ import {
   snapshotIsStale,
   type CommandCentreRealtimeMode,
 } from './command-centre-state';
-import {
-  eventControlContextChangedEvent,
-  readEventControlContext,
-} from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
 import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -560,7 +557,8 @@ export function CommandCentreClient() {
             <p className="ec-eyebrow">Event context</p>
             <h2>Select the live event</h2>
             <p>
-              Command Centre only loads organisations and events available to the signed-in operator.
+              Command Centre only loads organisations and events available to the signed-in
+              operator.
             </p>
           </div>
         </div>
