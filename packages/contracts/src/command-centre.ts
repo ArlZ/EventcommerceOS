@@ -158,7 +158,6 @@ export type CommandCentreInventoryAlertAction = 'ACKNOWLEDGE' | 'ASSIGN';
 
 export interface CommandCentreInventoryAlertActionRequest {
   action: CommandCentreInventoryAlertAction;
-  assignedActorId?: string;
 }
 
 export interface CommandCentreInventoryAlertActionView {
