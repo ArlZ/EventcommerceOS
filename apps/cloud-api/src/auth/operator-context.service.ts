@@ -1,7 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
-import { OperatorAuthService, type HeadersRecord, type OperatorOrganisationRole } from './operator-auth.service';
+import {
+  OperatorAuthService,
+  type HeadersRecord,
+  type OperatorOrganisationRole,
+} from './operator-auth.service';
 
 type EventLifecycle = 'DRAFT' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
 
