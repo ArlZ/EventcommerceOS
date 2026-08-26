@@ -1,3 +1,4 @@
+import { OperatorContextSwitcher } from '../operator-context-switcher';
 import { WorkflowRail } from '../workflow-ui';
 import { InventoryOperationsClient } from './inventory-operations-client';
 
@@ -28,6 +29,19 @@ export default function InventoryPage() {
         <span className="ec-status-pill">Read-only guidance</span>
       </header>
       <WorkflowRail steps={workflow} />
+      <section className="ec-panel" style={{ marginTop: 18 }}>
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Event context</p>
+            <h2>Select the event being monitored</h2>
+            <p>
+              Inventory is scoped to organisations and events available to your signed-in operator
+              account.
+            </p>
+          </div>
+        </div>
+        <OperatorContextSwitcher />
+      </section>
       <div className="ec-callout">
         <strong>Connectivity rule:</strong> This view can lag Event Edge during a network partition.
         <br />
