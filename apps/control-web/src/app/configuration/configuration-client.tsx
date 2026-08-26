@@ -218,7 +218,7 @@ export function ConfigurationClient() {
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim()) return;
     void refresh(organisationId);
-  }, [contextHydrated, organisationId]);
+  }, [contextHydrated, organisationId, eventId]);
 
   async function refresh(id = organisationId): Promise<void> {
     if (!id) return;
@@ -228,7 +228,8 @@ export function ConfigurationClient() {
     try {
       const view = await api<EventConfigurationView>(
         `/organisations/${id}/configuration`,
-        'GET', id,
+        'GET',
+        id,
       );
       setConfiguration(view);
       const currentEvent = view.events.find(
@@ -240,12 +241,20 @@ export function ConfigurationClient() {
         view.events.find((item) => item.lifecycle !== 'ARCHIVED') ??
         null;
       setEventId(nextEvent?.id ?? '');
-      writeEventControlContext({
-        organisationId: id,
-        organisationName: view.organisation.name,
-        eventId: nextEvent?.id ?? null,
-        eventName: nextEvent?.name ?? null,
-      });
+      const context = readEventControlContext();
+      if (
+        context.organisationId !== id ||
+        context.organisationName !== view.organisation.name ||
+        context.eventId !== (nextEvent?.id ?? undefined) ||
+        context.eventName !== (nextEvent?.name ?? undefined)
+      ) {
+        writeEventControlContext({
+          organisationId: id,
+          organisationName: view.organisation.name,
+          eventId: nextEvent?.id ?? null,
+          eventName: nextEvent?.name ?? null,
+        });
+      }
       setStatus(`Loaded ${view.organisation.name}. Continue with the next incomplete step.`);
       setStatusTone('success');
     } catch (error) {
