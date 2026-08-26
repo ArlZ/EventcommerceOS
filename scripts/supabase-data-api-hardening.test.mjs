@@ -8,13 +8,20 @@ const migration = readFileSync(
 );
 
 function compactSql(sql) {
-  return sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  return sql
+    .replace(/--[^\n]*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 const sql = compactSql(migration);
 
 test('Supabase API-role hardening stays portable to non-Supabase PostgreSQL', () => {
-  assert.match(sql, /foreach api_role in array array\['anon', 'authenticated', 'service_role'\]/);
+  assert.match(
+    sql,
+    /foreach api_role in array array\['anon', 'authenticated', 'service_role'\]/,
+  );
   assert.match(sql, /if to_regrole\(api_role\) is null then continue/);
 });
 
