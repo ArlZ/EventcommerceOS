@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   isManagedHostingerCloudApi,
+  runManagedCloudApiStartup,
   runManagedHostingerMigrations,
 } from '../src/system/managed-hostinger-migration';
 
@@ -25,6 +26,27 @@ describe('managed Hostinger migration preflight', () => {
       appRoot,
       env,
     );
+  });
+
+  it('orders migration before Nest bootstrap on the configured managed entry path', async () => {
+    const order: string[] = [];
+    const appRoot = resolve('/workspace', 'apps', 'cloud-api');
+
+    await runManagedCloudApiStartup(
+      async () => {
+        order.push('bootstrap');
+      },
+      {
+        env: { HOSTINGER_APP_TARGET: 'cloud-api' },
+        appRoot,
+        execute: () => {
+          order.push('migrate');
+          return { status: 0 };
+        },
+      },
+    );
+
+    expect(order).toEqual(['migrate', 'bootstrap']);
   });
 
   it('does not run migrations for other runtimes', () => {
@@ -57,5 +79,19 @@ describe('managed Hostinger migration preflight', () => {
         execute: () => ({ status: 17 }),
       }),
     ).toThrow(/migrations exited with status 17/);
+  });
+
+  it('never bootstraps the API after a failed managed migration', async () => {
+    const bootstrap = vi.fn(async () => undefined);
+
+    await expect(
+      runManagedCloudApiStartup(bootstrap, {
+        env: { HOSTINGER_APP_TARGET: 'cloud-api' },
+        appRoot: resolve('/workspace', 'apps', 'cloud-api'),
+        execute: () => ({ status: 23 }),
+      }),
+    ).rejects.toThrow(/migrations exited with status 23/);
+
+    expect(bootstrap).not.toHaveBeenCalled();
   });
 });
