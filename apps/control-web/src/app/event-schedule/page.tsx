@@ -5,7 +5,8 @@ import { EventScheduleClient } from './event-schedule-client';
 const workflow = [
   {
     label: 'Select event',
-    detail: 'Choose an assigned organisation and event from the authenticated Event Control context.',
+    detail:
+      'Choose an assigned organisation and event from the authenticated Event Control context.',
   },
   { label: 'Review window', detail: 'Confirm timezone, start and end against the operating plan.' },
   { label: 'Lock before Edge', detail: 'Save the DRAFT schedule before bootstrap and rehearsal.' },
