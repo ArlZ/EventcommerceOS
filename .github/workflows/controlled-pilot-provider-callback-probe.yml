@@ -42,8 +42,8 @@ jobs:
             "method": "POST",
             "contentType": "application/json",
             "bodyFile": "body.json",
-            "totalRequests": 80,
-            "concurrency": 10,
+            "totalRequests": 160,
+            "concurrency": 64,
             "requestTimeoutMs": 5000,
             "recovery": true
           }
