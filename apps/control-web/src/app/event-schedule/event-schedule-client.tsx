@@ -87,7 +87,9 @@ export function EventScheduleClient() {
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState('Select an event from the authenticated Event Control context.');
+  const [status, setStatus] = useState(
+    'Select an event from the authenticated Event Control context.',
+  );
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
 
   useEffect(() => {
@@ -172,7 +174,8 @@ export function EventScheduleClient() {
       );
       setConfiguration(view);
       const context = readEventControlContext();
-      const preferredEventId = context.organisationId === nextOrganisationId ? context.eventId : null;
+      const preferredEventId =
+        context.organisationId === nextOrganisationId ? context.eventId : null;
       const previous = view.events.find(
         (event) => event.id === preferredEventId && event.lifecycle !== 'ARCHIVED',
       );
