@@ -23,6 +23,6 @@ import { SupabaseAuthTransport } from './supabase-auth.transport';
       useClass: GlobalSecurityGuard,
     },
   ],
-  exports: [OperatorAuthService],
+  exports: [OperatorAuthService, SupabaseAuthTransport],
 })
 export class AuthModule {}
