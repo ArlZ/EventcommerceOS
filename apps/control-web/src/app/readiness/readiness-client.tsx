@@ -39,8 +39,9 @@ export function ReadinessClient() {
         if (active) setReadiness(evaluateEventReadiness(configuration, eventId));
       })
       .catch((caught) => {
-        if (active)
+        if (active) {
           setError(caught instanceof Error ? caught.message : 'Unable to load pilot readiness');
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -83,7 +84,8 @@ export function ReadinessClient() {
   if (error || !readiness) {
     return (
       <section className="ec-banner ec-banner--danger" role="alert">
-        <strong>Readiness unavailable.</strong> {error ?? 'Event configuration could not be evaluated.'}
+        <strong>Readiness unavailable.</strong>{' '}
+        {error ?? 'Event configuration could not be evaluated.'}
       </section>
     );
   }
@@ -119,9 +121,18 @@ export function ReadinessClient() {
         <div style={{ display: 'grid', gap: 10 }}>
           {readiness.items.map((item) => (
             <div className="ec-list-row" key={item.key}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  alignItems: 'flex-start',
+                }}
+              >
                 <div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div
+                    style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+                  >
                     <strong>{item.label}</strong>
                     <span className="ec-status-pill" data-tone={item.complete ? 'success' : 'warning'}>
                       {item.complete ? 'Ready' : 'Action needed'}
@@ -163,7 +174,9 @@ export function ReadinessClient() {
           <div className="ec-nav-card" style={{ cursor: 'default' }}>
             <div>
               <strong>Offline & close</strong>
-              <p>Committed-order durability, cloud convergence, stock counts and Event Close evidence.</p>
+              <p>
+                Committed-order durability, cloud convergence, stock counts and Event Close evidence.
+              </p>
             </div>
           </div>
         </div>
