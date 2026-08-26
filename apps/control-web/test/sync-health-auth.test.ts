@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-const sourceUrl = new URL(
-  '../src/app/sync-health/sync-health-client.tsx',
-  import.meta.url,
-);
+const sourceUrl = new URL('../src/app/sync-health/sync-health-client.tsx', import.meta.url);
 
 describe('sync health browser authentication', () => {
   it('uses the operator cookie session and browser request marker', async () => {
