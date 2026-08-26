@@ -1,7 +1,7 @@
 'use client';
 
 import type { FormEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
 import {
   eventControlContextChangedEvent,
