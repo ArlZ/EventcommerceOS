@@ -36,8 +36,9 @@ export function evaluateEventReadiness(
   eventId: string,
 ): EventReadiness {
   const event =
-    configuration.events.find((candidate) => candidate.id === eventId && candidate.lifecycle !== 'ARCHIVED') ??
-    null;
+    configuration.events.find(
+      (candidate) => candidate.id === eventId && candidate.lifecycle !== 'ARCHIVED',
+    ) ?? null;
   const eventOpen = Boolean(event && event.lifecycle !== 'CLOSED');
 
   const salesLocations = configuration.salesLocations.filter(
@@ -62,7 +63,9 @@ export function evaluateEventReadiness(
         (assignment) =>
           assignment.menuId === menu.id && salesLocationIds.has(assignment.salesLocationId),
       );
-      const assignedLocationIds = new Set(assignments.map((assignment) => assignment.salesLocationId));
+      const assignedLocationIds = new Set(
+        assignments.map((assignment) => assignment.salesLocationId),
+      );
       if (menuItems.length === 0 || assignedLocationIds.size === 0) return false;
 
       return menuItems.every((item) => {
