@@ -9,10 +9,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { OperatorAuthService, type HeadersRecord } from './operator-auth.service';
-import {
-  OperatorContextService,
-  type OperatorControlContext,
-} from './operator-context.service';
+import { OperatorContextService, type OperatorControlContext } from './operator-context.service';
 import {
   clearOperatorLoginCookie,
   clearOperatorSessionCookie,
