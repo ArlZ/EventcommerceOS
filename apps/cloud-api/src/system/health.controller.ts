@@ -1,10 +1,7 @@
 import { Controller, Get, Inject, ServiceUnavailableException } from '@nestjs/common';
 import { makeHealthResponse, type HealthResponse } from '@event-commerce/contracts';
 import { DatabaseService } from '../database/database.service';
-import {
-  migrationLedgerIsCurrent,
-  type MigrationLedgerEntry,
-} from './migration-readiness';
+import { migrationLedgerIsCurrent, type MigrationLedgerEntry } from './migration-readiness';
 import { runtimeReleaseCommit } from './release-identity';
 
 @Controller('health')

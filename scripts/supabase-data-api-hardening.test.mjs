@@ -3,7 +3,10 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const migration = readFileSync(
-  new URL('../apps/cloud-api/migrations/0020_supabase_data_api_least_privilege.sql', import.meta.url),
+  new URL(
+    '../apps/cloud-api/migrations/0020_supabase_data_api_least_privilege.sql',
+    import.meta.url,
+  ),
   'utf8',
 );
 
@@ -18,10 +21,7 @@ function compactSql(sql) {
 const sql = compactSql(migration);
 
 test('Supabase API-role hardening stays portable to non-Supabase PostgreSQL', () => {
-  assert.match(
-    sql,
-    /foreach api_role in array array\['anon', 'authenticated', 'service_role'\]/,
-  );
+  assert.match(sql, /foreach api_role in array array\['anon', 'authenticated', 'service_role'\]/);
   assert.match(sql, /if to_regrole\(api_role\) is null then continue/);
 });
 

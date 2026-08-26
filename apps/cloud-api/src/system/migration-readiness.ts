@@ -18,7 +18,9 @@ export function loadExpectedMigrationLedger(): MigrationLedgerEntry[] {
     .sort()
     .map((filename) => ({
       filename,
-      checksumSha256: migrationChecksum(readFileSync(resolve(migrationsDirectory, filename), 'utf8')),
+      checksumSha256: migrationChecksum(
+        readFileSync(resolve(migrationsDirectory, filename), 'utf8'),
+      ),
     }));
 }
 
