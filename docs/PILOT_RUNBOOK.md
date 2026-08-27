@@ -364,6 +364,18 @@ Retain:
 - database backup/restore PASS evidence and review sign-off;
 - post-event reconciliation sign-off.
 
+## Final machine review before human go/no-go
+
+After all real field gates have been reviewed and attached to the exact-release evidence manifest, run:
+
+```bash
+pnpm pilot:release:review
+```
+
+The command must return `READY_FOR_HUMAN_GO_NO_GO` before the named owners consider live-money authorization. It verifies all required manifest gates, retained evidence digests and exact runtime release identity together. It always emits `liveMoneyApproved=false`; the actual go/no-go decision remains human and must be retained in the release record.
+
+See `docs/PILOT_RELEASE_REVIEW.md`.
+
 ## 14. Graduation criteria
 
 A controlled pilot can graduate to a materially larger event only when:
