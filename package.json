@@ -19,6 +19,7 @@
     "security:sca": "node scripts/sca-evidence.mjs",
     "pilot:evidence:init": "node scripts/pilot-evidence.mjs init",
     "pilot:evidence:hash": "node scripts/pilot-evidence.mjs hash",
+    "pilot:evidence:review": "node scripts/pilot-evidence.mjs review-field",
     "pilot:evidence:validate": "node scripts/pilot-evidence.mjs validate",
     "pilot:preflight": "node scripts/pilot-preflight.mjs",
     "pilot:durability:verify": "node scripts/durability-evidence.mjs",
