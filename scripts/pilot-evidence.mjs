@@ -11,6 +11,19 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'FAIL']);
 const DEPLOYMENT_MODES = new Set(['single_instance_pilot', 'upstream_distributed']);
 
+const FIELD_GATE_REPORTS = {
+  representativeRecovery: { satisfiedField: 'representativeRecoverySatisfied', requireStatus: true },
+  abuseFloodExercise: { satisfiedField: 'abuseGateSatisfied', requireStatus: true },
+  hardwareNetwork: { satisfiedField: 'hardwareNetworkSatisfied', requireStatus: true },
+  paymentFaultMatrix: { satisfiedField: 'paymentFaultMatrixSatisfied', requireStatus: true },
+  offlineDurability: { satisfiedField: 'gateBSatisfied', requireStatus: true },
+  inventoryCloseReconciliation: {
+    satisfiedField: 'inventoryCloseReconciliationSatisfied',
+    requireStatus: false,
+  },
+  controlledPilotClose: { satisfiedField: 'controlledPilotCloseSatisfied', requireStatus: false },
+};
+
 export const REQUIRED_GATES = [
   'branchProtection',
   'dependencySecurity',
@@ -112,6 +125,82 @@ export function validateEvidenceRef(ref) {
     blockers.push('evidence sha256 must be a lowercase 64-character SHA-256 digest.');
   }
   return blockers;
+}
+
+export function applyReviewedFieldEvidence({
+  manifest,
+  gateName,
+  evidenceRef,
+  report,
+  reviewer,
+  reviewedAt,
+  notes = '',
+}) {
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+    throw new Error('pilot evidence manifest must be a JSON object.');
+  }
+  if (!SHA_PATTERN.test(manifest.releaseCommit ?? '')) {
+    throw new Error('manifest releaseCommit must be a lowercase 40-character git SHA.');
+  }
+
+  const contract = FIELD_GATE_REPORTS[gateName];
+  if (!contract) {
+    throw new Error(
+      `gate ${gateName ?? '<missing>'} is not supported by field-evidence review; review branchProtection and dependencySecurity manually.`,
+    );
+  }
+
+  const refBlockers = validateEvidenceRef(evidenceRef);
+  if (refBlockers.length > 0) {
+    throw new Error(`invalid evidence reference: ${refBlockers.join(' ')}`);
+  }
+  if (!isNonEmpty(reviewer)) {
+    throw new Error('reviewer must name the person who performed the field-evidence review.');
+  }
+  if (!isNonEmpty(reviewedAt) || !RFC3339_PATTERN.test(reviewedAt)) {
+    throw new Error('reviewedAt must be an RFC3339 timestamp.');
+  }
+  if (!report || typeof report !== 'object' || Array.isArray(report)) {
+    throw new Error('field evidence report must be a JSON object.');
+  }
+  if (report.releaseCommit !== manifest.releaseCommit) {
+    throw new Error('field evidence releaseCommit must match the pilot manifest releaseCommit.');
+  }
+  if (report.liveMoneyApproved !== false) {
+    throw new Error('field evidence must explicitly retain liveMoneyApproved=false.');
+  }
+  if (contract.requireStatus && report.status !== 'PASS') {
+    throw new Error(`field evidence report status must equal PASS for ${gateName}.`);
+  }
+  if (report[contract.satisfiedField] !== true) {
+    throw new Error(
+      `field evidence report must set ${contract.satisfiedField}=true for ${gateName}.`,
+    );
+  }
+
+  if (!manifest.gates || typeof manifest.gates !== 'object' || Array.isArray(manifest.gates)) {
+    throw new Error('pilot evidence manifest is missing gates.');
+  }
+  const gate = manifest.gates[gateName];
+  if (!gate || typeof gate !== 'object' || Array.isArray(gate)) {
+    throw new Error(`pilot evidence manifest is missing gate ${gateName}.`);
+  }
+
+  const refs = Array.isArray(gate.evidenceRefs) ? gate.evidenceRefs : [];
+  const alreadyPresent = refs.some(
+    (ref) => ref?.path === evidenceRef.path && ref?.sha256 === evidenceRef.sha256,
+  );
+  gate.evidenceRefs = alreadyPresent ? refs : [...refs, evidenceRef];
+  gate.status = 'PASS';
+  gate.reviewer = reviewer.trim();
+  gate.reviewedAt = reviewedAt;
+  gate.notes = typeof notes === 'string' ? notes : '';
+
+  if (gateName === 'representativeRecovery') {
+    gate.representativeData = true;
+  }
+
+  return manifest;
 }
 
 function validatePassEvidence(gateName, gate, blockers) {
@@ -334,6 +423,43 @@ function hashCommand(manifestPath, evidencePath) {
   console.log(JSON.stringify(createEvidenceRef(manifestPath, evidencePath)));
 }
 
+function reviewFieldCommand(
+  manifestInputPath,
+  gateName,
+  evidenceInputPath,
+  reviewer,
+  reviewedAt,
+  notes = '',
+) {
+  if (!manifestInputPath || !gateName || !evidenceInputPath || !reviewer || !reviewedAt) {
+    throw new Error(
+      'review-field requires <manifest.json> <gate> <evidence-file> <reviewer> <reviewedAt> [notes].',
+    );
+  }
+
+  const manifestPath = resolve(manifestInputPath);
+  const evidencePath = resolve(evidenceInputPath);
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  const report = JSON.parse(readFileSync(evidencePath, 'utf8'));
+  const evidenceRef = createEvidenceRef(manifestPath, evidencePath);
+
+  applyReviewedFieldEvidence({
+    manifest,
+    gateName,
+    evidenceRef,
+    report,
+    reviewer,
+    reviewedAt,
+    notes,
+  });
+
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  console.log(`Reviewed field evidence attached: gate=${gateName} path=${evidenceRef.path}`);
+  console.log(
+    'This records an explicit human review only. The overall pilot remains blocked until every required gate validates PASS.',
+  );
+}
+
 function validateCommand(inputPath) {
   if (!inputPath) throw new Error('validate requires a manifest path.');
   const manifestPath = resolve(inputPath);
@@ -352,6 +478,9 @@ function usage() {
   console.log('Usage:');
   console.log('  node scripts/pilot-evidence.mjs init [output.json]');
   console.log('  node scripts/pilot-evidence.mjs hash <manifest.json> <evidence-file>');
+  console.log(
+    '  node scripts/pilot-evidence.mjs review-field <manifest.json> <gate> <evidence-file> <reviewer> <reviewedAt> [notes]',
+  );
   console.log('  node scripts/pilot-evidence.mjs validate <manifest.json>');
 }
 
@@ -360,7 +489,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const command = process.argv[2];
     if (command === 'init') initCommand(process.argv[3]);
     else if (command === 'hash') hashCommand(process.argv[3], process.argv[4]);
-    else if (command === 'validate') validateCommand(process.argv[3]);
+    else if (command === 'review-field') {
+      reviewFieldCommand(
+        process.argv[3],
+        process.argv[4],
+        process.argv[5],
+        process.argv[6],
+        process.argv[7],
+        process.argv[8],
+      );
+    } else if (command === 'validate') validateCommand(process.argv[3]);
     else {
       usage();
       process.exitCode = 2;
