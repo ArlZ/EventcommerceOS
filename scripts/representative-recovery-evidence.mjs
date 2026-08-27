@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const REPRESENTATIVE_DOMAINS = [
@@ -15,15 +14,12 @@ const REPRESENTATIVE_DOMAINS = [
   'machineSecurity',
   'humanSecurity',
 ];
-
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
-
 function positiveInteger(value) {
   return Number.isSafeInteger(value) && value > 0;
 }
-
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') {
@@ -35,19 +31,17 @@ function canonical(value) {
   }
   return value;
 }
-
 function digestObject(value) {
-  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(value)))
+    .digest('hex');
 }
-
 function digestBytes(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
-
 function check(id, passed, details) {
   return { id, status: passed ? 'PASS' : 'FAIL', details };
 }
-
 function sameDatabase(left, right) {
   return (
     left?.host === right?.host &&
@@ -55,7 +49,6 @@ function sameDatabase(left, right) {
     left?.database === right?.database
   );
 }
-
 function validateBackupEvidence(evidence, manifest) {
   const errors = [];
   if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
@@ -100,7 +93,6 @@ function validateBackupEvidence(evidence, manifest) {
   }
   return errors;
 }
-
 export function verifyRepresentativeRecoveryFieldEvidence({
   manifest,
   backupEvidence,
@@ -110,7 +102,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
     throw new Error('representative recovery manifest must be a JSON object');
   }
-
   const checks = [];
   checks.push(check('schema', manifest.schemaVersion === 1, 'schemaVersion must equal 1'));
   checks.push(
@@ -129,7 +120,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       'liveMoneyApproved must be explicitly false',
     ),
   );
-
   const evidenceErrors = validateBackupEvidence(backupEvidence, manifest);
   checks.push(
     check(
@@ -138,7 +128,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       evidenceErrors.length ? evidenceErrors.join('; ') : 'backup/restore evidence is valid',
     ),
   );
-
   checks.push(
     check(
       'backup-evidence-digest',
@@ -146,7 +135,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       'backup evidence file must have a SHA-256 digest',
     ),
   );
-
   const cadenceMinutes = manifest.productionBackupCadenceMinutes;
   const cadenceValid = positiveInteger(cadenceMinutes);
   const cadenceWithinRpo =
@@ -162,9 +150,9 @@ export function verifyRepresentativeRecoveryFieldEvidence({
         : 'productionBackupCadenceMinutes must be a positive integer',
     ),
   );
-
   const encryptedStorageSatisfied =
-    manifest.liveOrProductionData !== true || backupEvidence?.dump?.encryptedStorageConfirmed === true;
+    manifest.liveOrProductionData !== true ||
+    backupEvidence?.dump?.encryptedStorageConfirmed === true;
   checks.push(
     check(
       'encrypted-storage',
@@ -174,7 +162,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
         : 'non-live controlled dataset does not require live-data storage confirmation',
     ),
   );
-
   checks.push(
     check(
       'isolated-restore-acknowledged',
@@ -189,7 +176,6 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       'evidenceRetainedOutsideRestoreTarget must be true',
     ),
   );
-
   const allPass = checks.every((entry) => entry.status === 'PASS');
   const core = {
     schemaVersion: 1,
@@ -207,8 +193,7 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       rpoMinutes: backupEvidence?.targets?.rpoMinutes ?? null,
       rtoMinutes: backupEvidence?.targets?.rtoMinutes ?? null,
       restoreDurationMs: backupEvidence?.restoreDurationMs ?? null,
-      recoveryPointAgeAtRestoreStartMs:
-        backupEvidence?.recoveryPointAgeAtRestoreStartMs ?? null,
+      recoveryPointAgeAtRestoreStartMs: backupEvidence?.recoveryPointAgeAtRestoreStartMs ?? null,
       publicTableCount: backupEvidence?.publicTableCount ?? null,
       representativeData: backupEvidence?.representativeData ?? null,
     },
@@ -219,16 +204,13 @@ export function verifyRepresentativeRecoveryFieldEvidence({
       productionBackupScheduleVerified: manifest.productionBackupScheduleVerified === true,
       liveOrProductionData: manifest.liveOrProductionData === true,
       isolatedRestoreTargetVerified: manifest.isolatedRestoreTargetVerified === true,
-      evidenceRetainedOutsideRestoreTarget:
-        manifest.evidenceRetainedOutsideRestoreTarget === true,
+      evidenceRetainedOutsideRestoreTarget: manifest.evidenceRetainedOutsideRestoreTarget === true,
     },
     scope:
       'Representative exact-release backup/restore and operational recovery evidence. This report cannot approve live money or replace hardware/network, offline durability, payment, abuse or close/reconciliation gates.',
   };
-
   return { ...core, reportDigestSha256: digestObject(core) };
 }
-
 function readJson(path, label) {
   try {
     return JSON.parse(readFileSync(resolve(path), 'utf8'));
@@ -236,13 +218,11 @@ function readJson(path, label) {
     throw new Error(`unable to read ${label} JSON ${path}: ${error.message}`);
   }
 }
-
 function usage() {
   console.error(
     'Usage: node scripts/representative-recovery-evidence.mjs <manifest.json> [output.json]',
   );
 }
-
 async function main() {
   const manifestPath = process.argv[2];
   if (!manifestPath) {
@@ -262,18 +242,16 @@ async function main() {
     backupEvidence,
     backupEvidenceSha256: digestBytes(backupBytes),
   });
-
   const outputPath = resolve(
     process.argv[3] ?? 'artifacts/pilot/representative-recovery-field-evidence.json',
   );
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\\n`, { mode: 0o600 });
   console.log(
     `Representative recovery field evidence ${report.status}: ${outputPath} digest=${report.reportDigestSha256}`,
   );
   if (report.status !== 'PASS') process.exitCode = 1;
 }
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await main();
 }
