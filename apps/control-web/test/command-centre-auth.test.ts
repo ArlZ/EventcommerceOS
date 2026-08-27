@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-const sourceUrl = new URL(
-  '../src/app/command-centre/command-centre-client.tsx',
-  import.meta.url,
-);
+const sourceUrl = new URL('../src/app/command-centre/command-centre-client.tsx', import.meta.url);
 
 describe('command centre browser authentication', () => {
   it('uses the operator cookie session for snapshot, stream and actions', async () => {
@@ -36,7 +33,7 @@ describe('command centre browser authentication', () => {
   it('does not send an assignee chosen by the browser', async () => {
     const source = await readFile(sourceUrl, 'utf8');
 
-    expect(source).toContain("body: JSON.stringify({ action })");
+    expect(source).toContain('body: JSON.stringify({ action })');
     expect(source).not.toContain('assignedActorId: actorId');
   });
 });
