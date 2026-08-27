@@ -74,11 +74,12 @@ export class CommandCentreController {
     ]);
     const normalizedAlertId = alertId.trim();
     if (!normalizedAlertId) throw new BadRequestException('alertId must not be empty');
+    const action = parseInventoryAlertAction(body);
     return this.commandCentre.actOnInventoryAlert(
       context,
       normalizedEventId,
       normalizedAlertId,
-      parseInventoryAlertAction(body),
+      action.action === 'ASSIGN' ? { ...action, assignedActorId: context.actorId } : action,
     );
   }
 }

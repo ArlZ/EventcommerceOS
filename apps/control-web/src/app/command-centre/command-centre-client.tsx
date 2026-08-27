@@ -9,14 +9,15 @@ import type {
   CommandCentreSnapshot,
 } from '@event-commerce/contracts';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   COMMAND_CENTRE_POLL_INTERVAL_MS,
   nextRealtimeMode,
   snapshotIsStale,
   type CommandCentreRealtimeMode,
 } from './command-centre-state';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
+import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 const lifecycleSteps = ['DRAFT', 'CONFIGURED', 'READY', 'LIVE', 'CLOSING', 'RECONCILED', 'CLOSED'];
@@ -24,26 +25,25 @@ const lifecycleSteps = ['DRAFT', 'CONFIGURED', 'READY', 'LIVE', 'CLOSING', 'RECO
 type ActiveEvent = { organisationId: string; eventId: string };
 type Tone = 'success' | 'warning' | 'danger' | 'neutral';
 
-function requestHeaders(actorId: string, organisationId: string): Record<string, string> {
+function requestHeaders(organisationId: string): Record<string, string> {
   return {
     'content-type': 'application/json',
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
+    'x-event-control-request': 'browser',
     'x-organisation-id': organisationId,
   };
 }
 
 async function commandCentreRequest<T>(
   path: string,
-  actorId: string,
   organisationId: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(requestHeaders(actorId, organisationId));
+  const headers = new Headers(requestHeaders(organisationId));
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     headers,
+    credentials: 'include',
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
@@ -378,7 +378,6 @@ async function consumeSse(
 }
 
 export function CommandCentreClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [active, setActive] = useState<ActiveEvent | null>(null);
@@ -390,33 +389,19 @@ export function CommandCentreClient() {
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const fetchSnapshot = useCallback(
-    async (target: ActiveEvent): Promise<void> => {
-      const next = await commandCentreRequest<CommandCentreSnapshot>(
-        `/command-centre/events/${encodeURIComponent(target.eventId)}`,
-        actorId,
-        target.organisationId,
-      );
-      setSnapshot(next);
-      const currentContext = readEventControlContext();
-      writeEventControlContext({
-        organisationId: target.organisationId,
-        organisationName:
-          currentContext.organisationId === target.organisationId
-            ? (currentContext.organisationName ?? null)
-            : null,
-        eventId: target.eventId,
-        eventName: next.event.name,
-      });
-      setError(null);
-    },
-    [actorId],
-  );
+  const fetchSnapshot = useCallback(async (target: ActiveEvent): Promise<void> => {
+    const next = await commandCentreRequest<CommandCentreSnapshot>(
+      `/command-centre/events/${encodeURIComponent(target.eventId)}`,
+      target.organisationId,
+    );
+    setSnapshot(next);
+    setError(null);
+  }, []);
 
   async function load(): Promise<void> {
     const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
     if (!target.organisationId || !target.eventId) {
-      setError('Enter both organisation ID and event ID.');
+      setError('Select an organisation and event from Event Control.');
       return;
     }
     setLoadingContext(true);
@@ -437,16 +422,26 @@ export function CommandCentreClient() {
   }, []);
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.eventId) setEventId(context.eventId);
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setOrganisationId(context.organisationId ?? '');
+      setEventId(context.eventId ?? '');
+      setActive(null);
+      setSnapshot(null);
+      setMode('IDLE');
+      setError(null);
+      setContextHydrated(true);
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
     void load();
-  }, [contextHydrated]);
+  }, [contextHydrated, organisationId, eventId]);
 
   useEffect(() => {
     if (!active) return;
@@ -457,7 +452,8 @@ export function CommandCentreClient() {
         const response = await fetch(
           `${apiBase}/command-centre/events/${encodeURIComponent(active.eventId)}/stream`,
           {
-            headers: requestHeaders(actorId, active.organisationId),
+            headers: requestHeaders(active.organisationId),
+            credentials: 'include',
             cache: 'no-store',
             signal: controller.signal,
           },
@@ -476,7 +472,7 @@ export function CommandCentreClient() {
       }
     })();
     return () => controller.abort();
-  }, [active, actorId, fetchSnapshot]);
+  }, [active, fetchSnapshot]);
 
   useEffect(() => {
     if (!active || mode !== 'POLLING') return;
@@ -498,14 +494,10 @@ export function CommandCentreClient() {
     try {
       await commandCentreRequest<CommandCentreInventoryAlertActionView>(
         `/command-centre/events/${encodeURIComponent(active.eventId)}/inventory-alerts/${encodeURIComponent(alertId)}/actions`,
-        actorId,
         active.organisationId,
         {
           method: 'POST',
-          body: JSON.stringify({
-            action,
-            ...(action === 'ASSIGN' ? { assignedActorId: actorId } : {}),
-          }),
+          body: JSON.stringify({ action }),
         },
       );
       await fetchSnapshot(active);
@@ -556,68 +548,28 @@ export function CommandCentreClient() {
         </div>
       </header>
 
+      <section className="ec-panel" style={{ marginBottom: 18 }}>
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Event context</p>
+            <h2>Select the live event</h2>
+            <p>
+              Command Centre only loads organisations and events available to the signed-in
+              operator.
+            </p>
+          </div>
+        </div>
+        <OperatorContextSwitcher />
+      </section>
+
       <div className="ec-operations-stack" aria-busy={loadingContext || busyAlertId !== null}>
-        {snapshot ? (
-          <details className="ec-context-switcher">
-            <summary>Change event context</summary>
-            <form
-              className="ec-context-loader ec-context-loader--embedded"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void load();
-              }}
-            >
-              <input
-                value={organisationId}
-                onChange={(event) => setOrganisationId(event.target.value)}
-                placeholder="Organisation ID"
-                aria-label="Organisation ID"
-              />
-              <input
-                value={eventId}
-                onChange={(event) => setEventId(event.target.value)}
-                placeholder="Event ID"
-                aria-label="Event ID"
-              />
-              <button type="submit" className="ec-button-primary" disabled={loadingContext}>
-                {loadingContext ? 'Loading…' : 'Load event'}
-              </button>
-            </form>
-          </details>
-        ) : (
-          <section className="ec-context-card">
-            <div>
-              <strong>Select event context</strong>
-              <p>
-                The event selected elsewhere in Event Control loads automatically. Enter different
-                IDs here only when you need to switch context or retry a failed load.
-              </p>
-            </div>
-            <form
-              className="ec-context-loader"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void load();
-              }}
-            >
-              <input
-                value={organisationId}
-                onChange={(event) => setOrganisationId(event.target.value)}
-                placeholder="Organisation ID"
-                aria-label="Organisation ID"
-              />
-              <input
-                value={eventId}
-                onChange={(event) => setEventId(event.target.value)}
-                placeholder="Event ID"
-                aria-label="Event ID"
-              />
-              <button type="submit" className="ec-button-primary" disabled={loadingContext}>
-                {loadingContext ? 'Loading live event…' : 'Load live event'}
-              </button>
-            </form>
-          </section>
-        )}
+        {!snapshot && !error ? (
+          <div className="ec-callout">
+            <strong>{loadingContext ? 'Loading live event…' : 'Select an event above.'}</strong>{' '}
+            Sales, inventory, payments and register health load from the authenticated Event Control
+            context.
+          </div>
+        ) : null}
 
         {error ? <div className="ec-banner ec-banner--warning">{error}</div> : null}
 
