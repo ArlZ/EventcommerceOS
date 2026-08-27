@@ -389,17 +389,14 @@ export function CommandCentreClient() {
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
-  const fetchSnapshot = useCallback(
-    async (target: ActiveEvent): Promise<void> => {
-      const next = await commandCentreRequest<CommandCentreSnapshot>(
-        `/command-centre/events/${encodeURIComponent(target.eventId)}`,
-        target.organisationId,
-      );
-      setSnapshot(next);
-      setError(null);
-    },
-    [],
-  );
+  const fetchSnapshot = useCallback(async (target: ActiveEvent): Promise<void> => {
+    const next = await commandCentreRequest<CommandCentreSnapshot>(
+      `/command-centre/events/${encodeURIComponent(target.eventId)}`,
+      target.organisationId,
+    );
+    setSnapshot(next);
+    setError(null);
+  }, []);
 
   async function load(): Promise<void> {
     const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
@@ -444,7 +441,7 @@ export function CommandCentreClient() {
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
     void load();
-  }, [contextHydrated]);
+  }, [contextHydrated, organisationId, eventId]);
 
   useEffect(() => {
     if (!active) return;
