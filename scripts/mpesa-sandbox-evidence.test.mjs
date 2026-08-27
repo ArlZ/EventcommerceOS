@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  MPESA_SCENARIO_IDS,
-  verifyMpesaSandboxFaultMatrix,
-} from './mpesa-sandbox-evidence.mjs';
-
+import { MPESA_SCENARIO_IDS, verifyMpesaSandboxFaultMatrix } from './mpesa-sandbox-evidence.mjs';
 const releaseCommit = 'a'.repeat(40);
-
 function scenario(id) {
   const base = {
     id,
@@ -72,7 +67,6 @@ function scenario(id) {
   }
   return base;
 }
-
 function passingMatrix() {
   return {
     schemaVersion: 1,
@@ -85,7 +79,6 @@ function passingMatrix() {
     scenarios: MPESA_SCENARIO_IDS.map(scenario),
   };
 }
-
 test('M-PESA sandbox verifier passes only a complete safe matrix', () => {
   const report = verifyMpesaSandboxFaultMatrix(
     passingMatrix(),
@@ -97,19 +90,14 @@ test('M-PESA sandbox verifier passes only a complete safe matrix', () => {
   assert.match(report.reportDigestSha256, /^[0-9a-f]{64}$/);
   assert.equal(report.scenarioSummary.length, 8);
 });
-
 test('M-PESA sandbox verifier fails closed when one scenario is not run', () => {
   const matrix = passingMatrix();
   matrix.scenarios[3].status = 'NOT_RUN';
   const report = verifyMpesaSandboxFaultMatrix(matrix);
   assert.equal(report.status, 'FAIL');
   assert.equal(report.paymentFaultMatrixSatisfied, false);
-  assert.equal(
-    report.checks.find((entry) => entry.id === 'scenario:MPESA-04')?.status,
-    'FAIL',
-  );
+  assert.equal(report.checks.find((entry) => entry.id === 'scenario:MPESA-04')?.status, 'FAIL');
 });
-
 test('M-PESA sandbox verifier rejects duplicate business effects', () => {
   const matrix = passingMatrix();
   matrix.scenarios[5].evidence.duplicateBusinessEffectCount = 1;
@@ -120,7 +108,6 @@ test('M-PESA sandbox verifier rejects duplicate business effects', () => {
     /duplicateBusinessEffectCount=0/,
   );
 });
-
 test('M-PESA sandbox verifier rejects phone and credential fields from retained evidence', () => {
   const matrix = passingMatrix();
   matrix.scenarios[0].evidence.msisdn = 'opaque-even-this-must-not-be-retained';
@@ -130,7 +117,6 @@ test('M-PESA sandbox verifier rejects phone and credential fields from retained 
   assert.equal(hygiene?.status, 'FAIL');
   assert.match(hygiene?.details ?? '', /msisdn/);
 });
-
 test('M-PESA sandbox verifier never treats production or live money as valid evidence', () => {
   const matrix = passingMatrix();
   matrix.environment = 'production';
