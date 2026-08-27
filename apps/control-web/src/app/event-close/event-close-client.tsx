@@ -7,32 +7,32 @@ import type {
 } from '@event-commerce/contracts';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
+import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
 type ActiveEvent = { organisationId: string; eventId: string };
 
-function headers(actorId: string, organisationId: string): Record<string, string> {
+function headers(organisationId: string): Record<string, string> {
   return {
     'content-type': 'application/json',
-    'x-actor-id': actorId,
-    'x-role': 'ADMIN',
+    'x-event-control-request': 'browser',
     'x-organisation-id': organisationId,
   };
 }
 
 async function requestJson<T>(
   path: string,
-  actorId: string,
   organisationId: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const requestHeaders = new Headers(headers(actorId, organisationId));
+  const requestHeaders = new Headers(headers(organisationId));
   new Headers(init.headers).forEach((value, key) => requestHeaders.set(key, value));
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
     headers: requestHeaders,
+    credentials: 'include',
     cache: 'no-store',
   });
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
@@ -115,7 +115,6 @@ function AttentionCard({
 }
 
 export function EventCloseClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [active, setActive] = useState<ActiveEvent | null>(null);
@@ -129,51 +128,54 @@ export function EventCloseClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.eventId) setEventId(context.eventId);
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setOrganisationId(context.organisationId ?? '');
+      setEventId(context.eventId ?? '');
+      setActive(null);
+      setReport(null);
+      setStored([]);
+      setConfiguration(null);
+      setError(null);
+      setPendingAction(null);
+      setContextHydrated(true);
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim() || !eventId.trim()) return;
     void load();
-  }, [contextHydrated]);
+  }, [contextHydrated, organisationId, eventId]);
 
   async function refresh(target: ActiveEvent): Promise<void> {
     const [nextReport, revisions, nextConfiguration] = await Promise.all([
       requestJson<EventCloseReport>(
         `/event-close/events/${encodeURIComponent(target.eventId)}/report`,
-        actorId,
         target.organisationId,
       ),
       requestJson<EventCloseStoredReportView[]>(
         `/event-close/events/${encodeURIComponent(target.eventId)}/reports`,
-        actorId,
         target.organisationId,
       ),
       requestJson<EventConfigurationView>(
         `/organisations/${encodeURIComponent(target.organisationId)}/configuration`,
-        actorId,
         target.organisationId,
       ).catch(() => null),
     ]);
     setReport(nextReport);
     setStored(revisions);
     setConfiguration(nextConfiguration);
-    writeEventControlContext({
-      organisationId: target.organisationId,
-      organisationName: nextConfiguration?.organisation.name ?? null,
-      eventId: target.eventId,
-      eventName: nextReport.event.name,
-    });
     setError(null);
   }
 
   async function load(): Promise<void> {
     const target = { organisationId: organisationId.trim(), eventId: eventId.trim() };
     if (!target.organisationId || !target.eventId) {
-      setError('Enter organisation ID and event ID.');
+      setError('Select an organisation and event from Event Control.');
       return;
     }
     setBusy(true);
@@ -194,7 +196,6 @@ export function EventCloseClient() {
     try {
       await requestJson(
         `/event-close/events/${encodeURIComponent(active.eventId)}/${kind}`,
-        actorId,
         active.organisationId,
         {
           method: 'POST',
@@ -218,7 +219,8 @@ export function EventCloseClient() {
     setBusy(true);
     try {
       const response = await fetch(`${apiBase}${path}`, {
-        headers: headers(actorId, active.organisationId),
+        headers: headers(active.organisationId),
+        credentials: 'include',
         cache: 'no-store',
       });
       if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
@@ -294,69 +296,41 @@ export function EventCloseClient() {
         </span>
       </header>
 
+      <section className="ec-panel" style={{ marginBottom: 18 }}>
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Event context</p>
+            <h2>Select the event being closed</h2>
+            <p>
+              Close controls only load organisations and events available to the signed-in operator.
+            </p>
+          </div>
+        </div>
+        <OperatorContextSwitcher />
+      </section>
+
       <div className="ec-operations-stack" aria-busy={busy}>
         {report ? (
-          <>
-            <div className="ec-context-bar">
-              <div>
-                <strong>{report.event.name}</strong>
-                {configuration?.organisation.name ? ` • ${configuration.organisation.name}` : ''}
-              </div>
-              <div className="ec-context-bar-actions">
-                <button type="button" disabled={busy} onClick={() => void load()}>
-                  {busy ? 'Refreshing…' : 'Refresh close review'}
-                </button>
-              </div>
+          <div className="ec-context-bar">
+            <div>
+              <strong>{report.event.name}</strong>
+              {configuration?.organisation.name ? ` • ${configuration.organisation.name}` : ''}
             </div>
-            <details className="ec-context-switcher">
-              <summary>Change event context</summary>
-              <div className="ec-context-loader ec-context-loader--embedded">
-                <input
-                  aria-label="Organisation ID"
-                  placeholder="Organisation ID"
-                  value={organisationId}
-                  onChange={(event) => setOrganisationId(event.target.value)}
-                />
-                <input
-                  aria-label="Event ID"
-                  placeholder="Event ID"
-                  value={eventId}
-                  onChange={(event) => setEventId(event.target.value)}
-                />
-                <button type="button" disabled={busy} onClick={() => void load()}>
-                  {busy ? 'Loading…' : 'Load event'}
-                </button>
-              </div>
-            </details>
-          </>
-        ) : (
-          <div className="ec-context-loader">
-            <input
-              aria-label="Organisation ID"
-              placeholder="Organisation ID"
-              value={organisationId}
-              onChange={(event) => setOrganisationId(event.target.value)}
-            />
-            <input
-              aria-label="Event ID"
-              placeholder="Event ID"
-              value={eventId}
-              onChange={(event) => setEventId(event.target.value)}
-            />
-            <button type="button" disabled={busy} onClick={() => void load()}>
-              {busy ? 'Loading…' : 'Load close review'}
-            </button>
+            <div className="ec-context-bar-actions">
+              <button type="button" disabled={busy} onClick={() => void load()}>
+                {busy ? 'Refreshing…' : 'Refresh close review'}
+              </button>
+            </div>
           </div>
-        )}
+        ) : null}
 
         {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
 
         {!report ? (
           <div className="ec-callout">
-            <strong>Load the event before closing.</strong> If Event Control already knows the
-            event, this review loads it automatically. Otherwise use the IDs above once; the review
-            starts with unresolved payment, inventory and operational signals, then moves into
-            detailed reconciliation and immutable close evidence.
+            <strong>Select the event above before closing.</strong> The review starts with
+            unresolved payment, inventory and operational signals, then moves into detailed
+            reconciliation and immutable close evidence.
           </div>
         ) : null}
 
