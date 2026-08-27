@@ -1,50 +1,45 @@
 'use client';
-
 import type { FormEvent, ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import {
+  eventControlContextChangedEvent,
+  readEventControlContext,
+  writeEventControlContext,
+} from '../event-context';
 import { canEditEventConfiguration } from './event-configuration';
 import { priceToMinorUnits } from './pricing';
-
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
-
 type Method = 'GET' | 'POST' | 'PATCH' | 'PUT';
 type Json = Record<string, unknown>;
 type NamedRecord = { id: string; name: string; lifecycle?: string };
-
 const fieldStyle: React.CSSProperties = {
   width: '100%',
   padding: '9px 10px',
 };
-
 const formStyle: React.CSSProperties = {
   display: 'grid',
   gap: 8,
 };
-
 async function api<T>(
   path: string,
   method: Method,
-  actorId: string,
   organisationId?: string,
   body?: Json,
 ): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     method,
+    credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      'x-actor-id': actorId,
-      'x-role': 'ADMIN',
+      'x-event-control-request': 'browser',
       ...(organisationId ? { 'x-organisation-id': organisationId } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
-
   if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
   return (await response.json()) as T;
 }
-
 function StepPanel({
   number,
   title,
@@ -74,15 +69,12 @@ function StepPanel({
     </section>
   );
 }
-
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} style={{ ...fieldStyle, ...props.style }} />;
 }
-
 function ActionButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button {...props} style={{ padding: '9px 12px', ...props.style }} />;
 }
-
 function ItemActions({
   item,
   onRename,
@@ -98,7 +90,6 @@ function ItemActions({
   const [name, setName] = useState(item.name);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
   const active = item.lifecycle !== 'ARCHIVED';
-
   async function saveRename(): Promise<void> {
     const nextName = name.trim();
     if (!nextName || nextName === item.name) {
@@ -109,7 +100,6 @@ function ItemActions({
     await onRename(nextName);
     setEditing(false);
   }
-
   return (
     <div className="ec-list-row">
       {editing ? (
@@ -176,9 +166,7 @@ function ItemActions({
     </div>
   );
 }
-
 export function ConfigurationClient() {
-  const actorId = useMemo(() => crypto.randomUUID(), []);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [productId, setProductId] = useState('');
@@ -190,19 +178,30 @@ export function ConfigurationClient() {
   const [contextHydrated, setContextHydrated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [statusTone, setStatusTone] = useState<'success' | 'warning' | 'danger'>('warning');
-
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) setOrganisationId(context.organisationId);
-    if (context.eventId) setEventId(context.eventId);
-    setContextHydrated(true);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setOrganisationId(context.organisationId ?? '');
+      setEventId(context.eventId ?? '');
+      setMenuId('');
+      setMenuItemId('');
+      setConfiguration(null);
+      setStatusTone('warning');
+      setStatus(
+        context.organisationId
+          ? 'Loading the selected organisation…'
+          : 'Select an organisation from Event Control.',
+      );
+      setContextHydrated(true);
+    };
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
-
   useEffect(() => {
     if (!contextHydrated || !organisationId.trim()) return;
     void refresh(organisationId);
-  }, [contextHydrated]);
-
+  }, [contextHydrated, organisationId, eventId]);
   async function refresh(id = organisationId): Promise<void> {
     if (!id) return;
     setBusy(true);
@@ -212,7 +211,6 @@ export function ConfigurationClient() {
       const view = await api<EventConfigurationView>(
         `/organisations/${id}/configuration`,
         'GET',
-        actorId,
         id,
       );
       setConfiguration(view);
@@ -225,12 +223,20 @@ export function ConfigurationClient() {
         view.events.find((item) => item.lifecycle !== 'ARCHIVED') ??
         null;
       setEventId(nextEvent?.id ?? '');
-      writeEventControlContext({
-        organisationId: id,
-        organisationName: view.organisation.name,
-        eventId: nextEvent?.id ?? null,
-        eventName: nextEvent?.name ?? null,
-      });
+      const context = readEventControlContext();
+      if (
+        context.organisationId !== id ||
+        context.organisationName !== view.organisation.name ||
+        context.eventId !== (nextEvent?.id ?? undefined) ||
+        context.eventName !== (nextEvent?.name ?? undefined)
+      ) {
+        writeEventControlContext({
+          organisationId: id,
+          organisationName: view.organisation.name,
+          eventId: nextEvent?.id ?? null,
+          eventName: nextEvent?.name ?? null,
+        });
+      }
       setStatus(`Loaded ${view.organisation.name}. Continue with the next incomplete step.`);
       setStatusTone('success');
     } catch (error) {
@@ -240,7 +246,6 @@ export function ConfigurationClient() {
       setBusy(false);
     }
   }
-
   async function run(operation: () => Promise<void>, successMessage = 'Saved'): Promise<void> {
     setBusy(true);
     setStatus('Saving…');
@@ -257,30 +262,27 @@ export function ConfigurationClient() {
       setBusy(false);
     }
   }
-
   async function rename(
     path: string,
     nextName: string,
     field: 'name' | 'displayName' = 'name',
   ): Promise<void> {
     await run(async () => {
-      await api(path, 'PATCH', actorId, organisationId, { [field]: nextName });
+      await api(path, 'PATCH', organisationId, { [field]: nextName });
     }, 'Name updated');
   }
-
   async function archive(path: string): Promise<void> {
     await run(async () => {
-      await api(path, 'PATCH', actorId, organisationId, { lifecycle: 'ARCHIVED' });
+      await api(path, 'PATCH', organisationId, { lifecycle: 'ARCHIVED' });
     }, 'Item archived');
   }
-
   async function submitOrganisation(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setStatus('Creating organisation…');
     try {
-      const created = await api<{ id: string }>('/organisations', 'POST', actorId, undefined, {
+      const created = await api<{ id: string }>('/organisations', 'POST', undefined, {
         name: form.get('name'),
       });
       setOrganisationId(created.id);
@@ -294,12 +296,11 @@ export function ConfigurationClient() {
       setBusy(false);
     }
   }
-
   async function submitEvent(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      const created = await api<{ id: string }>('/events', 'POST', actorId, organisationId, {
+      const created = await api<{ id: string }>('/events', 'POST', organisationId, {
         organisationId,
         name: form.get('name'),
         timezone: form.get('timezone'),
@@ -315,7 +316,6 @@ export function ConfigurationClient() {
       });
     }, 'Event created. Add the places where guests will buy and stock will be held.');
   }
-
   const activeEvents = configuration?.events.filter((item) => item.lifecycle !== 'ARCHIVED') ?? [];
   const selectedEvent = activeEvents.find((item) => item.id === eventId);
   const eventConfigurationEditable = canEditEventConfiguration(selectedEvent?.lifecycle);
@@ -369,7 +369,6 @@ export function ConfigurationClient() {
         )
       );
     });
-
   const organisationReady = Boolean(
     configuration && configuration.organisation.lifecycle !== 'ARCHIVED',
   );
@@ -386,22 +385,19 @@ export function ConfigurationClient() {
     inventoryReady &&
     catalogueReady &&
     menuReady;
-
   return (
     <div className="ec-operations-stack" style={{ marginTop: 18 }} aria-busy={busy}>
       <section className={`ec-banner ec-banner--${statusTone}`} aria-live="polite">
         <strong>{busy ? 'Working…' : 'Setup status'}</strong> • {status}
       </section>
-
       {!configuration ? (
         <section className="ec-panel ec-panel--priority">
           <div className="ec-panel-heading">
             <div>
               <h2>Open an organisation</h2>
               <p>
-                Create a new pilot operator or load an existing organisation by its setup ID. When
-                Event Control already has an organisation selected, its setup loads automatically;
-                use the ID field below only to switch or retry.
+                Select an organisation through the authenticated Event Control context, or create a
+                new pilot operator if your account has platform administration rights.
               </p>
             </div>
           </div>
@@ -412,29 +408,9 @@ export function ConfigurationClient() {
                 Create organisation
               </ActionButton>
             </form>
-            <form
-              style={formStyle}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void refresh(organisationId.trim());
-              }}
-            >
-              <Input
-                value={organisationId}
-                onChange={(event) => setOrganisationId(event.target.value)}
-                placeholder="Existing organisation ID"
-                aria-label="Existing organisation ID"
-                required
-                disabled={busy}
-              />
-              <ActionButton type="submit" disabled={busy || !organisationId.trim()}>
-                {busy ? 'Loading…' : 'Load existing organisation'}
-              </ActionButton>
-            </form>
           </div>
         </section>
       ) : null}
-
       {configuration ? (
         <>
           <section className="ec-context-bar">
@@ -448,7 +424,6 @@ export function ConfigurationClient() {
               {coreSetupReady ? 'Core setup ready' : 'Setup in progress'}
             </span>
           </section>
-
           {eventConfigurationLocked ? (
             <section className="ec-banner ec-banner--warning">
               <strong>{selectedEvent?.lifecycle} event setup is read only.</strong> This pilot does
@@ -458,7 +433,6 @@ export function ConfigurationClient() {
               setup.
             </section>
           ) : null}
-
           <section className="ec-kpi-grid" aria-label="Event setup progress">
             <SetupMetric label="Events" value={activeEvents.length} />
             <SetupMetric label="Sales locations" value={currentEventLocations.length} />
@@ -469,7 +443,6 @@ export function ConfigurationClient() {
             <SetupMetric label="SKUs" value={activeSkus.length} />
             <SetupMetric label="Menus" value={currentEventMenus.length} />
           </section>
-
           <StepPanel
             number={1}
             title="Organisation"
@@ -484,7 +457,6 @@ export function ConfigurationClient() {
               />
             </div>
           </StepPanel>
-
           <StepPanel
             number={2}
             title="Event"
@@ -511,7 +483,6 @@ export function ConfigurationClient() {
                   Create event
                 </ActionButton>
               </form>
-
               <div style={formStyle}>
                 <label htmlFor="event-select">
                   <strong>Event to configure</strong>
@@ -555,7 +526,6 @@ export function ConfigurationClient() {
               </div>
             </div>
           </StepPanel>
-
           <StepPanel
             number={3}
             title="Trading & stock locations"
@@ -576,16 +546,10 @@ export function ConfigurationClient() {
                     event.preventDefault();
                     const form = new FormData(event.currentTarget);
                     void run(async () => {
-                      await api(
-                        `/events/${eventId}/sales-locations`,
-                        'POST',
-                        actorId,
-                        organisationId,
-                        {
-                          name: form.get('name'),
-                          type: 'BAR',
-                        },
-                      );
+                      await api(`/events/${eventId}/sales-locations`, 'POST', organisationId, {
+                        name: form.get('name'),
+                        type: 'BAR',
+                      });
                     }, 'Sales location added');
                   }}
                 >
@@ -614,7 +578,6 @@ export function ConfigurationClient() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <h3>Inventory locations</h3>
                 <form
@@ -623,13 +586,10 @@ export function ConfigurationClient() {
                     event.preventDefault();
                     const form = new FormData(event.currentTarget);
                     void run(async () => {
-                      await api(
-                        `/events/${eventId}/inventory-locations`,
-                        'POST',
-                        actorId,
-                        organisationId,
-                        { name: form.get('name'), type: form.get('type') },
-                      );
+                      await api(`/events/${eventId}/inventory-locations`, 'POST', organisationId, {
+                        name: form.get('name'),
+                        type: form.get('type'),
+                      });
                     }, 'Inventory location added');
                   }}
                 >
@@ -668,7 +628,6 @@ export function ConfigurationClient() {
               </div>
             </div>
           </StepPanel>
-
           <StepPanel
             number={4}
             title="Products & sellable units"
@@ -682,17 +641,11 @@ export function ConfigurationClient() {
                   event.preventDefault();
                   const form = new FormData(event.currentTarget);
                   void run(async () => {
-                    const created = await api<{ id: string }>(
-                      '/products',
-                      'POST',
-                      actorId,
+                    const created = await api<{ id: string }>('/products', 'POST', organisationId, {
                       organisationId,
-                      {
-                        organisationId,
-                        name: form.get('name'),
-                        category: form.get('category'),
-                      },
-                    );
+                      name: form.get('name'),
+                      category: form.get('category'),
+                    });
                     setProductId(created.id);
                   }, 'Product created. Add the sellable unit next.');
                 }}
@@ -704,7 +657,6 @@ export function ConfigurationClient() {
                   Create product
                 </ActionButton>
               </form>
-
               <form
                 style={formStyle}
                 onSubmit={(event) => {
@@ -714,7 +666,6 @@ export function ConfigurationClient() {
                     const created = await api<{ id: string }>(
                       `/products/${productId}/skus`,
                       'POST',
-                      actorId,
                       organisationId,
                       {
                         name: form.get('name'),
@@ -762,7 +713,6 @@ export function ConfigurationClient() {
                 </ActionButton>
               </form>
             </div>
-
             <div className="ec-control-grid" style={{ marginTop: 12 }}>
               <div>
                 <h3>Products</h3>
@@ -792,7 +742,6 @@ export function ConfigurationClient() {
               </div>
             </div>
           </StepPanel>
-
           <StepPanel
             number={5}
             title="Menu & bar assignment"
@@ -814,7 +763,6 @@ export function ConfigurationClient() {
                     const created = await api<{ id: string }>(
                       `/events/${eventId}/menus`,
                       'POST',
-                      actorId,
                       organisationId,
                       { name: form.get('name') },
                     );
@@ -848,14 +796,13 @@ export function ConfigurationClient() {
                   ))}
                 </select>
               </form>
-
               <form
                 style={formStyle}
                 onSubmit={(event) => {
                   event.preventDefault();
                   const form = new FormData(event.currentTarget);
                   void run(async () => {
-                    await api(`/menus/${menuId}/assignments`, 'POST', actorId, organisationId, {
+                    await api(`/menus/${menuId}/assignments`, 'POST', organisationId, {
                       salesLocationId: form.get('salesLocationId'),
                     });
                   }, 'Menu assigned to sales location');
@@ -909,7 +856,6 @@ export function ConfigurationClient() {
               ))}
             </div>
           </StepPanel>
-
           <StepPanel
             number={6}
             title="Menu items & prices"
@@ -926,7 +872,6 @@ export function ConfigurationClient() {
                     const created = await api<{ id: string }>(
                       `/menus/${menuId}/items`,
                       'POST',
-                      actorId,
                       organisationId,
                       { skuId, displayName: form.get('displayName'), sortOrder: 10 },
                     );
@@ -961,7 +906,6 @@ export function ConfigurationClient() {
                   Add to menu
                 </ActionButton>
               </form>
-
               <form
                 style={formStyle}
                 onSubmit={(event) => {
@@ -973,7 +917,7 @@ export function ConfigurationClient() {
                     .toUpperCase();
                   const displayAmount = String(form.get('amount') ?? '').trim();
                   void run(async () => {
-                    await api(`/menu-items/${menuItemId}/prices`, 'PUT', actorId, organisationId, {
+                    await api(`/menu-items/${menuItemId}/prices`, 'PUT', organisationId, {
                       salesLocationId: salesLocationId || null,
                       amountMinor: priceToMinorUnits(displayAmount, currency),
                       currency,
@@ -1044,7 +988,6 @@ export function ConfigurationClient() {
                 </ActionButton>
               </form>
             </div>
-
             <div className="ec-list" style={{ marginTop: 12 }}>
               {currentMenuItems.map((item) => (
                 <ItemActions
@@ -1057,7 +1000,6 @@ export function ConfigurationClient() {
               ))}
             </div>
           </StepPanel>
-
           <section className={`ec-banner ec-banner--${coreSetupReady ? 'success' : 'warning'}`}>
             <strong>
               {coreSetupReady
@@ -1073,7 +1015,6 @@ export function ConfigurationClient() {
     </div>
   );
 }
-
 function SetupMetric({ label, value }: { label: string; value: number }) {
   return (
     <div className="ec-kpi">
