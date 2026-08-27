@@ -1,12 +1,11 @@
+import { OperatorContextSwitcher } from '../operator-context-switcher';
 import { WorkflowRail } from '../workflow-ui';
 import { ConfigurationClient } from './configuration-client';
 import { PosMenuPublicationControl } from './pos-menu-publication-control';
-
 const setupSequence =
   'organisation → event → sales locations → inventory locations → catalogue → menu.';
 const setupFollowUp =
   'Publish the approved DRAFT menu snapshots before device assignment and final pre-open checks.';
-
 const workflow = [
   { label: 'Organisation', detail: 'Choose the operator that owns the event configuration.' },
   { label: 'Event', detail: 'Create the event and establish the trading context.' },
@@ -19,7 +18,6 @@ const workflow = [
     detail: 'Freeze versioned POS menu snapshots for Event Edge while the event is still DRAFT.',
   },
 ];
-
 export default function ConfigurationPage() {
   return (
     <main className="ec-page">
@@ -40,6 +38,19 @@ export default function ConfigurationPage() {
       <div className="ec-callout">
         <strong>Pilot workflow:</strong> {setupSequence} {setupFollowUp}
       </div>
+      <section className="ec-panel" style={{ marginTop: 18 }}>
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Event context</p>
+            <h2>Select the organisation and event</h2>
+            <p>
+              Existing setup is available only for organisations assigned to your signed-in operator
+              account.
+            </p>
+          </div>
+        </div>
+        <OperatorContextSwitcher />
+      </section>
       <ConfigurationClient />
       <PosMenuPublicationControl />
     </main>
