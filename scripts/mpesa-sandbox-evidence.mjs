@@ -2,13 +2,11 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const STATUS = new Set(['NOT_RUN', 'PASS', 'FAIL']);
 const TERMINAL_STATES = new Set(['SUCCEEDED', 'FAILED']);
 const TRUTH_SOURCES = new Set(['PROVIDER_QUERY', 'PROVIDER_RECONCILIATION']);
 const SENSITIVE_KEY = /(phone|msisdn|passkey|secret|token|authorization|credential|password)/i;
-
 export const MPESA_SCENARIO_IDS = [
   'MPESA-01',
   'MPESA-02',
@@ -19,15 +17,12 @@ export const MPESA_SCENARIO_IDS = [
   'MPESA-07',
   'MPESA-08',
 ];
-
 function nonEmpty(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
-
 function validTime(value) {
   return typeof value === 'string' && Number.isFinite(Date.parse(value));
 }
-
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') {
@@ -39,15 +34,14 @@ function canonical(value) {
   }
   return value;
 }
-
 function digest(value) {
-  return createHash('sha256').update(JSON.stringify(canonical(value))).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(canonical(value)))
+    .digest('hex');
 }
-
 function check(id, passed, details) {
   return { id, status: passed ? 'PASS' : 'FAIL', details };
 }
-
 function sensitivePaths(value, path = 'matrix') {
   if (!value || typeof value !== 'object') return [];
   const findings = [];
@@ -58,11 +52,9 @@ function sensitivePaths(value, path = 'matrix') {
   }
   return findings;
 }
-
 function integerAtLeast(value, minimum) {
   return Number.isSafeInteger(value) && value >= minimum;
 }
-
 function validateScenarioCommon(scenario, id) {
   const errors = [];
   if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) {
@@ -74,21 +66,23 @@ function validateScenarioCommon(scenario, id) {
     return errors;
   }
   if (scenario.status !== 'PASS') return errors;
-
   if (!validTime(scenario.startedAt) || !validTime(scenario.completedAt)) {
     errors.push(`${id} PASS requires valid startedAt/completedAt timestamps`);
   } else if (Date.parse(scenario.completedAt) < Date.parse(scenario.startedAt)) {
     errors.push(`${id}.completedAt must not precede startedAt`);
   }
   if (!nonEmpty(scenario.attemptId)) errors.push(`${id} PASS requires attemptId`);
-  if (!scenario.evidence || typeof scenario.evidence !== 'object' || Array.isArray(scenario.evidence)) {
+  if (
+    !scenario.evidence ||
+    typeof scenario.evidence !== 'object' ||
+    Array.isArray(scenario.evidence)
+  ) {
     errors.push(`${id} PASS requires an evidence object`);
   } else if (scenario.evidence.duplicateBusinessEffectCount !== 0) {
     errors.push(`${id} PASS requires duplicateBusinessEffectCount=0`);
   }
   return errors;
 }
-
 function validateScenarioSpecific(scenario) {
   if (scenario.status !== 'PASS' || !scenario.evidence || typeof scenario.evidence !== 'object') {
     return [];
@@ -145,7 +139,9 @@ function validateScenarioSpecific(scenario) {
       break;
     case 'MPESA-07':
       if (e.callbackBeforeQueryObserved !== true || e.queryBeforeCallbackObserved !== true) {
-        errors.push('MPESA-07 must observe callback-before-query and query-before-callback ordering');
+        errors.push(
+          'MPESA-07 must observe callback-before-query and query-before-callback ordering',
+        );
       }
       if (e.terminalStateRegressed !== false) {
         errors.push('MPESA-07 terminalStateRegressed must be false');
@@ -167,12 +163,10 @@ function validateScenarioSpecific(scenario) {
   }
   return errors;
 }
-
 export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
   if (!matrix || typeof matrix !== 'object' || Array.isArray(matrix)) {
     throw new Error('M-PESA sandbox matrix must be a JSON object');
   }
-
   const checks = [];
   checks.push(check('schema', matrix.schemaVersion === 1, 'schemaVersion must equal 1'));
   checks.push(
@@ -184,7 +178,9 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
   );
   checks.push(check('event', nonEmpty(matrix.eventId), 'eventId is required'));
   checks.push(check('provider', matrix.provider === 'mpesa', 'provider must equal mpesa'));
-  checks.push(check('environment', matrix.environment === 'sandbox', 'environment must equal sandbox'));
+  checks.push(
+    check('environment', matrix.environment === 'sandbox', 'environment must equal sandbox'),
+  );
   checks.push(
     check(
       'live-money-boundary',
@@ -193,7 +189,6 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
     ),
   );
   checks.push(check('operator', nonEmpty(matrix.operator), 'operator is required'));
-
   const sensitive = sensitivePaths(matrix);
   checks.push(
     check(
@@ -204,7 +199,6 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
         : `remove sensitive fields: ${sensitive.join(', ')}`,
     ),
   );
-
   const scenarios = Array.isArray(matrix.scenarios) ? matrix.scenarios : [];
   const byId = new Map();
   const duplicates = [];
@@ -225,7 +219,6 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
       `expected exactly ${MPESA_SCENARIO_IDS.join(', ')}`,
     ),
   );
-
   for (const id of MPESA_SCENARIO_IDS) {
     const scenario = byId.get(id);
     const errors = [
@@ -244,7 +237,6 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
       ),
     );
   }
-
   const allPass = checks.every((entry) => entry.status === 'PASS');
   const core = {
     schemaVersion: 1,
@@ -266,7 +258,6 @@ export function verifyMpesaSandboxFaultMatrix(matrix, now = new Date()) {
   };
   return { ...core, reportDigestSha256: digest(core) };
 }
-
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(resolve(path), 'utf8'));
@@ -274,11 +265,9 @@ function readJson(path) {
     throw new Error(`unable to read M-PESA matrix JSON ${path}: ${error.message}`);
   }
 }
-
 function usage() {
   console.error('Usage: node scripts/mpesa-sandbox-evidence.mjs <matrix.json> [output.json]');
 }
-
 async function main() {
   const input = process.argv[2];
   if (!input) {
@@ -286,17 +275,15 @@ async function main() {
     process.exitCode = 2;
     return;
   }
-
   const report = verifyMpesaSandboxFaultMatrix(readJson(input));
   const output = resolve(process.argv[3] ?? 'artifacts/pilot/mpesa-sandbox-fault-matrix.json');
   mkdirSync(dirname(output), { recursive: true });
-  writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(output, `${JSON.stringify(report, null, 2)}\\n`, { mode: 0o600 });
   console.log(
     `M-PESA sandbox fault matrix ${report.status}: ${output} digest=${report.reportDigestSha256}`,
   );
   if (report.status !== 'PASS') process.exitCode = 1;
 }
-
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await main();
 }
