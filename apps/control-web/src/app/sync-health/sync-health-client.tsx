@@ -61,6 +61,7 @@ function deviceStatus(device: DeviceCloudStatus): {
 export function SyncHealthClient() {
   const [organisationName, setOrganisationName] = useState('');
   const [activeOrganisationId, setActiveOrganisationId] = useState('');
+  const [contextEventId, setContextEventId] = useState('');
   const [devices, setDevices] = useState<DeviceCloudStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -71,6 +72,7 @@ export function SyncHealthClient() {
       const context = readEventControlContext();
       setActiveOrganisationId(context.organisationId ?? '');
       setOrganisationName(context.organisationName ?? '');
+      setContextEventId(context.eventId ?? '');
       setDevices([]);
       setLastUpdatedAt(null);
       setError(null);
@@ -109,7 +111,7 @@ export function SyncHealthClient() {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5_000);
     return () => window.clearInterval(timer);
-  }, [activeOrganisationId, refresh]);
+  }, [activeOrganisationId, contextEventId, refresh]);
 
   const devicesWithBacklog = useMemo(
     () => devices.filter((device) => device.edgeBacklogCount > 0).length,
