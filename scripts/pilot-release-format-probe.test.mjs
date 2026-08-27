@@ -14,7 +14,8 @@ test('prints pilot release review Prettier output', async () => {
       trailingComma: 'all',
       printWidth: 100,
     });
-    console.log(`PILOT_RELEASE_FORMAT_BEGIN:${path}\n${formatted}\nPILOT_RELEASE_FORMAT_END:${path}`);
+    const encoded = Buffer.from(formatted, 'utf8').toString('base64');
+    console.log(`PILOT_RELEASE_FORMAT_BASE64:${path}:${encoded}`);
     if (source !== formatted) mismatches.push(path);
   }
   if (mismatches.length) throw new Error(`${mismatches.join(', ')} not formatted`);
