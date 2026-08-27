@@ -31,6 +31,22 @@ Retain non-secret evidence containing:
 
 Do **not** retain customer phone numbers in the shared evidence pack. Replace them with an opaque test-phone label if operator notes require correlation.
 
+## Machine-verifiable field evidence
+
+Record the eight scenarios in a non-secret JSON matrix and verify it on the exact release:
+
+```bash
+pnpm pilot:mpesa:verify -- \
+  artifacts/pilot/mpesa-sandbox-input.json \
+  artifacts/pilot/mpesa-sandbox-fault-matrix.json
+```
+
+The verifier is deliberately fail-closed. It requires all eight scenario IDs exactly once, a full 40-character release SHA, an event ID, `provider: "mpesa"`, `environment: "sandbox"`, and `liveMoneyApproved: false`. Every PASS scenario needs timestamps, an attempt ID, zero duplicate business effects and the scenario-specific observations described below.
+
+The retained input/report must not contain fields named like phone/MSISDN, passkeys, secrets, tokens, authorization, credentials or passwords. The generated report includes a SHA-256 digest and still states `liveMoneyApproved: false`; it is evidence for the `paymentFaultMatrix` review, not permission to load production credentials.
+
+A scenario that is `NOT_RUN`, `FAIL`, malformed, missing, duplicated, or inconsistent produces an overall `FAIL` report and a non-zero command exit.
+
 ## Required scenarios
 
 ### MPESA-01 — accepted STK push, successful payment
