@@ -2,7 +2,8 @@
 
 import type { DeviceCloudStatus } from '@event-commerce/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { readEventControlContext, writeEventControlContext } from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
+import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
@@ -58,21 +59,28 @@ function deviceStatus(device: DeviceCloudStatus): {
 }
 
 export function SyncHealthClient() {
-  const [organisationId, setOrganisationId] = useState('');
   const [organisationName, setOrganisationName] = useState('');
   const [activeOrganisationId, setActiveOrganisationId] = useState('');
+  const [contextEventId, setContextEventId] = useState('');
   const [devices, setDevices] = useState<DeviceCloudStatus[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    const context = readEventControlContext();
-    if (context.organisationId) {
-      setOrganisationId(context.organisationId);
-      setActiveOrganisationId(context.organisationId);
-    }
-    if (context.organisationName) setOrganisationName(context.organisationName);
+    const syncContext = () => {
+      const context = readEventControlContext();
+      setActiveOrganisationId(context.organisationId ?? '');
+      setOrganisationName(context.organisationName ?? '');
+      setContextEventId(context.eventId ?? '');
+      setDevices([]);
+      setLastUpdatedAt(null);
+      setError(null);
+    };
+
+    syncContext();
+    window.addEventListener(eventControlContextChangedEvent, syncContext);
+    return () => window.removeEventListener(eventControlContextChangedEvent, syncContext);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -81,7 +89,11 @@ export function SyncHealthClient() {
     try {
       const response = await fetch(`${apiBase}/sync/devices`, {
         cache: 'no-store',
-        headers: { 'x-organisation-id': activeOrganisationId },
+        credentials: 'include',
+        headers: {
+          'x-event-control-request': 'browser',
+          'x-organisation-id': activeOrganisationId,
+        },
       });
       if (!response.ok) throw new Error(`Cloud API returned ${response.status}`);
       setDevices((await response.json()) as DeviceCloudStatus[]);
@@ -94,37 +106,12 @@ export function SyncHealthClient() {
     }
   }, [activeOrganisationId]);
 
-  function loadOrganisation() {
-    const nextOrganisationId = organisationId.trim();
-    if (!nextOrganisationId) {
-      setError('Enter an organisation ID.');
-      return;
-    }
-    const currentContext = readEventControlContext();
-    const sameOrganisation = currentContext.organisationId === nextOrganisationId;
-    if (!sameOrganisation) setOrganisationName('');
-    writeEventControlContext({
-      organisationId: nextOrganisationId,
-      organisationName: sameOrganisation ? (currentContext.organisationName ?? null) : null,
-      eventId: sameOrganisation ? (currentContext.eventId ?? null) : null,
-      eventName: sameOrganisation ? (currentContext.eventName ?? null) : null,
-    });
-    if (nextOrganisationId === activeOrganisationId) {
-      void refresh();
-      return;
-    }
-    setDevices([]);
-    setLastUpdatedAt(null);
-    setError(null);
-    setActiveOrganisationId(nextOrganisationId);
-  }
-
   useEffect(() => {
     if (!activeOrganisationId) return undefined;
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5_000);
     return () => window.clearInterval(timer);
-  }, [activeOrganisationId, refresh]);
+  }, [activeOrganisationId, contextEventId, refresh]);
 
   const devicesWithBacklog = useMemo(
     () => devices.filter((device) => device.edgeBacklogCount > 0).length,
@@ -153,37 +140,16 @@ export function SyncHealthClient() {
       aria-busy={loading}
       aria-live="polite"
     >
-      {activeOrganisationId ? (
-        <details className="ec-context-switcher">
-          <summary>Change organisation</summary>
-          <div
-            className="ec-context-loader ec-context-loader--embedded"
-            style={{ gridTemplateColumns: '1fr auto' }}
-          >
-            <input
-              value={organisationId}
-              onChange={(event) => setOrganisationId(event.target.value)}
-              placeholder="Organisation ID"
-              aria-label="Organisation ID"
-            />
-            <button type="button" onClick={loadOrganisation} disabled={loading}>
-              {loading ? 'Loading…' : 'Load organisation'}
-            </button>
+      <section className="ec-panel">
+        <div className="ec-panel-heading">
+          <div>
+            <p className="ec-eyebrow">Operator context</p>
+            <h2>Select the organisation being monitored</h2>
+            <p>Only organisations available to the signed-in operator are shown.</p>
           </div>
-        </details>
-      ) : (
-        <div className="ec-context-loader" style={{ gridTemplateColumns: '1fr auto' }}>
-          <input
-            value={organisationId}
-            onChange={(event) => setOrganisationId(event.target.value)}
-            placeholder="Organisation ID"
-            aria-label="Organisation ID"
-          />
-          <button type="button" onClick={loadOrganisation} disabled={loading}>
-            {loading ? 'Loading…' : 'Load sync health'}
-          </button>
         </div>
-      )}
+        <OperatorContextSwitcher />
+      </section>
 
       {error ? (
         <div className="ec-banner ec-banner--danger">Device health unavailable: {error}</div>
@@ -229,9 +195,9 @@ export function SyncHealthClient() {
 
       {!activeOrganisationId && !error ? (
         <div className="ec-callout">
-          <strong>Select an organisation to begin.</strong> This screen shows whether registers are
-          reporting online and whether uploads are waiting. It does not decide whether a local till
-          can continue taking orders.
+          <strong>Select an organisation above to begin.</strong> This screen shows whether
+          registers are reporting online and whether uploads are waiting. It does not decide whether
+          a local till can continue taking orders.
         </div>
       ) : null}
 
