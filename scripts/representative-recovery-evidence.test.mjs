@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { verifyRepresentativeRecoveryFieldEvidence } from './representative-recovery-evidence.mjs';
-
 const releaseCommit = 'c'.repeat(40);
 const backupSha = 'd'.repeat(64);
-
 function passingManifest() {
   return {
     schemaVersion: 1,
@@ -19,7 +17,6 @@ function passingManifest() {
     evidenceRetainedOutsideRestoreTarget: true,
   };
 }
-
 function passingBackupEvidence() {
   return {
     schemaVersion: 2,
@@ -54,7 +51,6 @@ function passingBackupEvidence() {
     },
   };
 }
-
 test('representative recovery verifier passes complete exact-release evidence', () => {
   const report = verifyRepresentativeRecoveryFieldEvidence({
     manifest: passingManifest(),
@@ -68,7 +64,6 @@ test('representative recovery verifier passes complete exact-release evidence', 
   assert.equal(report.backupEvidence.publicTableCount, 46);
   assert.match(report.reportDigestSha256, /^[0-9a-f]{64}$/);
 });
-
 test('representative recovery verifier rejects synthetic or incomplete representative data', () => {
   const evidence = passingBackupEvidence();
   evidence.representativeData.payments = false;
@@ -83,7 +78,6 @@ test('representative recovery verifier rejects synthetic or incomplete represent
     /representativeData.payments/,
   );
 });
-
 test('representative recovery verifier fails when production cadence exceeds RPO target', () => {
   const manifest = passingManifest();
   manifest.productionBackupCadenceMinutes = 30;
@@ -93,9 +87,11 @@ test('representative recovery verifier fails when production cadence exceeds RPO
     backupEvidenceSha256: backupSha,
   });
   assert.equal(report.status, 'FAIL');
-  assert.equal(report.checks.find((entry) => entry.id === 'production-backup-cadence')?.status, 'FAIL');
+  assert.equal(
+    report.checks.find((entry) => entry.id === 'production-backup-cadence')?.status,
+    'FAIL',
+  );
 });
-
 test('representative recovery verifier requires encrypted storage for live data', () => {
   const manifest = passingManifest();
   manifest.liveOrProductionData = true;
@@ -107,7 +103,6 @@ test('representative recovery verifier requires encrypted storage for live data'
   assert.equal(report.status, 'FAIL');
   assert.equal(report.checks.find((entry) => entry.id === 'encrypted-storage')?.status, 'FAIL');
 });
-
 test('representative recovery verifier rejects same source and restore database', () => {
   const evidence = passingBackupEvidence();
   evidence.restoreTarget = { ...evidence.source };
@@ -122,7 +117,6 @@ test('representative recovery verifier rejects same source and restore database'
     /different databases/,
   );
 });
-
 test('representative recovery verifier never approves live money', () => {
   const manifest = passingManifest();
   manifest.liveMoneyApproved = true;
