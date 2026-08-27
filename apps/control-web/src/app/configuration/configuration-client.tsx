@@ -583,7 +583,8 @@ export function ConfigurationClient() {
                     void run(async () => {
                       await api(
                         `/events/${eventId}/sales-locations`,
-                        'POST', organisationId,
+                        'POST',
+                        organisationId,
                         {
                           name: form.get('name'),
                           type: 'BAR',
@@ -628,7 +629,8 @@ export function ConfigurationClient() {
                     void run(async () => {
                       await api(
                         `/events/${eventId}/inventory-locations`,
-                        'POST', organisationId,
+                        'POST',
+                        organisationId,
                         { name: form.get('name'), type: form.get('type') },
                       );
                     }, 'Inventory location added');
@@ -685,7 +687,8 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       '/products',
-                      'POST', organisationId,
+                      'POST',
+                      organisationId,
                       {
                         organisationId,
                         name: form.get('name'),
@@ -712,7 +715,8 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/products/${productId}/skus`,
-                      'POST', organisationId,
+                      'POST',
+                      organisationId,
                       {
                         name: form.get('name'),
                         code: form.get('code'),
@@ -810,7 +814,8 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/events/${eventId}/menus`,
-                      'POST', organisationId,
+                      'POST',
+                      organisationId,
                       { name: form.get('name') },
                     );
                     setMenuId(created.id);
@@ -920,7 +925,8 @@ export function ConfigurationClient() {
                   void run(async () => {
                     const created = await api<{ id: string }>(
                       `/menus/${menuId}/items`,
-                      'POST', organisationId,
+                      'POST',
+                      organisationId,
                       { skuId, displayName: form.get('displayName'), sortOrder: 10 },
                     );
                     setMenuItemId(created.id);
