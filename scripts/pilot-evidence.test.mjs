@@ -235,7 +235,6 @@ test('retained evidence fails when the reference resolves to a directory', () =>
   }
 });
 
-
 test('review helper attaches a verified hardware/network report with named review', () => {
   const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
   const ref = evidenceRef('hardwareNetwork');
