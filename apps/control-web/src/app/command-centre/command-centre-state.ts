@@ -37,10 +37,11 @@ export function venueTelemetry(
     };
   }
 
-  const suffix = totalCount === 1 ? 'register' : 'registers';
   const label =
     reportingCount === totalCount
-      ? `All ${totalCount} ${suffix} reporting`
+      ? totalCount === 1
+        ? '1 register reporting'
+        : `All ${totalCount} registers reporting`
       : `${reportingCount}/${totalCount} registers reporting`;
   const degraded = devices.some(
     (device) => device.status === 'DEGRADED' || device.edgeBacklogCount > 0,
