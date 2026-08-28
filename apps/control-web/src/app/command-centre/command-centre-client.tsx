@@ -427,7 +427,7 @@ export function CommandCentreClient() {
   const [error, setError] = useState<string | null>(null);
   const [contextHydrated, setContextHydrated] = useState(false);
   const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
-  const [window, setWindow] = useState<PulseWindow>('60m');
+  const [pulseWindow, setPulseWindow] = useState<PulseWindow>('60m');
   const [now, setNow] = useState(() => Date.now());
 
   const fetchSnapshot = useCallback(async (target: ActiveEvent) => {
@@ -675,15 +675,15 @@ export function CommandCentreClient() {
                 <button
                   type="button"
                   key={value}
-                  data-active={window === value}
-                  onClick={() => setWindow(value)}
+                  data-active={pulseWindow === value}
+                  onClick={() => setPulseWindow(value)}
                 >
                   {value === 'event' ? 'Event' : value}
                 </button>
               ))}
             </div>
           </div>
-          <SalesPulseChart snapshot={snapshot} window={window} now={now} />
+          <SalesPulseChart snapshot={snapshot} window={pulseWindow} now={now} />
         </div>
 
         <aside className="ec-action-rail">
