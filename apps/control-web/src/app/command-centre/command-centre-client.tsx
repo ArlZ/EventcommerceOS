@@ -292,6 +292,14 @@ function windowMinutes(value: PulseWindow): number | null {
   return null;
 }
 
+function currentOrderRate(snapshot: CommandCentreSnapshot, now: number): number {
+  const count = snapshot.salesPulse
+    .filter((point) => Date.parse(point.bucketStart) >= now - 15 * 60_000)
+    .reduce((sum, point) => sum + point.transactionCount, 0);
+  return count / 15;
+}
+
+
 function SalesPulseChart({
   snapshot,
   window,
@@ -664,7 +672,7 @@ export function CommandCentreClient() {
               </div>
               <div className="ec-pulse-inline-stats">
                 <span><b>{velocityList(snapshot.sales.currentSalesVelocity)}</b> sales velocity</span>
-                <span><b>{(snapshot.sales.transactionCount / Math.max(1, (now - Date.parse(snapshot.event.startsAt)) / 60_000)).toFixed(1)}/min</b> completed orders</span>
+                <span><b>{currentOrderRate(snapshot, now).toFixed(1)}/min</b> completed orders</span>
                 <span><b>{averageList(snapshot.sales.averageOrderValue)}</b> average order</span>
               </div>
             </div>
