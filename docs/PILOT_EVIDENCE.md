@@ -100,6 +100,45 @@ Do not place secrets, provider credentials, customer payment data or raw databas
 
 Changing or replacing reviewed evidence after sign-off therefore causes validation to fail until the new bytes are reviewed and the manifest is deliberately updated.
 
+## Attach reviewed field evidence safely
+
+For field gates that already have a machine-verifiable PASS report, use the review helper instead of manually editing digest references:
+
+```bash
+pnpm pilot:evidence:review -- \
+  artifacts/pilot/evidence.json \
+  hardwareNetwork \
+  artifacts/pilot/evidence/hardware-network-field-evidence.json \
+  "Named reviewer" \
+  "2026-08-27T11:30:00+03:00" \
+  "Venue exercise reviewed against retained diagnostics"
+```
+
+Supported field gates are:
+
+- `representativeRecovery`
+- `abuseFloodExercise`
+- `hardwareNetwork`
+- `paymentFaultMatrix`
+- `offlineDurability`
+- `inventoryCloseReconciliation`
+- `controlledPilotClose`
+
+The helper:
+
+- requires the evidence file to be retained below the manifest directory;
+- creates the SHA-256 evidence reference itself;
+- requires exact release identity;
+- requires `liveMoneyApproved=false`;
+- requires the gate-specific machine-verifier success flag;
+- requires an explicit named reviewer and RFC3339 review time;
+- sets only the requested field gate to PASS;
+- sets `representativeData=true` only when a representative recovery PASS report is reviewed.
+
+It deliberately refuses `branchProtection` and `dependencySecurity`; those governance/security gates still require their separate review process.
+
+The command does **not** authenticate the human name or prove that a person actually inspected the evidence. Supplying reviewer details is an explicit sign-off action and must only be done after the named reviewer has genuinely reviewed the retained bytes.
+
 ## Validate
 
 ```bash

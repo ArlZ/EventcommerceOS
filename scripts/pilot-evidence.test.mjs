@@ -8,6 +8,7 @@ import test from 'node:test';
 import {
   REQUIRED_GATES,
   REQUIRED_OWNERS,
+  applyReviewedFieldEvidence,
   createEvidenceRef,
   createInitialManifest,
   validateEvidenceFiles,
@@ -232,4 +233,145 @@ test('retained evidence fails when the reference resolves to a directory', () =>
   } finally {
     rmSync(fixture.root, { recursive: true, force: true });
   }
+});
+
+test('review helper attaches a verified hardware/network report with named review', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  const ref = evidenceRef('hardwareNetwork');
+  const report = {
+    releaseCommit: RELEASE,
+    status: 'PASS',
+    hardwareNetworkSatisfied: true,
+    liveMoneyApproved: false,
+  };
+  applyReviewedFieldEvidence({
+    manifest,
+    gateName: 'hardwareNetwork',
+    evidenceRef: ref,
+    report,
+    reviewer: 'Named reviewer',
+    reviewedAt: REVIEWED_AT,
+    notes: 'Venue field exercise reviewed.',
+  });
+  assert.equal(manifest.gates.hardwareNetwork.status, 'PASS');
+  assert.deepEqual(manifest.gates.hardwareNetwork.evidenceRefs, [ref]);
+  assert.equal(manifest.gates.hardwareNetwork.reviewer, 'Named reviewer');
+  assert.equal(manifest.gates.hardwareNetwork.reviewedAt, REVIEWED_AT);
+});
+
+test('review helper sets representativeData only for a passing representative recovery report', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  applyReviewedFieldEvidence({
+    manifest,
+    gateName: 'representativeRecovery',
+    evidenceRef: evidenceRef('representativeRecovery'),
+    report: {
+      releaseCommit: RELEASE,
+      status: 'PASS',
+      representativeRecoverySatisfied: true,
+      liveMoneyApproved: false,
+    },
+    reviewer: 'Recovery reviewer',
+    reviewedAt: REVIEWED_AT,
+  });
+  assert.equal(manifest.gates.representativeRecovery.status, 'PASS');
+  assert.equal(manifest.gates.representativeRecovery.representativeData, true);
+});
+
+test('review helper accepts event-close report for each close gate without inventing status', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  const report = {
+    releaseCommit: RELEASE,
+    controlledPilotCloseSatisfied: true,
+    inventoryCloseReconciliationSatisfied: true,
+    liveMoneyApproved: false,
+  };
+  for (const gateName of ['inventoryCloseReconciliation', 'controlledPilotClose']) {
+    applyReviewedFieldEvidence({
+      manifest,
+      gateName,
+      evidenceRef: evidenceRef(gateName),
+      report,
+      reviewer: 'Close reviewer',
+      reviewedAt: REVIEWED_AT,
+    });
+    assert.equal(manifest.gates[gateName].status, 'PASS');
+  }
+});
+
+test('review helper fails closed for release mismatch or missing safe boundary', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  const ref = evidenceRef('paymentFaultMatrix');
+  assert.throws(
+    () =>
+      applyReviewedFieldEvidence({
+        manifest,
+        gateName: 'paymentFaultMatrix',
+        evidenceRef: ref,
+        report: {
+          releaseCommit: OTHER_RELEASE,
+          status: 'PASS',
+          paymentFaultMatrixSatisfied: true,
+          liveMoneyApproved: false,
+        },
+        reviewer: 'Finance reviewer',
+        reviewedAt: REVIEWED_AT,
+      }),
+    /releaseCommit must match/,
+  );
+  assert.throws(
+    () =>
+      applyReviewedFieldEvidence({
+        manifest,
+        gateName: 'paymentFaultMatrix',
+        evidenceRef: ref,
+        report: {
+          releaseCommit: RELEASE,
+          status: 'PASS',
+          paymentFaultMatrixSatisfied: true,
+          liveMoneyApproved: true,
+        },
+        reviewer: 'Finance reviewer',
+        reviewedAt: REVIEWED_AT,
+      }),
+    /liveMoneyApproved=false/,
+  );
+});
+
+test('review helper rejects unsupported automated review for governance gates', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  assert.throws(
+    () =>
+      applyReviewedFieldEvidence({
+        manifest,
+        gateName: 'branchProtection',
+        evidenceRef: evidenceRef('branchProtection'),
+        report: { releaseCommit: RELEASE, liveMoneyApproved: false },
+        reviewer: 'Security reviewer',
+        reviewedAt: REVIEWED_AT,
+      }),
+    /not supported by field-evidence review/,
+  );
+});
+
+test('review helper does not duplicate the same digest-bound evidence reference', () => {
+  const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
+  const ref = evidenceRef('offlineDurability');
+  const report = {
+    releaseCommit: RELEASE,
+    status: 'PASS',
+    gateBSatisfied: true,
+    liveMoneyApproved: false,
+  };
+  for (let index = 0; index < 2; index += 1) {
+    applyReviewedFieldEvidence({
+      manifest,
+      gateName: 'offlineDurability',
+      evidenceRef: ref,
+      report,
+      reviewer: 'Durability reviewer',
+      reviewedAt: REVIEWED_AT,
+    });
+  }
+  assert.deepEqual(manifest.gates.offlineDurability.evidenceRefs, [ref]);
 });
