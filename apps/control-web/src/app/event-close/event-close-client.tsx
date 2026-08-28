@@ -352,8 +352,8 @@ export function EventCloseClient() {
                   ? 'The selected event is ready to load.'
                   : 'Select the event above before closing.'}
             </strong>{' '}
-            The review starts with unresolved payment, inventory and operational signals, then
-            moves into detailed reconciliation and immutable close evidence.
+            The review starts with unresolved payment, inventory and operational signals, then moves
+            into detailed reconciliation and immutable close evidence.
           </div>
         ) : null}
 
