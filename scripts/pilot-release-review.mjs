@@ -107,8 +107,7 @@ async function main() {
   });
 
   const outputPath = resolve(
-    process.env.PILOT_RELEASE_REVIEW_OUTPUT?.trim() ||
-      'artifacts/pilot/release-review.json',
+    process.env.PILOT_RELEASE_REVIEW_OUTPUT?.trim() || 'artifacts/pilot/release-review.json',
   );
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`, {
