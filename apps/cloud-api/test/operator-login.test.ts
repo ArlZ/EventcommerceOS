@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { OperatorAuthService } from '../src/auth/operator-auth.service';
@@ -11,6 +11,7 @@ import {
   loginEmail,
   maskOperatorEmail,
   OperatorLoginService,
+  verificationCode,
 } from '../src/auth/operator-login.service';
 import { classifyAbuseRequest } from '../src/security/abuse-protection.guard';
 
@@ -26,6 +27,15 @@ describe('operator browser authentication', () => {
   it('normalizes email and masks it for the verification screen', () => {
     expect(loginEmail(' Operator@Example.COM ')).toBe(email);
     expect(maskOperatorEmail(email)).toBe('o•••@example.com');
+  });
+
+  it('accepts the configured Supabase email OTP length without assuming six digits', () => {
+    expect(verificationCode('123456')).toBe('123456');
+    expect(verificationCode('12345678')).toBe('12345678');
+    expect(verificationCode(' 1234567890 ')).toBe('1234567890');
+    expect(() => verificationCode('12345')).toThrow(BadRequestException);
+    expect(() => verificationCode('12345678901')).toThrow(BadRequestException);
+    expect(() => verificationCode('12a45678')).toThrow(BadRequestException);
   });
 
   it('serializes HttpOnly production cookies without exposing a domain-wide credential', () => {
