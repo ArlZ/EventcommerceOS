@@ -15,6 +15,7 @@ import type {
   CommandCentrePaymentMethodMetric,
   CommandCentreProductMetric,
   CommandCentreRealtimeEvent,
+  CommandCentreSalesPulsePoint,
   CommandCentreSnapshot,
   CommandCentreTransferMetric,
 } from '@event-commerce/contracts';
@@ -25,6 +26,7 @@ import type { QueryResultRow } from 'pg';
 import { assertOrganisationAccess, type AdminContext } from '../configuration/admin-context';
 import { DatabaseService } from '../database/database.service';
 import { PaymentRailService } from '../payments/payment-rail.service';
+import { deviceOperationalStatus } from '../sync/device-operational-status';
 
 interface EventRow extends QueryResultRow {
   id: string;
@@ -61,11 +63,25 @@ interface ProductRow extends QueryResultRow {
 interface AttemptHealthRow extends QueryResultRow {
   currency: string;
   total_count: string;
+  succeeded_count: string;
   pending_count: string;
   unknown_count: string;
   failed_count: string;
   unknown_value_minor: string;
   latest_attempt_at: Date | string | null;
+}
+
+interface SalesPulseRow extends QueryResultRow {
+  bucket_start: Date | string;
+  currency: string;
+  transaction_count: string;
+  gross_minor: string;
+}
+
+interface LocationPaymentRow extends QueryResultRow {
+  sales_location_id: string;
+  total_count: string;
+  succeeded_count: string;
 }
 
 interface SettledMethodRow extends QueryResultRow {
@@ -175,7 +191,9 @@ export class CommandCentreService {
 
     const [
       salesRows,
+      pulseRows,
       locationRows,
+      locationPaymentRows,
       productRows,
       attemptRows,
       settledRows,
@@ -185,7 +203,9 @@ export class CommandCentreService {
       watermark,
     ] = await Promise.all([
       this.sales(eventId),
+      this.salesPulse(eventId),
       this.locations(eventId),
+      this.locationPaymentHealth(eventId),
       this.products(eventId),
       this.paymentAttemptHealthRows(eventId),
       this.settledPaymentMethods(eventId),
@@ -196,7 +216,7 @@ export class CommandCentreService {
     ]);
 
     const sales = this.salesSummary(salesRows);
-    const locations = this.locationMetrics(locationRows);
+    const salesPulse = this.salesPulseViews(pulseRows);
     const products = this.productMetrics(productRows);
     const paymentHealth = this.paymentHealth(attemptRows);
     const paymentMethods: CommandCentrePaymentMethodMetric[] = settledRows.map((row) => ({
@@ -208,6 +228,7 @@ export class CommandCentreService {
     const risks = this.inventoryRiskViews(inventoryRows);
     const transfers = this.transferViews(transferRows);
     const devices = this.deviceViews(deviceRows);
+    const locations = this.locationMetrics(locationRows, locationPaymentRows, devices);
     const railAvailability = this.rails.availability();
     const latestAttemptAt =
       attemptRows
@@ -241,6 +262,7 @@ export class CommandCentreService {
         latestSourceAt: isoNullable(watermark.latest_source_at),
       },
       sales,
+      salesPulse,
       salesLocations: locations,
       topProducts: products,
       payments: {
@@ -394,6 +416,46 @@ export class CommandCentreService {
     );
   }
 
+  private async salesPulse(eventId: string): Promise<SalesPulseRow[]> {
+    return this.database.query<SalesPulseRow>(
+      `SELECT date_bin('5 minutes'::interval, occurred_at, '2000-01-01'::timestamptz) AS bucket_start,
+              currency,
+              count(*)::text AS transaction_count,
+              coalesce(sum(total_minor),0)::text AS gross_minor
+       FROM sync_order_state
+       WHERE event_id = $1 AND state = 'CLOSED'
+       GROUP BY bucket_start, currency
+       ORDER BY bucket_start ASC, currency ASC`,
+      [eventId],
+    );
+  }
+
+  private async locationPaymentHealth(eventId: string): Promise<LocationPaymentRow[]> {
+    return this.database.query<LocationPaymentRow>(
+      `WITH latest_attempt AS (
+         SELECT DISTINCT ON (attempt.payment_id)
+                attempt.payment_id, attempt.status
+         FROM payment_attempts attempt
+         JOIN payments payment ON payment.id=attempt.payment_id
+         WHERE payment.event_id=$1
+         ORDER BY attempt.payment_id,
+                  coalesce(attempt.resolved_at,attempt.updated_at) DESC,
+                  attempt.id DESC
+       )
+       SELECT coalesce(state.sales_location_id,'unassigned') AS sales_location_id,
+              count(*)::text AS total_count,
+              count(*) FILTER (WHERE latest_attempt.status='SUCCEEDED')::text AS succeeded_count
+       FROM payments payment
+       JOIN latest_attempt ON latest_attempt.payment_id=payment.id
+       LEFT JOIN sync_order_state state
+         ON state.order_id=payment.order_id AND state.event_id=payment.event_id
+       WHERE payment.event_id=$1
+       GROUP BY state.sales_location_id
+       ORDER BY sales_location_id`,
+      [eventId],
+    );
+  }
+
   private async locations(eventId: string): Promise<LocationRow[]> {
     return this.database.query<LocationRow>(
       `SELECT coalesce(state.sales_location_id, 'unassigned') AS sales_location_id,
@@ -453,6 +515,7 @@ export class CommandCentreService {
     return this.database.query<AttemptHealthRow>(
       `SELECT payment.currency,
               count(*)::text AS total_count,
+              count(*) FILTER (WHERE attempt.status = 'SUCCEEDED')::text AS succeeded_count,
               count(*) FILTER (WHERE attempt.status IN ('CREATED','INITIATED','PENDING'))::text AS pending_count,
               count(*) FILTER (WHERE attempt.status = 'UNKNOWN')::text AS unknown_count,
               count(*) FILTER (WHERE attempt.status = 'FAILED')::text AS failed_count,
@@ -652,7 +715,38 @@ export class CommandCentreService {
     return { transactionCount, grossSales, averageOrderValue, currentSalesVelocity, lastSaleAt };
   }
 
-  private locationMetrics(rows: LocationRow[]): CommandCentreLocationMetric[] {
+  private salesPulseViews(rows: SalesPulseRow[]): CommandCentreSalesPulsePoint[] {
+    const grouped = new Map<string, CommandCentreSalesPulsePoint>();
+    for (const row of rows) {
+      const bucketStart = iso(row.bucket_start);
+      const current = grouped.get(bucketStart) ?? {
+        bucketStart,
+        transactionCount: 0,
+        grossSales: [],
+      };
+      current.transactionCount += Number(row.transaction_count);
+      current.grossSales.push({ currency: row.currency, amountMinor: row.gross_minor });
+      grouped.set(bucketStart, current);
+    }
+    return [...grouped.values()].sort((left, right) =>
+      left.bucketStart.localeCompare(right.bucketStart),
+    );
+  }
+
+  private locationMetrics(
+    rows: LocationRow[],
+    paymentRows: LocationPaymentRow[],
+    devices: CommandCentreDeviceMetric[],
+  ): CommandCentreLocationMetric[] {
+    const paymentByLocation = new Map(
+      paymentRows.map((row) => [
+        row.sales_location_id,
+        {
+          total: Number(row.total_count),
+          succeeded: Number(row.succeeded_count),
+        },
+      ]),
+    );
     const grouped = new Map<string, CommandCentreLocationMetric>();
     for (const row of rows) {
       const current = grouped.get(row.sales_location_id) ?? {
@@ -662,6 +756,11 @@ export class CommandCentreService {
         grossSales: [],
         currentSalesVelocity: [],
         lastSaleAt: null,
+        paymentSuccessRate: null,
+        tillsHealthy: 0,
+        tillsTotal: 0,
+        lowestCoverMinutes: null,
+        issueCount: 0,
       };
       current.transactionCount += Number(row.transaction_count);
       current.grossSales.push({ currency: row.currency, amountMinor: row.gross_minor });
@@ -675,9 +774,38 @@ export class CommandCentreService {
       }
       grouped.set(row.sales_location_id, current);
     }
-    return [...grouped.values()].sort((left, right) =>
-      (left.lastSaleAt ?? '').localeCompare(right.lastSaleAt ?? ''),
-    );
+
+    for (const location of grouped.values()) {
+      const payment = paymentByLocation.get(location.salesLocationId);
+      location.paymentSuccessRate =
+        payment && payment.total > 0 ? rate(payment.succeeded, payment.total) : null;
+      const locationDevices = devices.filter(
+        (device) => device.salesLocationId === location.salesLocationId,
+      );
+      location.tillsTotal = locationDevices.length;
+      location.tillsHealthy = locationDevices.filter(
+        (device) => device.status === 'HEALTHY',
+      ).length;
+      location.issueCount =
+        locationDevices.filter((device) => device.status !== 'HEALTHY').length +
+        (payment ? payment.total - payment.succeeded : 0);
+    }
+
+    return [...grouped.values()].sort((left, right) => {
+      const leftGross = left.grossSales.reduce(
+        (sum, value) => sum + BigInt(value.amountMinor),
+        0n,
+      );
+      const rightGross = right.grossSales.reduce(
+        (sum, value) => sum + BigInt(value.amountMinor),
+        0n,
+      );
+      return leftGross === rightGross
+        ? left.name.localeCompare(right.name)
+        : leftGross > rightGross
+          ? -1
+          : 1;
+    });
   }
 
   private productMetrics(rows: ProductRow[]): CommandCentreProductMetric[] {
@@ -710,18 +838,21 @@ export class CommandCentreService {
     const totals = rows.reduce(
       (accumulator, row) => {
         accumulator.total += Number(row.total_count);
+        accumulator.succeeded += Number(row.succeeded_count);
         accumulator.pending += Number(row.pending_count);
         accumulator.unknown += Number(row.unknown_count);
         accumulator.failed += Number(row.failed_count);
         return accumulator;
       },
-      { total: 0, pending: 0, unknown: 0, failed: 0 },
+      { total: 0, succeeded: 0, pending: 0, unknown: 0, failed: 0 },
     );
     return {
       totalCount: totals.total,
+      succeededCount: totals.succeeded,
       pendingCount: totals.pending,
       unknownCount: totals.unknown,
       failedCount: totals.failed,
+      successRate: rate(totals.succeeded, totals.total),
       pendingRate: rate(totals.pending, totals.total),
       unknownRate: rate(totals.unknown, totals.total),
       failureRate: rate(totals.failed, totals.total),
@@ -769,8 +900,10 @@ export class CommandCentreService {
     return rows.map((row) => {
       const age = row.sync_age_seconds === null ? null : Number(row.sync_age_seconds);
       const backlog = row.edge_backlog_count ?? 0;
-      const status: CommandCentreDeviceMetric['status'] =
-        age === null || age > 120 ? 'STALE' : backlog > 0 || age > 30 ? 'DEGRADED' : 'HEALTHY';
+      const status: CommandCentreDeviceMetric['status'] = deviceOperationalStatus({
+        syncAgeSeconds: age,
+        edgeBacklogCount: backlog,
+      });
       return {
         deviceId: row.device_id,
         salesLocationId: row.sales_location_id,
