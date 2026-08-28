@@ -513,18 +513,30 @@ export class CommandCentreService {
 
   private async paymentAttemptHealthRows(eventId: string): Promise<AttemptHealthRow[]> {
     return this.database.query<AttemptHealthRow>(
-      `SELECT payment.currency,
+      `WITH latest_attempt AS (
+         SELECT DISTINCT ON (payment.id)
+                payment.id AS payment_id,
+                payment.currency,
+                payment.amount_minor,
+                attempt.status,
+                attempt.updated_at
+         FROM payments payment
+         JOIN payment_attempts attempt ON attempt.payment_id = payment.id
+         WHERE payment.event_id = $1
+         ORDER BY payment.id,
+                  coalesce(attempt.resolved_at,attempt.updated_at) DESC,
+                  attempt.id DESC
+       )
+       SELECT currency,
               count(*)::text AS total_count,
-              count(*) FILTER (WHERE attempt.status = 'SUCCEEDED')::text AS succeeded_count,
-              count(*) FILTER (WHERE attempt.status IN ('CREATED','INITIATED','PENDING'))::text AS pending_count,
-              count(*) FILTER (WHERE attempt.status = 'UNKNOWN')::text AS unknown_count,
-              count(*) FILTER (WHERE attempt.status = 'FAILED')::text AS failed_count,
-              coalesce(sum(payment.amount_minor) FILTER (WHERE attempt.status = 'UNKNOWN'),0)::text AS unknown_value_minor,
-              max(attempt.updated_at) AS latest_attempt_at
-       FROM payments payment
-       JOIN payment_attempts attempt ON attempt.payment_id = payment.id
-       WHERE payment.event_id = $1
-       GROUP BY payment.currency ORDER BY payment.currency`,
+              count(*) FILTER (WHERE status = 'SUCCEEDED')::text AS succeeded_count,
+              count(*) FILTER (WHERE status IN ('CREATED','INITIATED','PENDING'))::text AS pending_count,
+              count(*) FILTER (WHERE status = 'UNKNOWN')::text AS unknown_count,
+              count(*) FILTER (WHERE status = 'FAILED')::text AS failed_count,
+              coalesce(sum(amount_minor) FILTER (WHERE status = 'UNKNOWN'),0)::text AS unknown_value_minor,
+              max(updated_at) AS latest_attempt_at
+       FROM latest_attempt
+       GROUP BY currency ORDER BY currency`,
       [eventId],
     );
   }
