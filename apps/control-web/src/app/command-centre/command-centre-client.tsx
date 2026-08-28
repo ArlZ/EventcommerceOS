@@ -586,14 +586,15 @@ export function CommandCentreClient() {
   const stale = snapshotIsStale(snapshot, now);
   const payment = snapshot.payments.attempts;
   const deviceIssues = snapshot.devices.filter((device) => device.status !== 'HEALTHY');
-  const healthyDevices = snapshot.devices.length - deviceIssues.length;
+  const reportingDevices = snapshot.devices.filter((device) => device.status !== 'STALE').length;
   const queuedUploads = snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0);
   const criticalRisks = snapshot.inventory.risks.filter((risk) => risk.severity === 'CRITICAL');
   const warningRisks = snapshot.inventory.risks.filter((risk) => risk.severity !== 'CRITICAL');
   const configurationAlerts = snapshot.alerts.filter((alert) => alert.id.startsWith('payment-rail:'));
-  const actionAlerts = snapshot.alerts
-    .filter((alert) => !alert.id.startsWith('payment-rail:'))
-    .slice(0, 5);
+  const liveActionAlerts = snapshot.alerts.filter(
+    (alert) => !alert.id.startsWith('payment-rail:'),
+  );
+  const actionAlerts = liveActionAlerts.slice(0, 5);
   const primaryGross = primaryAmount(snapshot.sales.grossSales);
   const lastSaleLocation =
     [...snapshot.salesLocations]
@@ -696,10 +697,10 @@ export function CommandCentreClient() {
           <div className="ec-action-rail-head">
             <div>
               <span>Act now</span>
-              <h2>{actionAlerts.length} require attention</h2>
+              <h2>{liveActionAlerts.length} require attention</h2>
             </div>
             <span className="ec-live-count" data-tone={actionAlerts.some((alert) => alert.severity === 'CRITICAL') ? 'danger' : 'warning'}>
-              {actionAlerts.length}
+              {liveActionAlerts.length}
             </span>
           </div>
 
@@ -761,11 +762,11 @@ export function CommandCentreClient() {
         <div>
           <span>Payment success</span>
           <strong>{(payment.successRate * 100).toFixed(1)}%</strong>
-          <small>{payment.succeededCount} / {payment.totalCount} attempts</small>
+          <small>{payment.succeededCount} / {payment.totalCount} payments</small>
         </div>
         <div>
           <span>Tills reporting</span>
-          <strong>{healthyDevices} / {snapshot.devices.length}</strong>
+          <strong>{reportingDevices} / {snapshot.devices.length}</strong>
           <small>{deviceIssues.length} need attention</small>
         </div>
         <div>
