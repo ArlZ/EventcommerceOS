@@ -10,9 +10,11 @@ const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const GATE_STATUSES = new Set(['NOT_RUN', 'PASS', 'FAIL']);
 const DEPLOYMENT_MODES = new Set(['single_instance_pilot', 'upstream_distributed']);
-
 const FIELD_GATE_REPORTS = {
-  representativeRecovery: { satisfiedField: 'representativeRecoverySatisfied', requireStatus: true },
+  representativeRecovery: {
+    satisfiedField: 'representativeRecoverySatisfied',
+    requireStatus: true,
+  },
   abuseFloodExercise: { satisfiedField: 'abuseGateSatisfied', requireStatus: true },
   hardwareNetwork: { satisfiedField: 'hardwareNetworkSatisfied', requireStatus: true },
   paymentFaultMatrix: { satisfiedField: 'paymentFaultMatrixSatisfied', requireStatus: true },
@@ -142,14 +144,12 @@ export function applyReviewedFieldEvidence({
   if (!SHA_PATTERN.test(manifest.releaseCommit ?? '')) {
     throw new Error('manifest releaseCommit must be a lowercase 40-character git SHA.');
   }
-
   const contract = FIELD_GATE_REPORTS[gateName];
   if (!contract) {
     throw new Error(
       `gate ${gateName ?? '<missing>'} is not supported by field-evidence review; review branchProtection and dependencySecurity manually.`,
     );
   }
-
   const refBlockers = validateEvidenceRef(evidenceRef);
   if (refBlockers.length > 0) {
     throw new Error(`invalid evidence reference: ${refBlockers.join(' ')}`);
@@ -177,7 +177,6 @@ export function applyReviewedFieldEvidence({
       `field evidence report must set ${contract.satisfiedField}=true for ${gateName}.`,
     );
   }
-
   if (!manifest.gates || typeof manifest.gates !== 'object' || Array.isArray(manifest.gates)) {
     throw new Error('pilot evidence manifest is missing gates.');
   }
@@ -185,7 +184,6 @@ export function applyReviewedFieldEvidence({
   if (!gate || typeof gate !== 'object' || Array.isArray(gate)) {
     throw new Error(`pilot evidence manifest is missing gate ${gateName}.`);
   }
-
   const refs = Array.isArray(gate.evidenceRefs) ? gate.evidenceRefs : [];
   const alreadyPresent = refs.some(
     (ref) => ref?.path === evidenceRef.path && ref?.sha256 === evidenceRef.sha256,
@@ -195,11 +193,9 @@ export function applyReviewedFieldEvidence({
   gate.reviewer = reviewer.trim();
   gate.reviewedAt = reviewedAt;
   gate.notes = typeof notes === 'string' ? notes : '';
-
   if (gateName === 'representativeRecovery') {
     gate.representativeData = true;
   }
-
   return manifest;
 }
 
@@ -436,13 +432,11 @@ function reviewFieldCommand(
       'review-field requires <manifest.json> <gate> <evidence-file> <reviewer> <reviewedAt> [notes].',
     );
   }
-
   const manifestPath = resolve(manifestInputPath);
   const evidencePath = resolve(evidenceInputPath);
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const report = JSON.parse(readFileSync(evidencePath, 'utf8'));
   const evidenceRef = createEvidenceRef(manifestPath, evidencePath);
-
   applyReviewedFieldEvidence({
     manifest,
     gateName,
@@ -452,7 +446,6 @@ function reviewFieldCommand(
     reviewedAt,
     notes,
   });
-
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
   console.log(`Reviewed field evidence attached: gate=${gateName} path=${evidenceRef.path}`);
   console.log(

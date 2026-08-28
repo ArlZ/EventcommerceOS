@@ -235,7 +235,6 @@ test('retained evidence fails when the reference resolves to a directory', () =>
   }
 });
 
-
 test('review helper attaches a verified hardware/network report with named review', () => {
   const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
   const ref = evidenceRef('hardwareNetwork');
@@ -245,7 +244,6 @@ test('review helper attaches a verified hardware/network report with named revie
     hardwareNetworkSatisfied: true,
     liveMoneyApproved: false,
   };
-
   applyReviewedFieldEvidence({
     manifest,
     gateName: 'hardwareNetwork',
@@ -255,7 +253,6 @@ test('review helper attaches a verified hardware/network report with named revie
     reviewedAt: REVIEWED_AT,
     notes: 'Venue field exercise reviewed.',
   });
-
   assert.equal(manifest.gates.hardwareNetwork.status, 'PASS');
   assert.deepEqual(manifest.gates.hardwareNetwork.evidenceRefs, [ref]);
   assert.equal(manifest.gates.hardwareNetwork.reviewer, 'Named reviewer');
@@ -277,7 +274,6 @@ test('review helper sets representativeData only for a passing representative re
     reviewer: 'Recovery reviewer',
     reviewedAt: REVIEWED_AT,
   });
-
   assert.equal(manifest.gates.representativeRecovery.status, 'PASS');
   assert.equal(manifest.gates.representativeRecovery.representativeData, true);
 });
@@ -290,7 +286,6 @@ test('review helper accepts event-close report for each close gate without inven
     inventoryCloseReconciliationSatisfied: true,
     liveMoneyApproved: false,
   };
-
   for (const gateName of ['inventoryCloseReconciliation', 'controlledPilotClose']) {
     applyReviewedFieldEvidence({
       manifest,
@@ -307,7 +302,6 @@ test('review helper accepts event-close report for each close gate without inven
 test('review helper fails closed for release mismatch or missing safe boundary', () => {
   const manifest = createInitialManifest(RELEASE, '2026-08-15T11:00:00Z');
   const ref = evidenceRef('paymentFaultMatrix');
-
   assert.throws(
     () =>
       applyReviewedFieldEvidence({
@@ -325,7 +319,6 @@ test('review helper fails closed for release mismatch or missing safe boundary',
       }),
     /releaseCommit must match/,
   );
-
   assert.throws(
     () =>
       applyReviewedFieldEvidence({
@@ -370,7 +363,6 @@ test('review helper does not duplicate the same digest-bound evidence reference'
     gateBSatisfied: true,
     liveMoneyApproved: false,
   };
-
   for (let index = 0; index < 2; index += 1) {
     applyReviewedFieldEvidence({
       manifest,
@@ -381,6 +373,5 @@ test('review helper does not duplicate the same digest-bound evidence reference'
       reviewedAt: REVIEWED_AT,
     });
   }
-
   assert.deepEqual(manifest.gates.offlineDurability.evidenceRefs, [ref]);
 });
