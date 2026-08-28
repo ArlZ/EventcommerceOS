@@ -26,7 +26,16 @@ type OperatorControlContext = { organisations: ContextOrganisation[] };
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
-export function OperatorContextSwitcher() {
+export function OperatorContextSwitcher({
+  onContextChange,
+}: {
+  onContextChange?: (context: {
+    organisationId: string;
+    organisationName: string;
+    eventId: string | null;
+    eventName: string | null;
+  }) => void;
+} = {}) {
   const [context, setContext] = useState<OperatorControlContext | null>(null);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
@@ -62,12 +71,14 @@ export function OperatorContextSwitcher() {
         const fallbackEvent = storedEvent ?? fallbackOrganisation.events[0];
         setOrganisationId(fallbackOrganisation.id);
         setEventId(fallbackEvent?.id ?? '');
-        writeEventControlContext({
+        const nextContext = {
           organisationId: fallbackOrganisation.id,
           organisationName: fallbackOrganisation.name,
           eventId: fallbackEvent?.id ?? null,
           eventName: fallbackEvent?.name ?? null,
-        });
+        };
+        writeEventControlContext(nextContext);
+        onContextChange?.(nextContext);
       })
       .catch(() => {
         if (active) setError('Context unavailable');
@@ -112,12 +123,14 @@ export function OperatorContextSwitcher() {
           const event = organisation.events[0];
           setOrganisationId(organisation.id);
           setEventId(event?.id ?? '');
-          writeEventControlContext({
+          const nextContext = {
             organisationId: organisation.id,
             organisationName: organisation.name,
             eventId: event?.id ?? null,
             eventName: event?.name ?? null,
-          });
+          };
+          writeEventControlContext(nextContext);
+          onContextChange?.(nextContext);
         }}
       >
         {context.organisations.map((organisation) => (
@@ -136,12 +149,14 @@ export function OperatorContextSwitcher() {
           );
           if (!selectedOrganisation || !event) return;
           setEventId(event.id);
-          writeEventControlContext({
+          const nextContext = {
             organisationId: selectedOrganisation.id,
             organisationName: selectedOrganisation.name,
             eventId: event.id,
             eventName: event.name,
-          });
+          };
+          writeEventControlContext(nextContext);
+          onContextChange?.(nextContext);
         }}
       >
         {selectedOrganisation?.events.length ? null : <option value="">No events</option>}
