@@ -961,11 +961,7 @@ export function CommandCentreClient() {
                   ? 'warning'
                   : 'success';
             const issueTone: Tone =
-              location.issueCount >= 5
-                ? 'danger'
-                : location.issueCount > 0
-                  ? 'warning'
-                  : 'success';
+              location.issueCount >= 5 ? 'danger' : location.issueCount > 0 ? 'warning' : 'success';
 
             return (
               <div className="ec-location-lane" data-tone={tone} key={location.salesLocationId}>
