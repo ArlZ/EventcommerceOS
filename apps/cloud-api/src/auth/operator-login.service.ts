@@ -82,9 +82,9 @@ function rememberDevice(value: unknown): boolean {
   return value;
 }
 
-function verificationCode(value: unknown): string {
-  if (typeof value !== 'string' || !/^\d{6}$/.test(value.trim())) {
-    throw new BadRequestException('Verification code must contain six digits');
+export function verificationCode(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{6,10}$/.test(value.trim())) {
+    throw new BadRequestException('Verification code must contain between 6 and 10 digits');
   }
   return value.trim();
 }

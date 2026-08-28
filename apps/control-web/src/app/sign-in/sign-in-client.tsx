@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './sign-in.module.css';
 
@@ -100,10 +100,10 @@ export function SignInClient() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [maskedEmail, setMaskedEmail] = useState('');
-  const [digits, setDigits] = useState(['', '', '', '', '', '']);
+  const [code, setCode] = useState('');
   const [seconds, setSeconds] = useState(60);
   const [codeError, setCodeError] = useState(false);
-  const codeRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const codeRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -129,7 +129,7 @@ export function SignInClient() {
         return current - 1;
       });
     }, 1_000);
-    window.setTimeout(() => codeRefs.current[0]?.focus(), 250);
+    window.setTimeout(() => codeRef.current?.focus(), 250);
     return () => window.clearInterval(interval);
   }, [step]);
 
@@ -147,7 +147,7 @@ export function SignInClient() {
         },
       );
       setMaskedEmail(result.maskedEmail);
-      setDigits(['', '', '', '', '', '']);
+      setCode('');
       setDirection('forward');
       setStep('verify');
     } catch (failure) {
@@ -157,35 +157,9 @@ export function SignInClient() {
     }
   }
 
-  function updateDigit(index: number, raw: string): void {
-    const numeric = raw.replace(/\D/g, '');
-    if (!numeric) {
-      setDigits((current) => current.map((digit, position) => (position === index ? '' : digit)));
-      return;
-    }
-    const next = [...digits];
-    numeric
-      .slice(0, 6 - index)
-      .split('')
-      .forEach((digit, offset) => {
-        next[index + offset] = digit;
-      });
-    setDigits(next);
-    setCodeError(false);
-    const target = Math.min(index + numeric.length, 5);
-    codeRefs.current[target]?.focus();
-  }
-
-  function codeKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>): void {
-    if (event.key === 'Backspace' && !digits[index] && index > 0) {
-      codeRefs.current[index - 1]?.focus();
-    }
-  }
-
   async function submitCode(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const code = digits.join('');
-    if (!/^\d{6}$/.test(code)) return;
+    if (!/^\d{6,10}$/.test(code)) return;
     setBusy(true);
     setError(null);
     setCodeError(false);
@@ -200,8 +174,8 @@ export function SignInClient() {
     } catch (failure) {
       setError(friendlyError(failure, 'verify'));
       setCodeError(true);
-      setDigits(['', '', '', '', '', '']);
-      window.setTimeout(() => codeRefs.current[0]?.focus(), 50);
+      setCode('');
+      window.setTimeout(() => codeRef.current?.focus(), 50);
     } finally {
       setBusy(false);
     }
@@ -229,13 +203,13 @@ export function SignInClient() {
   function back(): void {
     setDirection('back');
     setStep('credentials');
-    setDigits(['', '', '', '', '', '']);
+    setCode('');
     setCodeError(false);
     setError(null);
   }
 
   const stepClass = direction === 'back' ? styles.stepBack : styles.stepForward;
-  const codeComplete = digits.every((digit) => digit.length === 1);
+  const codeComplete = /^\d{6,10}$/.test(code);
 
   return (
     <main className={styles.shell}>
@@ -426,7 +400,7 @@ export function SignInClient() {
               </button>
               <h2 className={styles.formTitle}>Enter verification code</h2>
               <p className={styles.formSub}>
-                We sent a 6-digit code to <strong>{maskedEmail}</strong>.
+                We sent a verification code to <strong>{maskedEmail}</strong>.
               </p>
               {error ? (
                 <div className={styles.banner}>
@@ -436,24 +410,27 @@ export function SignInClient() {
               ) : null}
 
               <form onSubmit={(event) => void submitCode(event)}>
-                <div className={`${styles.codeRow} ${codeError ? styles.codeError : ''}`}>
-                  {digits.map((digit, index) => (
-                    <input
-                      key={index}
-                      ref={(node) => {
-                        codeRefs.current[index] = node;
-                      }}
-                      className={styles.codeInput}
-                      aria-label={`Verification digit ${index + 1}`}
-                      value={digit}
-                      onChange={(event) => updateDigit(index, event.target.value)}
-                      onKeyDown={(event) => codeKeyDown(index, event)}
-                      inputMode="numeric"
-                      autoComplete={index === 0 ? 'one-time-code' : 'off'}
-                      maxLength={index === 0 ? 6 : 1}
-                      disabled={busy}
-                    />
-                  ))}
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel} htmlFor="verification-code">
+                    Verification code
+                  </label>
+                  <input
+                    ref={codeRef}
+                    className={`${styles.input} ${codeError ? styles.invalidInput : ''}`}
+                    id="verification-code"
+                    name="verification-code"
+                    value={code}
+                    onChange={(event) => {
+                      setCode(event.target.value.replace(/\D/g, '').slice(0, 10));
+                      setCodeError(false);
+                    }}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={10}
+                    placeholder="Enter the code from your email"
+                    aria-invalid={codeError}
+                    disabled={busy}
+                  />
                 </div>
                 <button
                   className={styles.primaryButton}
