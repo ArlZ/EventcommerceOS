@@ -5,7 +5,6 @@ export type CommandCentreRealtimeEvent = 'RESET' | 'CONNECT' | 'STREAM_CONNECTED
 
 export const COMMAND_CENTRE_POLL_INTERVAL_MS = 15_000;
 
-
 export interface CommandCentreVenueTelemetry {
   tone: 'success' | 'warning' | 'neutral';
   label: string;
