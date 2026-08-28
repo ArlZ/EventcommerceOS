@@ -36,19 +36,19 @@ export function readEventControlContext(): EventControlContext {
 
 export function writeEventControlContext(next: EventControlContext): void {
   if (typeof window === 'undefined') return;
-  const merged = { ...readEventControlContext(), ...next };
+  const current = readEventControlContext();
+  const merged = { ...current, ...next };
   const organisationId = stringField(merged.organisationId);
   const organisationName = stringField(merged.organisationName);
   const eventId = stringField(merged.eventId);
   const eventName = stringField(merged.eventName);
-  window.sessionStorage.setItem(
-    storageKey,
-    JSON.stringify({
-      ...(organisationId ? { organisationId } : {}),
-      ...(organisationName ? { organisationName } : {}),
-      ...(eventId ? { eventId } : {}),
-      ...(eventName ? { eventName } : {}),
-    }),
-  );
+  const normalized = {
+    ...(organisationId ? { organisationId } : {}),
+    ...(organisationName ? { organisationName } : {}),
+    ...(eventId ? { eventId } : {}),
+    ...(eventName ? { eventName } : {}),
+  };
+  if (JSON.stringify(current) === JSON.stringify(normalized)) return;
+  window.sessionStorage.setItem(storageKey, JSON.stringify(normalized));
   window.dispatchEvent(new Event(eventControlContextChangedEvent));
 }
