@@ -968,11 +968,7 @@ export function CommandCentreClient() {
                   : 'success';
 
             return (
-              <div
-                className="ec-location-lane"
-                data-tone={tone}
-                key={location.salesLocationId}
-              >
+              <div className="ec-location-lane" data-tone={tone} key={location.salesLocationId}>
                 <strong>{location.name}</strong>
                 <span>{moneyList(location.grossSales, true)}</span>
                 <span>{velocityList(location.currentSalesVelocity)}</span>
