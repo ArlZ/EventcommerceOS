@@ -21,15 +21,18 @@ function snapshot(generatedAt: string, staleAfterSeconds = 30): CommandCentreSna
       currentSalesVelocity: [],
       lastSaleAt: null,
     },
+    salesPulse: [],
     salesLocations: [],
     topProducts: [],
     payments: {
       settledMethods: [],
       attempts: {
         totalCount: 0,
+        succeededCount: 0,
         pendingCount: 0,
         unknownCount: 0,
         failedCount: 0,
+        successRate: 0,
         pendingRate: 0,
         unknownRate: 0,
         failureRate: 0,
