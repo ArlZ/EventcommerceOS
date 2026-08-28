@@ -3,14 +3,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  validateEvidenceFiles,
-  validateManifest,
-} from './pilot-evidence.mjs';
-import {
-  currentGitIdentity,
-  runPreflight,
-} from './pilot-preflight.mjs';
+import { validateEvidenceFiles, validateManifest } from './pilot-evidence.mjs';
+import { currentGitIdentity, runPreflight } from './pilot-preflight.mjs';
 
 function check(id, passed, details) {
   return { id, status: passed ? 'PASS' : 'BLOCKED', details };
