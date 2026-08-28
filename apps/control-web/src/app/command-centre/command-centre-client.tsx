@@ -16,6 +16,7 @@ import {
   COMMAND_CENTRE_POLL_INTERVAL_MS,
   nextRealtimeMode,
   snapshotIsStale,
+  venueTelemetry,
   type CommandCentreRealtimeMode,
 } from './command-centre-state';
 
@@ -671,6 +672,7 @@ export function CommandCentreClient() {
   const phase = eventPhase(snapshot, now);
   const stale = snapshotIsStale(snapshot, now);
   const payment = snapshot.payments.attempts;
+  const venue = venueTelemetry(snapshot.devices);
   const deviceIssues = snapshot.devices.filter((device) => device.status !== 'HEALTHY');
   const reportingDevices = snapshot.devices.filter((device) => device.status !== 'STALE').length;
   const queuedUploads = snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0);
@@ -732,9 +734,9 @@ export function CommandCentreClient() {
 
         <div className="ec-truth-bar">
           <div className="ec-truth-block">
-            <span className="ec-truth-label">Venue Edge</span>
+            <span className="ec-truth-label">Venue registers</span>
             <strong>
-              <i data-tone="success" /> Selling locally
+              <i data-tone={venue.tone} /> {venue.label}
             </strong>
           </div>
           <div className="ec-sync-trace" aria-hidden="true">

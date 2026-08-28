@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { CommandCentreSnapshot } from '@event-commerce/contracts';
-import { nextRealtimeMode, snapshotIsStale } from '../src/app/command-centre/command-centre-state';
+import {
+  nextRealtimeMode,
+  snapshotIsStale,
+  venueTelemetry,
+} from '../src/app/command-centre/command-centre-state';
 
 function snapshot(generatedAt: string, staleAfterSeconds = 30): CommandCentreSnapshot {
   return {
@@ -58,5 +62,65 @@ describe('command centre realtime degradation', () => {
     const value = snapshot(generatedAt, 30);
     expect(snapshotIsStale(value, Date.parse('2026-08-14T13:00:29.000Z'))).toBe(false);
     expect(snapshotIsStale(value, Date.parse('2026-08-14T13:00:31.000Z'))).toBe(true);
+  });
+});
+
+describe('command centre venue telemetry', () => {
+  const device = (
+    deviceId: string,
+    status: 'HEALTHY' | 'DEGRADED' | 'STALE',
+    edgeBacklogCount = 0,
+  ): CommandCentreSnapshot['devices'][number] => ({
+    deviceId,
+    salesLocationId: 'location-1',
+    salesLocationName: 'Main Bar',
+    lastSeenAt: '2026-08-28T18:00:00.000Z',
+    lastCloudDeliveryAt: '2026-08-28T18:00:00.000Z',
+    edgeBacklogCount,
+    syncAgeSeconds: status === 'STALE' ? 600 : status === 'DEGRADED' ? 60 : 5,
+    status,
+  });
+
+  it('does not claim local selling when no register telemetry exists', () => {
+    expect(venueTelemetry([])).toEqual({
+      tone: 'neutral',
+      label: 'No register telemetry yet',
+      reportingCount: 0,
+      totalCount: 0,
+    });
+  });
+
+  it('uses current register reporting as the venue signal', () => {
+    expect(venueTelemetry([device('till-1', 'HEALTHY'), device('till-2', 'HEALTHY')])).toEqual({
+      tone: 'success',
+      label: 'All 2 registers reporting',
+      reportingCount: 2,
+      totalCount: 2,
+    });
+  });
+
+  it('warns without inferring that local checkout has stopped', () => {
+    expect(venueTelemetry([device('till-1', 'STALE'), device('till-2', 'STALE')])).toEqual({
+      tone: 'warning',
+      label: 'Local status not confirmed',
+      reportingCount: 0,
+      totalCount: 2,
+    });
+
+    expect(venueTelemetry([device('till-1', 'HEALTHY'), device('till-2', 'STALE')])).toEqual({
+      tone: 'warning',
+      label: '1/2 registers reporting',
+      reportingCount: 1,
+      totalCount: 2,
+    });
+  });
+
+  it('marks queued or delayed telemetry as warning while registers are still reporting', () => {
+    expect(venueTelemetry([device('till-1', 'DEGRADED', 3)])).toEqual({
+      tone: 'warning',
+      label: '1 register reporting',
+      reportingCount: 1,
+      totalCount: 1,
+    });
   });
 });
