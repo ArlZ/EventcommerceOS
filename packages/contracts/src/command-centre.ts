@@ -15,6 +15,12 @@ export interface CommandCentreCurrencyVelocity {
   amountMinorPerMinute: string;
 }
 
+export interface CommandCentreSalesPulsePoint {
+  bucketStart: string;
+  transactionCount: number;
+  grossSales: CommandCentreCurrencyAmount[];
+}
+
 export interface CommandCentreSalesSummary {
   transactionCount: number;
   grossSales: CommandCentreCurrencyAmount[];
@@ -30,6 +36,11 @@ export interface CommandCentreLocationMetric {
   grossSales: CommandCentreCurrencyAmount[];
   currentSalesVelocity: CommandCentreCurrencyVelocity[];
   lastSaleAt: string | null;
+  paymentSuccessRate: number | null;
+  tillsHealthy: number;
+  tillsTotal: number;
+  lowestCoverMinutes: number | null;
+  issueCount: number;
 }
 
 export interface CommandCentreProductMetric {
@@ -48,9 +59,11 @@ export interface CommandCentrePaymentMethodMetric {
 
 export interface CommandCentrePaymentAttemptHealth {
   totalCount: number;
+  succeededCount: number;
   pendingCount: number;
   unknownCount: number;
   failedCount: number;
+  successRate: number;
   pendingRate: number;
   unknownRate: number;
   failureRate: number;
@@ -133,6 +146,7 @@ export interface CommandCentreSnapshot {
     latestSourceAt: string | null;
   };
   sales: CommandCentreSalesSummary;
+  salesPulse: CommandCentreSalesPulsePoint[];
   salesLocations: CommandCentreLocationMetric[];
   topProducts: CommandCentreProductMetric[];
   payments: {
