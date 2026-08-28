@@ -143,12 +143,20 @@ export function createPilotEvidencePack({
     ],
   };
 
-  writeFileSync(resolve(root, 'evidence.json'), `${JSON.stringify(manifest, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  writeFileSync(resolve(root, 'execution-plan.json'), `${JSON.stringify(plan, null, 2)}\n`, {
-    mode: 0o600,
-  });
+  writeFileSync(
+    resolve(root, 'evidence.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    {
+      mode: 0o600,
+    },
+  );
+  writeFileSync(
+    resolve(root, 'execution-plan.json'),
+    `${JSON.stringify(plan, null, 2)}\n`,
+    {
+      mode: 0o600,
+    },
+  );
 
   return { root, manifest, plan };
 }
