@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { DeviceCloudStatus } from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
+import { deviceOperationalStatus, deviceSyncAgeSeconds } from './device-operational-status';
 
 interface DeviceHealthRow extends QueryResultRow {
   device_id: string;
@@ -44,19 +45,29 @@ export class SyncDeviceHealthService {
       [organisationId],
     );
 
-    return rows.map((row) => ({
-      deviceId: row.device_id,
-      lastSeenAt: isoTimestamp(row.last_seen_at, 'last_seen_at'),
-      lastSequenceSeen: safeSequence(row.last_sequence_seen, 'last_sequence_seen'),
-      edgeAcceptedThroughSequence: safeSequence(
-        row.edge_accepted_through_sequence,
-        'edge_accepted_through_sequence',
-      ),
-      edgeBacklogCount: row.edge_backlog_count,
-      lastCloudDeliveryAt:
-        row.last_cloud_delivery_at === null
-          ? null
-          : isoTimestamp(row.last_cloud_delivery_at, 'last_cloud_delivery_at'),
-    }));
+    const now = new Date();
+    return rows.map((row) => {
+      const syncAgeSeconds = deviceSyncAgeSeconds(row.last_seen_at, now) ?? 0;
+      const operationalStatus = deviceOperationalStatus({
+        syncAgeSeconds,
+        edgeBacklogCount: row.edge_backlog_count,
+      });
+      return {
+        deviceId: row.device_id,
+        lastSeenAt: isoTimestamp(row.last_seen_at, 'last_seen_at'),
+        lastSequenceSeen: safeSequence(row.last_sequence_seen, 'last_sequence_seen'),
+        edgeAcceptedThroughSequence: safeSequence(
+          row.edge_accepted_through_sequence,
+          'edge_accepted_through_sequence',
+        ),
+        edgeBacklogCount: row.edge_backlog_count,
+        lastCloudDeliveryAt:
+          row.last_cloud_delivery_at === null
+            ? null
+            : isoTimestamp(row.last_cloud_delivery_at, 'last_cloud_delivery_at'),
+        syncAgeSeconds,
+        operationalStatus,
+      };
+    });
   }
 }

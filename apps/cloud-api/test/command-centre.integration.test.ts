@@ -116,8 +116,9 @@ describeIntegration('live event command centre', () => {
     await database.query(
       `INSERT INTO sync_device_state(
          device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
-         edge_backlog_count,last_cloud_delivery_at
-       ) VALUES ('device-1',now()-interval '10 seconds',4,4,0,now()-interval '10 seconds')`,
+         edge_backlog_count,last_cloud_delivery_at,organisation_id
+       ) VALUES ('device-1',now()-interval '10 seconds',4,4,0,now()-interval '10 seconds',$1)`,
+      [organisationId],
     );
 
     await database.query(
@@ -177,12 +178,49 @@ describeIntegration('live event command centre', () => {
         valueMinor: '10000',
       },
     ]);
-    expect(response.body.payments.attempts.unknownCount).toBe(1);
+    expect(response.body.salesPulse).toHaveLength(1);
+    expect(response.body.salesPulse[0]).toMatchObject({
+      transactionCount: 1,
+      grossSales: [{ currency: 'KES', amountMinor: '10000' }],
+    });
+    expect(response.body.payments.attempts).toMatchObject({
+      totalCount: 2,
+      succeededCount: 1,
+      unknownCount: 1,
+      successRate: 0.5,
+    });
+    expect(response.body.salesLocations[0]).toMatchObject({
+      salesLocationId,
+      paymentSuccessRate: 1,
+      tillsHealthy: 1,
+      tillsTotal: 1,
+    });
     expect(response.body.inventory.risks[0]).toMatchObject({
       alertId: 'alert-1',
       state: 'OPEN',
       skuName: 'Water 500ml',
     });
+  });
+
+  it('uses the same stale device status in Command Centre and Sync Health', async () => {
+    await database.query(
+      `UPDATE sync_device_state
+       SET last_seen_at=now()-interval '10 minutes',edge_backlog_count=0
+       WHERE device_id='device-1'`,
+    );
+
+    const commandCentre = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+    const syncHealth = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    expect(commandCentre.body.devices[0].status).toBe('STALE');
+    expect(syncHealth.body[0].operationalStatus).toBe('STALE');
+    expect(syncHealth.body[0].syncAgeSeconds).toBeGreaterThan(120);
   });
 
   it('rejects cross-organisation access before returning event metrics', async () => {

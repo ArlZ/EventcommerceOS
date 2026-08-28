@@ -84,16 +84,17 @@ describeIntegration('operator sync device health', () => {
       .set(viewerHeaders)
       .expect(200);
 
-    expect(response.body).toEqual([
-      {
-        deviceId: 'register-alpha',
-        lastSeenAt: '2026-08-21T05:00:00.000Z',
-        lastSequenceSeen: 18,
-        edgeAcceptedThroughSequence: 17,
-        edgeBacklogCount: 1,
-        lastCloudDeliveryAt: '2026-08-21T04:59:50.000Z',
-      },
-    ]);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0]).toMatchObject({
+      deviceId: 'register-alpha',
+      lastSeenAt: '2026-08-21T05:00:00.000Z',
+      lastSequenceSeen: 18,
+      edgeAcceptedThroughSequence: 17,
+      edgeBacklogCount: 1,
+      lastCloudDeliveryAt: '2026-08-21T04:59:50.000Z',
+      operationalStatus: 'STALE',
+    });
+    expect(response.body[0].syncAgeSeconds).toBeGreaterThan(120);
   });
 
   it('rejects cross-organisation access for an organisation operator', async () => {
@@ -109,15 +110,16 @@ describeIntegration('operator sync device health', () => {
       .set(platformHeaders(otherOrganisationId))
       .expect(200);
 
-    expect(response.body).toEqual([
-      {
-        deviceId: 'register-other',
-        lastSeenAt: '2026-08-21T05:01:00.000Z',
-        lastSequenceSeen: 9,
-        edgeAcceptedThroughSequence: 9,
-        edgeBacklogCount: 0,
-        lastCloudDeliveryAt: '2026-08-21T05:00:55.000Z',
-      },
-    ]);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0]).toMatchObject({
+      deviceId: 'register-other',
+      lastSeenAt: '2026-08-21T05:01:00.000Z',
+      lastSequenceSeen: 9,
+      edgeAcceptedThroughSequence: 9,
+      edgeBacklogCount: 0,
+      lastCloudDeliveryAt: '2026-08-21T05:00:55.000Z',
+      operationalStatus: 'STALE',
+    });
+    expect(response.body[0].syncAgeSeconds).toBeGreaterThan(120);
   });
 });

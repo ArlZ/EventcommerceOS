@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { EventConfigurationView } from '@event-commerce/contracts';
-import { readEventControlContext } from '../event-context';
+import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
 import { evaluateEventReadiness, type EventReadiness } from './readiness';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
@@ -14,43 +14,49 @@ export function ReadinessClient() {
   const [error, setError] = useState<string | null>(null);
   const [context, setContext] = useState({ organisationId: '', eventId: '' });
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     const selected = readEventControlContext();
     const organisationId = selected.organisationId ?? '';
     const eventId = selected.eventId ?? '';
     setContext({ organisationId, eventId });
+    setReadiness(null);
+    setError(null);
 
     if (!organisationId || !eventId) {
       setLoading(false);
       return;
     }
 
-    let active = true;
-    setError(null);
-    void fetch(`${apiBase}/organisations/${organisationId}/configuration`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: { 'x-event-control-request': 'browser' },
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Readiness check failed with ${response.status}`);
-        const configuration = (await response.json()) as EventConfigurationView;
-        if (active) setReadiness(evaluateEventReadiness(configuration, eventId));
-      })
-      .catch((caught) => {
-        if (active) {
-          setError(caught instanceof Error ? caught.message : 'Unable to load pilot readiness');
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
+    setLoading(true);
+    try {
+      const response = await fetch(`${apiBase}/organisations/${organisationId}/configuration`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'x-event-control-request': 'browser',
+          'x-organisation-id': organisationId,
+        },
+        signal: AbortSignal.timeout(10_000),
       });
-
-    return () => {
-      active = false;
-    };
+      if (response.status === 401) {
+        throw new Error('Session expired. Sign in again, then retry readiness.');
+      }
+      if (!response.ok) throw new Error(`Readiness check failed with ${response.status}`);
+      const configuration = (await response.json()) as EventConfigurationView;
+      setReadiness(evaluateEventReadiness(configuration, eventId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to load pilot readiness');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void load();
+    const refresh = () => void load();
+    window.addEventListener(eventControlContextChangedEvent, refresh);
+    return () => window.removeEventListener(eventControlContextChangedEvent, refresh);
+  }, [load]);
 
   if (loading) {
     return (
@@ -86,6 +92,12 @@ export function ReadinessClient() {
       <section className="ec-banner ec-banner--danger" role="alert">
         <strong>Readiness unavailable.</strong>{' '}
         {error ?? 'Event configuration could not be evaluated.'}
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <button type="button" onClick={() => void load()}>
+            Retry
+          </button>
+          {error?.startsWith('Session expired') ? <Link href="/sign-in">Sign in again</Link> : null}
+        </div>
       </section>
     );
   }

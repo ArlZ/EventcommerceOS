@@ -41,6 +41,8 @@ export interface DeviceCloudStatus {
   edgeAcceptedThroughSequence: number;
   edgeBacklogCount: number;
   lastCloudDeliveryAt: string | null;
+  syncAgeSeconds?: number;
+  operationalStatus?: 'HEALTHY' | 'DEGRADED' | 'STALE';
 }
 
 export interface EdgeCloudBatch {

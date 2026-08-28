@@ -25,7 +25,10 @@ describe('event close browser authentication', () => {
 
     expect(source).toContain('eventControlContextChangedEvent');
     expect(source).toContain('readEventControlContext()');
-    expect(source).toContain('<OperatorContextSwitcher />');
+    expect(source).toContain('<OperatorContextSwitcher');
+    expect(source).toContain('onContextChange={(next) => {');
+    expect(source).toContain('setOrganisationId(next.organisationId);');
+    expect(source).toContain("setEventId(next.eventId ?? '');");
     expect(source).not.toContain('placeholder="Organisation ID"');
     expect(source).not.toContain('placeholder="Event ID"');
   });

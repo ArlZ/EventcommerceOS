@@ -283,7 +283,10 @@ export function EventCloseClient() {
             truth; it never erases unresolved payments, stock movement or later source corrections.
           </p>
         </div>
-        <span className="ec-status-pill" data-tone={attentionRequired ? 'warning' : 'success'}>
+        <span
+          className="ec-status-pill"
+          data-tone={report ? (attentionRequired ? 'warning' : 'success') : undefined}
+        >
           {report
             ? isOperationallyClosed
               ? attentionRequired
@@ -292,7 +295,9 @@ export function EventCloseClient() {
               : attentionRequired
                 ? 'Resolve before close'
                 : 'Ready to close'
-            : 'Not loaded'}
+            : busy
+              ? 'Loading close review'
+              : 'Awaiting event'}
         </span>
       </header>
 
@@ -306,7 +311,19 @@ export function EventCloseClient() {
             </p>
           </div>
         </div>
-        <OperatorContextSwitcher />
+        <OperatorContextSwitcher
+          onContextChange={(next) => {
+            setOrganisationId(next.organisationId);
+            setEventId(next.eventId ?? '');
+            setActive(null);
+            setReport(null);
+            setStored([]);
+            setConfiguration(null);
+            setError(null);
+            setPendingAction(null);
+            setContextHydrated(true);
+          }}
+        />
       </section>
 
       <div className="ec-operations-stack" aria-busy={busy}>
@@ -326,11 +343,17 @@ export function EventCloseClient() {
 
         {error ? <div className="ec-banner ec-banner--danger">{error}</div> : null}
 
-        {!report ? (
+        {!report && !error ? (
           <div className="ec-callout">
-            <strong>Select the event above before closing.</strong> The review starts with
-            unresolved payment, inventory and operational signals, then moves into detailed
-            reconciliation and immutable close evidence.
+            <strong>
+              {busy
+                ? 'Loading the selected event close review…'
+                : organisationId && eventId
+                  ? 'The selected event is ready to load.'
+                  : 'Select the event above before closing.'}
+            </strong>{' '}
+            The review starts with unresolved payment, inventory and operational signals, then moves
+            into detailed reconciliation and immutable close evidence.
           </div>
         ) : null}
 
