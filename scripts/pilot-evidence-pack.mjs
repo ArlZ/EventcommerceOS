@@ -31,7 +31,7 @@ export const PILOT_FIELD_STAGES = [
       'pnpm pilot:cloud-convergence:verify -- inputs/cloud-convergence.json evidence/cloud-convergence-evidence.json',
     reviewEvidence: 'evidence/cloud-convergence-evidence.json',
     prerequisite:
-      'First collect POS/Event Edge durability checkpoints and run pnpm pilot:durability:verify.',
+      'First collect POS/Event Edge checkpoints and run pnpm pilot:durability:verify -- inputs/durability.json evidence/durability-evidence.json; reference that PASS report from the Cloud convergence input.',
   },
   {
     id: 'abuseFloodExercise',
@@ -58,6 +58,8 @@ export const PILOT_FIELD_STAGES = [
     command:
       'pnpm pilot:event-close:verify -- evidence/event-close.json evidence/event-close-verification.json',
     reviewEvidence: 'evidence/event-close-verification.json',
+    prerequisite:
+      'First collect the exact-release Event Close bundle and set PILOT_EVIDENCE_RELEASE_COMMIT to the same full release SHA before verification.',
     sharedReportWith: 'controlledPilotClose',
   },
   {
@@ -67,6 +69,8 @@ export const PILOT_FIELD_STAGES = [
     command:
       'pnpm pilot:event-close:verify -- evidence/event-close.json evidence/event-close-verification.json',
     reviewEvidence: 'evidence/event-close-verification.json',
+    prerequisite:
+      'First collect the exact-release Event Close bundle and set PILOT_EVIDENCE_RELEASE_COMMIT to the same full release SHA before verification.',
     sharedReportWith: 'inventoryCloseReconciliation',
   },
 ];
@@ -149,8 +153,14 @@ function usage() {
 }
 
 function main() {
-  const [releaseCommit, outputDir, eventName = '', eventDate = '', venue = '', deploymentMode = ''] =
-    process.argv.slice(2);
+  const [
+    releaseCommit,
+    outputDir,
+    eventName = '',
+    eventDate = '',
+    venue = '',
+    deploymentMode = '',
+  ] = process.argv.slice(2);
   if (!releaseCommit || !outputDir) {
     usage();
     process.exitCode = 2;
