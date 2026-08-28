@@ -81,7 +81,7 @@ function nonEmpty(value) {
 
 function ensureEmptyDirectory(root) {
   if (existsSync(root) && readdirSync(root).length > 0) {
-    throw new Error(`refusing to initialize non-empty pilot evidence directory: ${root}`);
+    throw new Error(\n      `refusing to initialize non-empty pilot evidence directory: ${root}`,\n    );
   }
   mkdirSync(root, { recursive: true, mode: 0o700 });
 }
@@ -121,15 +121,15 @@ export function createPilotEvidencePack({
       {
         id: 'branchProtection',
         status: 'NOT_RUN',
-        instruction: 'Review protected-main evidence and attach it manually after named review.',
+        instruction:\n          'Review protected-main evidence and attach it manually after named review.',
       },
       {
         id: 'dependencySecurity',
         status: 'NOT_RUN',
-        instruction: 'Review exact-release SCA evidence and record blockingFindings after named review.',
+        instruction:\n          'Review exact-release SCA evidence and record blockingFindings after named review.',
       },
     ],
-    fieldStages: PILOT_FIELD_STAGES.map((stage) => ({ ...stage, status: 'NOT_RUN' })),
+    fieldStages: PILOT_FIELD_STAGES.map((stage) => ({\n      ...stage,\n      status: 'NOT_RUN',\n    })),
     finalCommands: [
       'pnpm pilot:evidence:validate -- evidence.json',
       'pnpm pilot:release:review',
@@ -175,8 +175,8 @@ function main() {
     deploymentMode,
   });
   console.log(`Controlled-pilot evidence pack initialized: ${result.root}`);
-  console.log(`release=${releaseCommit} disposition=NOT_RUN liveMoneyApproved=false`);
-  console.log('No pilot gate was marked PASS. Complete the real exercises and named reviews.');
+  console.log(\n    `release=${releaseCommit} disposition=NOT_RUN liveMoneyApproved=false`,\n  );
+  console.log(\n    'No pilot gate was marked PASS. Complete the real exercises and named reviews.',\n  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();
