@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   eventControlContextChangedEvent,
   readEventControlContext,
@@ -36,10 +36,15 @@ export function OperatorContextSwitcher({
     eventName: string | null;
   }) => void;
 } = {}) {
+  const onContextChangeRef = useRef(onContextChange);
   const [context, setContext] = useState<OperatorControlContext | null>(null);
   const [organisationId, setOrganisationId] = useState('');
   const [eventId, setEventId] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onContextChangeRef.current = onContextChange;
+  }, [onContextChange]);
 
   useEffect(() => {
     const selected = readEventControlContext();
@@ -78,7 +83,7 @@ export function OperatorContextSwitcher({
           eventName: fallbackEvent?.name ?? null,
         };
         writeEventControlContext(nextContext);
-        onContextChange?.(nextContext);
+        onContextChangeRef.current?.(nextContext);
       })
       .catch(() => {
         if (active) setError('Context unavailable');
@@ -130,7 +135,7 @@ export function OperatorContextSwitcher({
             eventName: event?.name ?? null,
           };
           writeEventControlContext(nextContext);
-          onContextChange?.(nextContext);
+          onContextChangeRef.current?.(nextContext);
         }}
       >
         {context.organisations.map((organisation) => (
@@ -156,7 +161,7 @@ export function OperatorContextSwitcher({
             eventName: event.name,
           };
           writeEventControlContext(nextContext);
-          onContextChange?.(nextContext);
+          onContextChangeRef.current?.(nextContext);
         }}
       >
         {selectedOrganisation?.events.length ? null : <option value="">No events</option>}
