@@ -81,9 +81,7 @@ function nonEmpty(value) {
 
 function ensureEmptyDirectory(root) {
   if (existsSync(root) && readdirSync(root).length > 0) {
-    throw new Error(
-      `refusing to initialize non-empty pilot evidence directory: ${root}`,
-    );
+    throw new Error(`refusing to initialize non-empty pilot evidence directory: ${root}`);
   }
   mkdirSync(root, { recursive: true, mode: 0o700 });
 }
@@ -123,8 +121,7 @@ export function createPilotEvidencePack({
       {
         id: 'branchProtection',
         status: 'NOT_RUN',
-        instruction:
-          'Review protected-main evidence and attach it manually after named review.',
+        instruction: 'Review protected-main evidence and attach it manually after named review.',
       },
       {
         id: 'dependencySecurity',
@@ -133,30 +130,19 @@ export function createPilotEvidencePack({
           'Review exact-release SCA evidence and record blockingFindings after named review.',
       },
     ],
-    fieldStages: PILOT_FIELD_STAGES.map((stage) => ({
-      ...stage,
-      status: 'NOT_RUN',
-    })),
+    fieldStages: PILOT_FIELD_STAGES.map((stage) => ({ ...stage, status: 'NOT_RUN' })),
     finalCommands: [
       'pnpm pilot:evidence:validate -- evidence.json',
       'pnpm pilot:release:review',
     ],
   };
 
-  writeFileSync(
-    resolve(root, 'evidence.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
-    {
-      mode: 0o600,
-    },
-  );
-  writeFileSync(
-    resolve(root, 'execution-plan.json'),
-    `${JSON.stringify(plan, null, 2)}\n`,
-    {
-      mode: 0o600,
-    },
-  );
+  writeFileSync(resolve(root, 'evidence.json'), `${JSON.stringify(manifest, null, 2)}\n`, {
+    mode: 0o600,
+  });
+  writeFileSync(resolve(root, 'execution-plan.json'), `${JSON.stringify(plan, null, 2)}\n`, {
+    mode: 0o600,
+  });
 
   return { root, manifest, plan };
 }
@@ -190,12 +176,8 @@ function main() {
     deploymentMode,
   });
   console.log(`Controlled-pilot evidence pack initialized: ${result.root}`);
-  console.log(
-    `release=${releaseCommit} disposition=NOT_RUN liveMoneyApproved=false`,
-  );
-  console.log(
-    'No pilot gate was marked PASS. Complete the real exercises and named reviews.',
-  );
+  console.log(`release=${releaseCommit} disposition=NOT_RUN liveMoneyApproved=false`);
+  console.log('No pilot gate was marked PASS. Complete the real exercises and named reviews.');
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();
