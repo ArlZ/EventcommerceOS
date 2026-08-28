@@ -95,9 +95,7 @@ function compactMoney(currency: string, amountMinor: string): string {
 function averageList(values: CommandCentreCurrencyAverage[]): string {
   return values.length === 0
     ? '—'
-    : values
-        .map((value) => formatMinor(value.currency, value.averageOrderValueMinor))
-        .join(' · ');
+    : values.map((value) => formatMinor(value.currency, value.averageOrderValueMinor)).join(' · ');
 }
 
 function velocityList(values: CommandCentreCurrencyVelocity[]): string {
@@ -134,7 +132,10 @@ function durationLabel(milliseconds: number): string {
   return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
 }
 
-function eventPhase(snapshot: CommandCentreSnapshot, now: number): {
+function eventPhase(
+  snapshot: CommandCentreSnapshot,
+  now: number,
+): {
   label: string;
   tone: Tone;
   progress: number;
@@ -186,7 +187,8 @@ function severityLabel(severity: string): string {
 function plainInventoryTitle(risk: CommandCentreInventoryRisk): string {
   if (risk.alertType.includes('STOCKOUT')) return `${risk.skuName} may run out`;
   if (risk.alertType === 'LOW_STOCK') return `${risk.skuName} is running low`;
-  if (risk.alertType === 'ABNORMAL_DEPLETION') return `${risk.skuName} is selling faster than expected`;
+  if (risk.alertType === 'ABNORMAL_DEPLETION')
+    return `${risk.skuName} is selling faster than expected`;
   if (risk.alertType === 'STOCK_IMBALANCE') return `${risk.skuName} stock is imbalanced`;
   return `${risk.skuName} needs stock attention`;
 }
@@ -301,7 +303,6 @@ function currentOrderRate(snapshot: CommandCentreSnapshot, now: number): number 
   return count / 15;
 }
 
-
 function SalesPulseChart({
   snapshot,
   window,
@@ -365,8 +366,20 @@ function SalesPulseChart({
         role="img"
         aria-label="Five-minute sales pulse, with revenue line and completed-order bars"
       >
-        <line className="ec-chart-grid" x1={left} x2={width - right} y1={top + plotHeight} y2={top + plotHeight} />
-        <line className="ec-chart-grid" x1={left} x2={width - right} y1={top + plotHeight / 2} y2={top + plotHeight / 2} />
+        <line
+          className="ec-chart-grid"
+          x1={left}
+          x2={width - right}
+          y1={top + plotHeight}
+          y2={top + plotHeight}
+        />
+        <line
+          className="ec-chart-grid"
+          x1={left}
+          x2={width - right}
+          y1={top + plotHeight / 2}
+          y2={top + plotHeight / 2}
+        />
         {prepared.map((point, index) => {
           const barHeight = Math.max(2, (point.transactionCount / maxOrders) * plotHeight * 0.36);
           const barWidth = Math.max(3, Math.min(16, plotWidth / Math.max(1, prepared.length) - 3));
@@ -385,17 +398,33 @@ function SalesPulseChart({
         <path className="ec-chart-area" d={area} />
         <polyline className="ec-chart-line" points={line} fill="none" />
         {prepared.map((point, index) => (
-          <circle className="ec-chart-point" key={`point:${point.bucketStart}`} cx={x(index)} cy={y(point.grossMinor)} r="2.5" />
+          <circle
+            className="ec-chart-point"
+            key={`point:${point.bucketStart}`}
+            cx={x(index)}
+            cy={y(point.grossMinor)}
+            r="2.5"
+          />
         ))}
         {labels.map(({ index, label }) => (
-          <text className="ec-chart-label" key={`label:${index}`} x={x(index)} y={height - 10} textAnchor="middle">
+          <text
+            className="ec-chart-label"
+            key={`label:${index}`}
+            x={x(index)}
+            y={height - 10}
+            textAnchor="middle"
+          >
             {label}
           </text>
         ))}
       </svg>
       <div className="ec-chart-legend">
-        <span><i className="ec-legend-line" /> Revenue per 5 min</span>
-        <span><i className="ec-legend-bar" /> Completed orders</span>
+        <span>
+          <i className="ec-legend-line" /> Revenue per 5 min
+        </span>
+        <span>
+          <i className="ec-legend-bar" /> Completed orders
+        </span>
       </div>
     </div>
   );
@@ -576,7 +605,9 @@ export function CommandCentreClient() {
               >
                 Retry
               </button>
-              {error.startsWith('Session expired') ? <Link href="/sign-in">Sign in again</Link> : null}
+              {error.startsWith('Session expired') ? (
+                <Link href="/sign-in">Sign in again</Link>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -592,10 +623,10 @@ export function CommandCentreClient() {
   const queuedUploads = snapshot.devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0);
   const criticalRisks = snapshot.inventory.risks.filter((risk) => risk.severity === 'CRITICAL');
   const warningRisks = snapshot.inventory.risks.filter((risk) => risk.severity !== 'CRITICAL');
-  const configurationAlerts = snapshot.alerts.filter((alert) => alert.id.startsWith('payment-rail:'));
-  const liveActionAlerts = snapshot.alerts.filter(
-    (alert) => !alert.id.startsWith('payment-rail:'),
+  const configurationAlerts = snapshot.alerts.filter((alert) =>
+    alert.id.startsWith('payment-rail:'),
   );
+  const liveActionAlerts = snapshot.alerts.filter((alert) => !alert.id.startsWith('payment-rail:'));
   const actionAlerts = liveActionAlerts.slice(0, 5);
   const primaryGross = primaryAmount(snapshot.sales.grossSales);
   const lastSaleLocation =
@@ -623,7 +654,10 @@ export function CommandCentreClient() {
           </div>
         </div>
 
-        <div className="ec-event-progress" aria-label={`Event progress ${Math.round(phase.progress * 100)}%`}>
+        <div
+          className="ec-event-progress"
+          aria-label={`Event progress ${Math.round(phase.progress * 100)}%`}
+        >
           <div className="ec-event-progress-track">
             <span style={{ width: `${phase.progress * 100}%` }} />
             <i style={{ left: `${phase.progress * 100}%` }} aria-hidden="true" />
@@ -638,9 +672,13 @@ export function CommandCentreClient() {
         <div className="ec-truth-bar">
           <div className="ec-truth-block">
             <span className="ec-truth-label">Venue Edge</span>
-            <strong><i data-tone="success" /> Local selling protected from Cloud loss</strong>
+            <strong>
+              <i data-tone="success" /> Local selling protected from Cloud loss
+            </strong>
           </div>
-          <div className="ec-sync-trace" aria-hidden="true"><span /></div>
+          <div className="ec-sync-trace" aria-hidden="true">
+            <span />
+          </div>
           <div className="ec-truth-block">
             <span className="ec-truth-label">Cloud mirror</span>
             <strong>
@@ -650,13 +688,15 @@ export function CommandCentreClient() {
                 : `Updated ${ageLabel(snapshot.freshness.generatedAt, now)}`}
             </strong>
           </div>
-          <div className="ec-truth-meta">
-            Last sale {ageLabel(snapshot.sales.lastSaleAt, now)}
-          </div>
+          <div className="ec-truth-meta">Last sale {ageLabel(snapshot.sales.lastSaleAt, now)}</div>
         </div>
       </section>
 
-      {error ? <div className="ec-live-error"><strong>Refresh issue:</strong> {error}</div> : null}
+      {error ? (
+        <div className="ec-live-error">
+          <strong>Refresh issue:</strong> {error}
+        </div>
+      ) : null}
 
       <section className="ec-live-first-grid">
         <div className="ec-trading-pulse">
@@ -674,9 +714,15 @@ export function CommandCentreClient() {
                 </strong>
               </div>
               <div className="ec-pulse-inline-stats">
-                <span><b>{velocityList(snapshot.sales.currentSalesVelocity)}</b> sales velocity</span>
-                <span><b>{currentOrderRate(snapshot, now).toFixed(1)}/min</b> completed orders</span>
-                <span><b>{averageList(snapshot.sales.averageOrderValue)}</b> average order</span>
+                <span>
+                  <b>{velocityList(snapshot.sales.currentSalesVelocity)}</b> sales velocity
+                </span>
+                <span>
+                  <b>{currentOrderRate(snapshot, now).toFixed(1)}/min</b> completed orders
+                </span>
+                <span>
+                  <b>{averageList(snapshot.sales.averageOrderValue)}</b> average order
+                </span>
               </div>
             </div>
             <div className="ec-pulse-window" aria-label="Chart time window">
@@ -701,7 +747,12 @@ export function CommandCentreClient() {
               <span>Act now</span>
               <h2>{liveActionAlerts.length} require attention</h2>
             </div>
-            <span className="ec-live-count" data-tone={actionAlerts.some((alert) => alert.severity === 'CRITICAL') ? 'danger' : 'warning'}>
+            <span
+              className="ec-live-count"
+              data-tone={
+                actionAlerts.some((alert) => alert.severity === 'CRITICAL') ? 'danger' : 'warning'
+              }
+            >
               {liveActionAlerts.length}
             </span>
           </div>
@@ -718,7 +769,11 @@ export function CommandCentreClient() {
                 const risk = presentation.risk;
                 const busy = risk ? busyAlertId === risk.alertId : false;
                 return (
-                  <article className="ec-action-item" data-tone={severityTone(alert.severity)} key={alert.id}>
+                  <article
+                    className="ec-action-item"
+                    data-tone={severityTone(alert.severity)}
+                    key={alert.id}
+                  >
                     <div className="ec-action-item-top">
                       <span>{severityLabel(alert.severity)}</span>
                       <small>Open {ageLabel(alert.openedAt, now)}</small>
@@ -764,11 +819,15 @@ export function CommandCentreClient() {
         <div>
           <span>Payment success</span>
           <strong>{(payment.successRate * 100).toFixed(1)}%</strong>
-          <small>{payment.succeededCount} / {payment.totalCount} payments</small>
+          <small>
+            {payment.succeededCount} / {payment.totalCount} payments
+          </small>
         </div>
         <div>
           <span>Tills reporting</span>
-          <strong>{reportingDevices} / {snapshot.devices.length}</strong>
+          <strong>
+            {reportingDevices} / {snapshot.devices.length}
+          </strong>
           <small>{deviceIssues.length} need attention</small>
         </div>
         <div>
@@ -784,7 +843,9 @@ export function CommandCentreClient() {
         <div>
           <span>Queued sale updates</span>
           <strong>{queuedUploads}</strong>
-          <small>across {snapshot.devices.filter((device) => device.edgeBacklogCount > 0).length} tills</small>
+          <small>
+            across {snapshot.devices.filter((device) => device.edgeBacklogCount > 0).length} tills
+          </small>
         </div>
         <div>
           <span>Last sale</span>
@@ -820,7 +881,9 @@ export function CommandCentreClient() {
                   ? '—'
                   : `${(location.paymentSuccessRate * 100).toFixed(1)}%`}
               </span>
-              <span>{location.tillsHealthy}/{location.tillsTotal}</span>
+              <span>
+                {location.tillsHealthy}/{location.tillsTotal}
+              </span>
               <span data-tone={location.issueCount > 0 ? 'warning' : 'success'}>
                 {location.issueCount > 0 ? location.issueCount : 'Clear'}
               </span>
@@ -846,10 +909,16 @@ export function CommandCentreClient() {
                 <div className="ec-risk-line" key={risk.alertId}>
                   <div>
                     <strong>{plainInventoryTitle(risk)}</strong>
-                    <span>{risk.inventoryLocationName ?? 'Event-wide'} · {coverLabel(risk.minutesOfCover)}</span>
+                    <span>
+                      {risk.inventoryLocationName ?? 'Event-wide'} ·{' '}
+                      {coverLabel(risk.minutesOfCover)}
+                    </span>
                   </div>
                   <div className="ec-cover-track" aria-label={coverLabel(risk.minutesOfCover)}>
-                    <span style={{ width: `${coverWidth}%` }} data-tone={severityTone(risk.severity)} />
+                    <span
+                      style={{ width: `${coverWidth}%` }}
+                      data-tone={severityTone(risk.severity)}
+                    />
                   </div>
                   <small>
                     {risk.suggestedTransferQuantityBase && risk.suggestedSourceLocationName
@@ -877,10 +946,18 @@ export function CommandCentreClient() {
             <span data-state="failed" style={{ flex: payment.failedCount }} />
           </div>
           <div className="ec-payment-status-legend">
-            <span><i data-state="success" /> {payment.succeededCount} successful</span>
-            <span><i data-state="pending" /> {payment.pendingCount} pending</span>
-            <span><i data-state="unknown" /> {payment.unknownCount} verify</span>
-            <span><i data-state="failed" /> {payment.failedCount} failed</span>
+            <span>
+              <i data-state="success" /> {payment.succeededCount} successful
+            </span>
+            <span>
+              <i data-state="pending" /> {payment.pendingCount} pending
+            </span>
+            <span>
+              <i data-state="unknown" /> {payment.unknownCount} verify
+            </span>
+            <span>
+              <i data-state="failed" /> {payment.failedCount} failed
+            </span>
           </div>
           <div className="ec-payment-exposure">
             <span>Unresolved value</span>
@@ -888,7 +965,10 @@ export function CommandCentreClient() {
           </div>
           {configurationAlerts.length > 0 ? (
             <div className="ec-config-note">
-              <strong>{configurationAlerts.length} payment configuration item{configurationAlerts.length === 1 ? '' : 's'} need setup attention.</strong>
+              <strong>
+                {configurationAlerts.length} payment configuration item
+                {configurationAlerts.length === 1 ? '' : 's'} need setup attention.
+              </strong>
               <span>{configurationAlerts.map((alert) => alert.title).join(' · ')}</span>
             </div>
           ) : null}
@@ -905,16 +985,22 @@ export function CommandCentreClient() {
             <Link href="/sync-health">Open device health →</Link>
           </div>
           {deviceIssues.length === 0 ? (
-            <div className="ec-live-empty"><strong>All tills reporting normally.</strong></div>
+            <div className="ec-live-empty">
+              <strong>All tills reporting normally.</strong>
+            </div>
           ) : (
             <div className="ec-device-exception-list">
               {deviceIssues.map((device) => (
                 <div key={device.deviceId}>
-                  <span className="ec-device-status-mark" data-tone={device.status === 'STALE' ? 'danger' : 'warning'} />
+                  <span
+                    className="ec-device-status-mark"
+                    data-tone={device.status === 'STALE' ? 'danger' : 'warning'}
+                  />
                   <div>
                     <strong>{deviceLabels.get(device.deviceId) ?? device.deviceId}</strong>
                     <small>
-                      {device.status === 'STALE' ? 'Not reporting' : 'Delayed'} · heartbeat {ageLabel(device.lastSeenAt, now)}
+                      {device.status === 'STALE' ? 'Not reporting' : 'Delayed'} · heartbeat{' '}
+                      {ageLabel(device.lastSeenAt, now)}
                     </small>
                   </div>
                   <b>{device.edgeBacklogCount} queued</b>
@@ -934,18 +1020,26 @@ export function CommandCentreClient() {
           <div className="ec-product-ranking">
             {snapshot.topProducts.slice(0, 5).map((product) => {
               const maxGross = Math.max(
-                ...snapshot.topProducts.map((candidate) => Number(amountTotal(candidate.grossSales))),
+                ...snapshot.topProducts.map((candidate) =>
+                  Number(amountTotal(candidate.grossSales)),
+                ),
                 1,
               );
               const gross = Number(amountTotal(product.grossSales));
-              const risk = snapshot.inventory.risks.find((candidate) => candidate.skuId === product.skuId);
+              const risk = snapshot.inventory.risks.find(
+                (candidate) => candidate.skuId === product.skuId,
+              );
               return (
                 <div key={product.skuId}>
                   <div className="ec-product-rank-copy">
                     <strong>{product.name}</strong>
-                    <span>{moneyList(product.grossSales, true)} · {product.quantitySold} units</span>
+                    <span>
+                      {moneyList(product.grossSales, true)} · {product.quantitySold} units
+                    </span>
                   </div>
-                  <div className="ec-product-bar"><span style={{ width: `${(gross / maxGross) * 100}%` }} /></div>
+                  <div className="ec-product-bar">
+                    <span style={{ width: `${(gross / maxGross) * 100}%` }} />
+                  </div>
                   <small data-tone={risk ? severityTone(risk.severity) : 'neutral'}>
                     {risk ? coverLabel(risk.minutesOfCover) : 'Stock stable'}
                   </small>
@@ -965,23 +1059,40 @@ export function CommandCentreClient() {
           <Link href="/inventory">Manage stock →</Link>
         </div>
         {snapshot.inventory.activeTransfers.length === 0 ? (
-          <div className="ec-live-empty"><strong>No active stock transfers.</strong></div>
+          <div className="ec-live-empty">
+            <strong>No active stock transfers.</strong>
+          </div>
         ) : (
           <div className="ec-transfer-journeys">
             {snapshot.inventory.activeTransfers.map((transfer) => (
               <div className="ec-transfer-journey" key={transfer.transferId}>
                 <strong>{transfer.sourceLocationName ?? 'Source'}</strong>
                 <div className="ec-transfer-path">
-                  <span data-done={['PICKING','DISPATCHED','IN_TRANSIT','RECEIVED'].includes(transfer.state)}>Picking</span>
+                  <span
+                    data-done={['PICKING', 'DISPATCHED', 'IN_TRANSIT', 'RECEIVED'].includes(
+                      transfer.state,
+                    )}
+                  >
+                    Picking
+                  </span>
                   <i />
-                  <span data-done={['DISPATCHED','IN_TRANSIT','RECEIVED'].includes(transfer.state)}>Dispatched</span>
+                  <span
+                    data-done={['DISPATCHED', 'IN_TRANSIT', 'RECEIVED'].includes(transfer.state)}
+                  >
+                    Dispatched
+                  </span>
                   <i />
-                  <span data-done={['IN_TRANSIT','RECEIVED'].includes(transfer.state)}>In transit</span>
+                  <span data-done={['IN_TRANSIT', 'RECEIVED'].includes(transfer.state)}>
+                    In transit
+                  </span>
                   <i />
                   <span data-done={transfer.state === 'RECEIVED'}>Received</span>
                 </div>
                 <strong>{transfer.destinationLocationName ?? 'Destination'}</strong>
-                <small>{transfer.assignedActorId ? 'Owner assigned' : 'Owner unassigned'} · updated {ageLabel(transfer.updatedAt, now)}</small>
+                <small>
+                  {transfer.assignedActorId ? 'Owner assigned' : 'Owner unassigned'} · updated{' '}
+                  {ageLabel(transfer.updatedAt, now)}
+                </small>
               </div>
             ))}
           </div>
@@ -990,7 +1101,12 @@ export function CommandCentreClient() {
 
       <footer className="ec-live-footer">
         <span>
-          Realtime: {mode === 'LIVE' ? 'connected' : mode === 'POLLING' ? 'recovering with polling' : mode.toLowerCase()}
+          Realtime:{' '}
+          {mode === 'LIVE'
+            ? 'connected'
+            : mode === 'POLLING'
+              ? 'recovering with polling'
+              : mode.toLowerCase()}
         </span>
         <span>Cloud dashboards may lag; local-first checkout remains independent.</span>
       </footer>
