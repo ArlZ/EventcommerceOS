@@ -119,7 +119,7 @@ describe('command centre venue telemetry', () => {
   it('marks queued or delayed telemetry as warning while registers are still reporting', () => {
     expect(venueTelemetry([device('till-1', 'DEGRADED', 3)])).toEqual({
       tone: 'warning',
-      label: 'All 1 register reporting',
+      label: '1 register reporting',
       reportingCount: 1,
       totalCount: 1,
     });
