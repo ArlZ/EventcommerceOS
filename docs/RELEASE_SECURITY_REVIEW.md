@@ -69,7 +69,7 @@ Security tests cover missing/wrong/unknown/revoked credentials, body identity mi
 
 **Status: remediated and merged into `main`; exact-release operational acceptance remains required.**
 
-Cloud now uses revocable, expiring opaque operator sessions. Session secrets are generated with 256 bits of randomness and only SHA-256 digests are stored. Actor identity, platform authority and organisation membership/role are resolved from Cloud database state on each request.
+Cloud now uses password + email-code browser sign-in backed by Supabase Auth, followed by a separate revocable, expiring Event Commerce OS operator session. After the password proof succeeds, Event Control requires a six-digit email OTP; Cloud issues its own opaque operator session only after that verification succeeds. Operator session secrets use 256 bits of randomness and only SHA-256 digests are stored. Actor identity, platform authority and organisation membership/role are resolved from Cloud database state on each request.
 
 Implemented controls:
 
@@ -85,9 +85,11 @@ Implemented controls:
 - refund/reversal mutation authority is separated from general event administration and requires `FINANCE` for organisation-scoped operators;
 - privileged payment actor IDs must match the authenticated session;
 - operator/session/membership lifecycle actions have append-only audit records;
-- control-web stores the temporary access token in browser `sessionStorage`, injects it only for the configured Cloud origin and strips obsolete actor/role headers.
+- control-web sends authentication requests with credentials enabled; Cloud stores the login challenge and authenticated operator session in HttpOnly, `SameSite=Strict` cookies that are `Secure` in production;
+- the browser does not receive or persist the upstream Supabase access token; the temporary upstream proof is signed out after verification on a best-effort basis;
+- the legacy/admin-issued `ecom_op_...` bearer session remains a bounded provisioning/recovery/diagnostic path rather than the normal browser sign-in mechanism.
 
-The controlled-pilot provisioning path is an audited Cloud DB-admin CLI, not a password login flow. No claim is made that this is final enterprise IAM: external OIDC/SSO, MFA and organization-specific identity-policy integration remain appropriate P2 hardening/graduation work beyond a bounded pilot.
+Controlled-pilot identity and membership provisioning remains an audited Cloud DB-admin action, while normal browser access now uses the provisioned operator work email, password and six-digit email verification code. Password recovery remains administrator-managed. No claim is made that this is final enterprise IAM: external OIDC/SAML SSO, authenticator-based MFA/step-up and organization-specific identity-policy integration remain appropriate P2 hardening/graduation work beyond a bounded pilot.
 
 Adversarial coverage includes legacy-header privilege spoofing, role inflation, wrong-organisation selection, platform-only organisation creation, expired/revoked session rejection, revoked-identity rejection, machine-token rejection on human routes, role separation, organisation-admin denial for refund/reversal mutation and privileged payment actor spoof rejection before business effect.
 
