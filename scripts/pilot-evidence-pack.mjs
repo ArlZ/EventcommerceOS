@@ -131,10 +131,7 @@ export function createPilotEvidencePack({
       },
     ],
     fieldStages: PILOT_FIELD_STAGES.map((stage) => ({ ...stage, status: 'NOT_RUN' })),
-    finalCommands: [
-      'pnpm pilot:evidence:validate -- evidence.json',
-      'pnpm pilot:release:review',
-    ],
+    finalCommands: ['pnpm pilot:evidence:validate -- evidence.json', 'pnpm pilot:release:review'],
   };
 
   writeFileSync(resolve(root, 'evidence.json'), `${JSON.stringify(manifest, null, 2)}\n`, {
