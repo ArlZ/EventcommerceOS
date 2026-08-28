@@ -96,9 +96,7 @@ export function ReadinessClient() {
           <button type="button" onClick={() => void load()}>
             Retry
           </button>
-          {error?.startsWith('Session expired') ? (
-            <Link href="/sign-in">Sign in again</Link>
-          ) : null}
+          {error?.startsWith('Session expired') ? <Link href="/sign-in">Sign in again</Link> : null}
         </div>
       </section>
     );
