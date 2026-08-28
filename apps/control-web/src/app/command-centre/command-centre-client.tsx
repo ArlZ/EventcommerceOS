@@ -307,6 +307,18 @@ function currentOrderRate(snapshot: CommandCentreSnapshot, now: number): number 
   return count / 15;
 }
 
+function locationTone(location: CommandCentreSnapshot['salesLocations'][number]): Tone {
+  const paymentRate = location.paymentSuccessRate;
+  const allTillsDown = location.tillsTotal > 0 && location.tillsHealthy === 0;
+  const someTillsDown = location.tillsHealthy < location.tillsTotal;
+
+  if (allTillsDown || (paymentRate !== null && paymentRate < 0.9)) return 'danger';
+  if (location.issueCount > 0 || someTillsDown || (paymentRate !== null && paymentRate < 0.97)) {
+    return 'warning';
+  }
+  return 'success';
+}
+
 function SalesPulseChart({
   snapshot,
   window,
@@ -335,8 +347,8 @@ function SalesPulseChart({
 
   const width = 760;
   const height = 250;
-  const left = 18;
-  const right = 12;
+  const left = 62;
+  const right = 16;
   const top = 12;
   const bottom = 38;
   const plotWidth = width - left - right;
@@ -346,6 +358,23 @@ function SalesPulseChart({
   const x = (index: number) =>
     left + (prepared.length === 1 ? plotWidth / 2 : (index / (prepared.length - 1)) * plotWidth);
   const y = (grossMinor: number) => top + plotHeight - (grossMinor / maxGross) * plotHeight;
+  const pulseCurrency =
+    primaryAmount(prepared[0]!.grossSales)?.currency ??
+    primaryAmount(snapshot.sales.grossSales)?.currency ??
+    'KES';
+  const yLabels = [
+    {
+      key: 'max',
+      y: top + 4,
+      label: compactMoney(pulseCurrency, Math.round(maxGross).toString()),
+    },
+    {
+      key: 'mid',
+      y: top + plotHeight / 2 + 4,
+      label: compactMoney(pulseCurrency, Math.round(maxGross / 2).toString()),
+    },
+    { key: 'zero', y: top + plotHeight + 4, label: '0' },
+  ];
   const line = prepared.map((point, index) => `${x(index)},${y(point.grossMinor)}`).join(' ');
   const area = [
     `M ${x(0)} ${top + plotHeight}`,
@@ -370,6 +399,17 @@ function SalesPulseChart({
         role="img"
         aria-label="Five-minute sales pulse, with revenue line and completed-order bars"
       >
+        {yLabels.map((label) => (
+          <text
+            className="ec-chart-y-label"
+            key={label.key}
+            x={left - 9}
+            y={label.y}
+            textAnchor="end"
+          >
+            {label.label}
+          </text>
+        ))}
         <line
           className="ec-chart-grid"
           x1={left}
@@ -408,7 +448,16 @@ function SalesPulseChart({
             cx={x(index)}
             cy={y(point.grossMinor)}
             r="2.5"
-          />
+          >
+            <title>
+              {new Date(point.bucketStart).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}{' '}
+              · {compactMoney(pulseCurrency, Math.round(point.grossMinor).toString())} ·{' '}
+              {point.transactionCount} orders
+            </title>
+          </circle>
         ))}
         {labels.map(({ index, label }) => (
           <text
@@ -632,6 +681,8 @@ export function CommandCentreClient() {
   );
   const liveActionAlerts = snapshot.alerts.filter((alert) => !alert.id.startsWith('payment-rail:'));
   const actionAlerts = liveActionAlerts.slice(0, 5);
+  const compactHiddenActionCount = Math.max(0, liveActionAlerts.length - 3);
+  const desktopHiddenActionCount = Math.max(0, liveActionAlerts.length - actionAlerts.length);
   const primaryGross = primaryAmount(snapshot.sales.grossSales);
   const presentedEvent = eventPresentation(snapshot.event.name);
   const lastSaleLocation =
@@ -820,6 +871,18 @@ export function CommandCentreClient() {
                   </article>
                 );
               })}
+              {desktopHiddenActionCount > 0 ? (
+                <div className="ec-action-overflow ec-action-overflow--desktop">
+                  <strong>+{desktopHiddenActionCount} more unresolved issues</strong>
+                  <span>Continue below for payment, till and stock detail.</span>
+                </div>
+              ) : null}
+              {compactHiddenActionCount > 0 ? (
+                <div className="ec-action-overflow ec-action-overflow--compact">
+                  <strong>+{compactHiddenActionCount} more unresolved issues</strong>
+                  <span>Continue below for payment, till and stock detail.</span>
+                </div>
+              ) : null}
             </div>
           )}
         </aside>
@@ -881,24 +944,44 @@ export function CommandCentreClient() {
             <span>Tills</span>
             <span>Issues</span>
           </div>
-          {snapshot.salesLocations.map((location) => (
-            <div className="ec-location-lane" key={location.salesLocationId}>
-              <strong>{location.name}</strong>
-              <span>{moneyList(location.grossSales, true)}</span>
-              <span>{velocityList(location.currentSalesVelocity)}</span>
-              <span>
-                {location.paymentSuccessRate === null
-                  ? '—'
-                  : `${(location.paymentSuccessRate * 100).toFixed(1)}%`}
-              </span>
-              <span>
-                {location.tillsHealthy}/{location.tillsTotal}
-              </span>
-              <span data-tone={location.issueCount > 0 ? 'warning' : 'success'}>
-                {location.issueCount > 0 ? location.issueCount : 'Clear'}
-              </span>
-            </div>
-          ))}
+          {snapshot.salesLocations.map((location) => {
+            const tone = locationTone(location);
+            const paymentTone: Tone =
+              location.paymentSuccessRate === null
+                ? 'neutral'
+                : location.paymentSuccessRate < 0.9
+                  ? 'danger'
+                  : location.paymentSuccessRate < 0.97
+                    ? 'warning'
+                    : 'success';
+            const tillTone: Tone =
+              location.tillsTotal > 0 && location.tillsHealthy === 0
+                ? 'danger'
+                : location.tillsHealthy < location.tillsTotal
+                  ? 'warning'
+                  : 'success';
+            const issueTone: Tone =
+              location.issueCount >= 5 ? 'danger' : location.issueCount > 0 ? 'warning' : 'success';
+
+            return (
+              <div className="ec-location-lane" data-tone={tone} key={location.salesLocationId}>
+                <strong>{location.name}</strong>
+                <span>{moneyList(location.grossSales, true)}</span>
+                <span>{velocityList(location.currentSalesVelocity)}</span>
+                <span data-tone={paymentTone}>
+                  {location.paymentSuccessRate === null
+                    ? '—'
+                    : `${(location.paymentSuccessRate * 100).toFixed(1)}%`}
+                </span>
+                <span data-tone={tillTone}>
+                  {location.tillsHealthy}/{location.tillsTotal}
+                </span>
+                <span data-tone={issueTone}>
+                  {location.issueCount > 0 ? location.issueCount : 'Clear'}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </section>
 
