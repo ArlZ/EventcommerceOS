@@ -198,13 +198,6 @@ function coverLabel(value: string | null): string {
   return `${Math.max(0, Math.round(minutes))} min cover`;
 }
 
-function providerLabel(value: string): string {
-  if (value === 'mpesa') return 'M-Pesa';
-  if (value.includes('pesapal') || value.includes('sabi')) return 'Pesapal / SABI';
-  if (value.includes('external')) return 'Card terminal';
-  return value.replaceAll('_', ' ');
-}
-
 function friendlyDeviceLabels(snapshot: CommandCentreSnapshot): Map<string, string> {
   const groups = new Map<string, typeof snapshot.devices>();
   for (const device of snapshot.devices) {
@@ -498,7 +491,7 @@ export function CommandCentreClient() {
         if (!response.ok) throw new Error(`Realtime channel returned ${response.status}`);
         setMode((current) => nextRealtimeMode(current, 'STREAM_CONNECTED'));
         await consumeSse(response, async () => fetchSnapshot(active));
-      } catch (failure) {
+      } catch {
         if (controller.signal.aborted) return;
         setMode((current) => nextRealtimeMode(current, 'STREAM_FAILED'));
       }
