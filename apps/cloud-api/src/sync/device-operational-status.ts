@@ -20,10 +20,7 @@ export function deviceOperationalStatus(input: {
   if (input.syncAgeSeconds === null || input.syncAgeSeconds > DEVICE_STALE_AFTER_SECONDS) {
     return 'STALE';
   }
-  if (
-    input.edgeBacklogCount > 0 ||
-    input.syncAgeSeconds > DEVICE_DEGRADED_AFTER_SECONDS
-  ) {
+  if (input.edgeBacklogCount > 0 || input.syncAgeSeconds > DEVICE_DEGRADED_AFTER_SECONDS) {
     return 'DEGRADED';
   }
   return 'HEALTHY';
