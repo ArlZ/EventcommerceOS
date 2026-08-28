@@ -37,8 +37,9 @@ describe('command centre aggregation shape', () => {
 
     const snapshot = await service.snapshot({ actorId, organisationId, role: 'ADMIN' }, eventId);
 
-    expect(calls).toHaveLength(10);
+    expect(calls).toHaveLength(12);
     expect(snapshot.sales.transactionCount).toBe(0);
+    expect(snapshot.salesPulse).toEqual([]);
     expect(snapshot.salesLocations).toEqual([]);
     expect(snapshot.topProducts).toEqual([]);
   });
