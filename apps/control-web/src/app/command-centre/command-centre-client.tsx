@@ -55,12 +55,11 @@ function formatMinor(currency: string, amountMinor: string, fractionDigits = 0):
   const amount = Number(amountMinor) / 100;
   if (!Number.isFinite(amount)) return `${currency} ${amountMinor}`;
   try {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency,
+    const formatted = new Intl.NumberFormat('en-KE', {
       maximumFractionDigits: fractionDigits,
       minimumFractionDigits: 0,
     }).format(amount);
+    return `${currency} ${formatted}`;
   } catch {
     return `${currency} ${amount.toFixed(fractionDigits)}`;
   }
@@ -81,12 +80,11 @@ function compactMoney(currency: string, amountMinor: string): string {
   const amount = Number(amountMinor) / 100;
   if (!Number.isFinite(amount)) return formatMinor(currency, amountMinor);
   try {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency,
+    const formatted = new Intl.NumberFormat('en-KE', {
       notation: 'compact',
       maximumFractionDigits: 1,
     }).format(amount);
+    return `${currency} ${formatted}`;
   } catch {
     return formatMinor(currency, amountMinor);
   }
@@ -207,6 +205,12 @@ function quantityLabel(value: string | null): string {
   return new Intl.NumberFormat('en-KE', {
     maximumFractionDigits: Number.isInteger(quantity) ? 0 : 1,
   }).format(quantity);
+}
+
+function eventPresentation(name: string): { name: string; simulation: boolean } {
+  const simulationPrefix = '[SIMULATION] ';
+  if (!name.startsWith(simulationPrefix)) return { name, simulation: false };
+  return { name: name.slice(simulationPrefix.length), simulation: true };
 }
 
 function friendlyDeviceLabels(snapshot: CommandCentreSnapshot): Map<string, string> {
@@ -629,6 +633,7 @@ export function CommandCentreClient() {
   const liveActionAlerts = snapshot.alerts.filter((alert) => !alert.id.startsWith('payment-rail:'));
   const actionAlerts = liveActionAlerts.slice(0, 5);
   const primaryGross = primaryAmount(snapshot.sales.grossSales);
+  const presentedEvent = eventPresentation(snapshot.event.name);
   const lastSaleLocation =
     [...snapshot.salesLocations]
       .filter((location) => location.lastSaleAt)
@@ -638,10 +643,15 @@ export function CommandCentreClient() {
     <main className="ec-page ec-page--wide ec-live-command-centre">
       <section className="ec-event-spine">
         <div className="ec-event-spine-main">
-          <div>
-            <p className="ec-live-kicker">Command Centre</p>
+          <div className="ec-event-identity">
+            <div className="ec-live-kicker-row">
+              <p className="ec-live-kicker">Command Centre</p>
+              {presentedEvent.simulation ? (
+                <span className="ec-simulation-badge">Simulation</span>
+              ) : null}
+            </div>
             <div className="ec-event-title-row">
-              <h1>{snapshot.event.name}</h1>
+              <h1>{presentedEvent.name}</h1>
               <span className="ec-live-phase" data-tone={phase.tone}>
                 <span aria-hidden="true" />
                 {phase.label}
@@ -673,7 +683,7 @@ export function CommandCentreClient() {
           <div className="ec-truth-block">
             <span className="ec-truth-label">Venue Edge</span>
             <strong>
-              <i data-tone="success" /> Local selling protected from Cloud loss
+              <i data-tone="success" /> Selling locally
             </strong>
           </div>
           <div className="ec-sync-trace" aria-hidden="true">
