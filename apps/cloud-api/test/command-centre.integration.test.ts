@@ -202,6 +202,27 @@ describeIntegration('live event command centre', () => {
     });
   });
 
+  it('uses the same stale device status in Command Centre and Sync Health', async () => {
+    await database.query(
+      `UPDATE sync_device_state
+       SET last_seen_at=now()-interval '10 minutes',edge_backlog_count=0
+       WHERE device_id='device-1'`,
+    );
+
+    const commandCentre = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+    const syncHealth = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    expect(commandCentre.body.devices[0].status).toBe('STALE');
+    expect(syncHealth.body[0].operationalStatus).toBe('STALE');
+    expect(syncHealth.body[0].syncAgeSeconds).toBeGreaterThan(120);
+  });
+
   it('rejects cross-organisation access before returning event metrics', async () => {
     const outsider = await provisionOperator(database, {
       actorId: '33333333-3333-4333-8333-444444444444',
