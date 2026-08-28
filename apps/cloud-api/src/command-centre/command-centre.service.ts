@@ -804,10 +804,7 @@ export class CommandCentreService {
     }
 
     return [...grouped.values()].sort((left, right) => {
-      const leftGross = left.grossSales.reduce(
-        (sum, value) => sum + BigInt(value.amountMinor),
-        0n,
-      );
+      const leftGross = left.grossSales.reduce((sum, value) => sum + BigInt(value.amountMinor), 0n);
       const rightGross = right.grossSales.reduce(
         (sum, value) => sum + BigInt(value.amountMinor),
         0n,
