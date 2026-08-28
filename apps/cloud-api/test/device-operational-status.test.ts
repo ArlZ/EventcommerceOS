@@ -8,15 +8,11 @@ import {
 
 describe('device operational status', () => {
   it('keeps a current, empty-backlog register healthy', () => {
-    expect(
-      deviceOperationalStatus({ syncAgeSeconds: 12, edgeBacklogCount: 0 }),
-    ).toBe('HEALTHY');
+    expect(deviceOperationalStatus({ syncAgeSeconds: 12, edgeBacklogCount: 0 })).toBe('HEALTHY');
   });
 
   it('marks backlog or a late heartbeat as degraded', () => {
-    expect(
-      deviceOperationalStatus({ syncAgeSeconds: 12, edgeBacklogCount: 3 }),
-    ).toBe('DEGRADED');
+    expect(deviceOperationalStatus({ syncAgeSeconds: 12, edgeBacklogCount: 3 })).toBe('DEGRADED');
     expect(
       deviceOperationalStatus({
         syncAgeSeconds: DEVICE_DEGRADED_AFTER_SECONDS + 1,
@@ -32,9 +28,7 @@ describe('device operational status', () => {
         edgeBacklogCount: 0,
       }),
     ).toBe('STALE');
-    expect(
-      deviceOperationalStatus({ syncAgeSeconds: null, edgeBacklogCount: 0 }),
-    ).toBe('STALE');
+    expect(deviceOperationalStatus({ syncAgeSeconds: null, edgeBacklogCount: 0 })).toBe('STALE');
   });
 
   it('clamps future telemetry to zero age rather than producing negative age', () => {
