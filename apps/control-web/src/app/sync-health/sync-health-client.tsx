@@ -27,9 +27,7 @@ function compactId(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
-function operationalStatus(
-  device: DeviceCloudStatus,
-): 'HEALTHY' | 'DEGRADED' | 'STALE' {
+function operationalStatus(device: DeviceCloudStatus): 'HEALTHY' | 'DEGRADED' | 'STALE' {
   if (device.operationalStatus) return device.operationalStatus;
   const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(device.lastSeenAt)) / 1000));
   if (ageSeconds > 120) return 'STALE';
