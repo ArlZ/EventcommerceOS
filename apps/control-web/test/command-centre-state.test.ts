@@ -65,7 +65,6 @@ describe('command centre realtime degradation', () => {
   });
 });
 
-
 describe('command centre venue telemetry', () => {
   const device = (
     deviceId: string,
