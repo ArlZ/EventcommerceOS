@@ -162,23 +162,20 @@ test('release review blocks when a runtime reports a different release', async (
   }
 });
 
-test(
-  'release review never authorizes live money even when machine prerequisites pass',
-  async () => {
-    const data = fixture();
-    try {
-      const report = await runPilotReleaseReview({
-        manifest: data.manifest,
-        manifestPath: data.manifestPath,
-        gitIdentity: gitIdentity(),
-        env: environment(),
-        fetchImpl: healthyFetch,
-      });
-      assert.equal(report.candidateReadyForHumanGoNoGo, true);
-      assert.equal(report.liveMoneyApproved, false);
-      assert.match(report.scope, /does not itself authorize live money/);
-    } finally {
-      rmSync(data.root, { recursive: true, force: true });
-    }
-  },
-);
+test('release review never authorizes live money even when machine prerequisites pass', async () => {
+  const data = fixture();
+  try {
+    const report = await runPilotReleaseReview({
+      manifest: data.manifest,
+      manifestPath: data.manifestPath,
+      gitIdentity: gitIdentity(),
+      env: environment(),
+      fetchImpl: healthyFetch,
+    });
+    assert.equal(report.candidateReadyForHumanGoNoGo, true);
+    assert.equal(report.liveMoneyApproved, false);
+    assert.match(report.scope, /does not itself authorize live money/);
+  } finally {
+    rmSync(data.root, { recursive: true, force: true });
+  }
+});
