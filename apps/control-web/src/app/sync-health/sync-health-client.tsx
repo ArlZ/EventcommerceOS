@@ -27,34 +27,51 @@ function compactId(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
+function operationalStatus(
+  device: DeviceCloudStatus,
+): 'HEALTHY' | 'DEGRADED' | 'STALE' {
+  if (device.operationalStatus) return device.operationalStatus;
+  const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(device.lastSeenAt)) / 1000));
+  if (ageSeconds > 120) return 'STALE';
+  if (device.edgeBacklogCount > 0 || ageSeconds > 30) return 'DEGRADED';
+  return 'HEALTHY';
+}
+
 function deviceNeedsAttention(device: DeviceCloudStatus): boolean {
-  return device.edgeBacklogCount > 0 || !device.lastCloudDeliveryAt;
+  return operationalStatus(device) !== 'HEALTHY';
 }
 
 function deviceStatus(device: DeviceCloudStatus): {
   label: string;
-  tone: 'success' | 'warning';
+  tone: 'success' | 'warning' | 'danger';
   detail: string;
 } {
-  if (device.edgeBacklogCount > 0) {
+  const status = operationalStatus(device);
+  if (status === 'STALE') {
     return {
-      label: 'Sales waiting to upload',
-      tone: 'warning',
-      detail: `${device.edgeBacklogCount} locally accepted update(s) are waiting to upload. Do not stop selling for this delay alone.`,
+      label: 'Not reporting',
+      tone: 'danger',
+      detail: `Last heartbeat ${ageLabel(device.lastSeenAt)}. Local selling status cannot be confirmed from Cloud telemetry.`,
     };
   }
-  if (!device.lastCloudDeliveryAt) {
+  if (device.edgeBacklogCount > 0) {
     return {
-      label: 'Upload not confirmed',
+      label: 'Reporting with queued uploads',
       tone: 'warning',
-      detail:
-        'No online delivery has been confirmed yet. Check connectivity; this alone does not prove the register is unavailable.',
+      detail: `${device.edgeBacklogCount} locally accepted update(s) are waiting to upload. Local selling can continue while Cloud catches up.`,
+    };
+  }
+  if (status === 'DEGRADED') {
+    return {
+      label: 'Reporting late',
+      tone: 'warning',
+      detail: `Last heartbeat ${ageLabel(device.lastSeenAt)}. Check the venue network if this delay continues.`,
     };
   }
   return {
     label: 'Reporting normally',
     tone: 'success',
-    detail: 'No pending uploads are currently reported.',
+    detail: 'Heartbeat is current and no pending uploads are reported.',
   };
 }
 
@@ -113,12 +130,12 @@ export function SyncHealthClient() {
     return () => window.clearInterval(timer);
   }, [activeOrganisationId, contextEventId, refresh]);
 
-  const devicesWithBacklog = useMemo(
-    () => devices.filter((device) => device.edgeBacklogCount > 0).length,
+  const queuedUploadCount = useMemo(
+    () => devices.reduce((sum, device) => sum + device.edgeBacklogCount, 0),
     [devices],
   );
-  const devicesWithoutCloudDelivery = useMemo(
-    () => devices.filter((device) => !device.lastCloudDeliveryAt).length,
+  const healthyDevices = useMemo(
+    () => devices.filter((device) => operationalStatus(device) === 'HEALTHY').length,
     [devices],
   );
   const attentionDevices = useMemo(() => devices.filter(deviceNeedsAttention).length, [devices]);
@@ -188,9 +205,9 @@ export function SyncHealthClient() {
 
       <section className="ec-kpi-grid" aria-label="Device sync summary">
         <SyncMetric label="Registers seen" value={devices.length.toString()} />
+        <SyncMetric label="Healthy" value={healthyDevices.toString()} />
         <SyncMetric label="Need attention" value={attentionDevices.toString()} />
-        <SyncMetric label="Waiting to upload" value={devicesWithBacklog.toString()} />
-        <SyncMetric label="Upload not confirmed" value={devicesWithoutCloudDelivery.toString()} />
+        <SyncMetric label="Queued sale updates" value={queuedUploadCount.toString()} />
       </section>
 
       {!activeOrganisationId && !error ? (
