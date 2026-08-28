@@ -7,7 +7,7 @@ This is the controlled-pilot human access procedure for Cloud/Event Control. It 
 The primary browser sign-in flow is:
 
 1. work email + password are verified against the configured Supabase Auth project;
-2. Event Control sends a six-digit email verification code;
+2. Event Control sends a numeric email verification code using the configured Supabase Auth OTP length;
 3. the operator enters that code;
 4. only after both proofs succeed does Cloud create its own opaque operator session.
 
@@ -94,12 +94,14 @@ A `PLATFORM_ADMIN` does not need an organisation membership for platform-wide au
 2. Open **Sign in**.
 3. Enter the provisioned work email and password.
 4. After the password is accepted, check the masked email destination shown by Event Control.
-5. Enter the six-digit verification code sent by email.
+5. Enter the verification code sent by email.
 6. If appropriate for the managed workstation, leave **Remember this device for 30 days** enabled. Disable it on shared or temporary workstations.
 7. After Event Control redirects to the home screen, select the intended organisation/event.
 8. Confirm the context switcher exposes only the organisation/event the operator is authorized to use before performing any mutation.
 
 If the verification email does not arrive, **Resend** becomes available after 60 seconds. The sign-in challenge expires after 10 minutes.
+
+The current Event Control UI and Cloud API accept numeric email OTPs from 6 through 10 digits and Supabase Auth remains the authority for whether the supplied code is valid and unexpired. Keep the Supabase **Email OTP length**, the Magic Link/OTP template's `{{ .Token }}` output and the client validation aligned; do not hard-code template wording such as "6-digit" unless the project setting is also locked to that length.
 
 Password recovery is administrator-managed during the controlled pilot.
 
