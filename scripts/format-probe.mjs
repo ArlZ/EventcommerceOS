@@ -13,7 +13,8 @@ const targets = [
 
 for (const filepath of targets) {
   const source = await readFile(filepath, 'utf8');
-  const formatted = await prettier.format(source, { filepath });
+  const config = (await prettier.resolveConfig(filepath)) ?? {};
+  const formatted = await prettier.format(source, { ...config, filepath });
   await writeFile(filepath, formatted, 'utf8');
 }
 
