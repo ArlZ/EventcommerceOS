@@ -198,6 +198,15 @@ function coverLabel(value: string | null): string {
   return `${Math.max(0, Math.round(minutes))} min cover`;
 }
 
+function quantityLabel(value: string | null): string {
+  if (!value) return '—';
+  const quantity = Number(value);
+  if (!Number.isFinite(quantity)) return value;
+  return new Intl.NumberFormat('en-KE', {
+    maximumFractionDigits: Number.isInteger(quantity) ? 0 : 1,
+  }).format(quantity);
+}
+
 function friendlyDeviceLabels(snapshot: CommandCentreSnapshot): Map<string, string> {
   const groups = new Map<string, typeof snapshot.devices>();
   for (const device of snapshot.devices) {
@@ -235,7 +244,7 @@ function actionPresentation(
     if (risk) {
       const move =
         risk.suggestedTransferQuantityBase && risk.suggestedSourceLocationName
-          ? `Move ${risk.suggestedTransferQuantityBase} from ${risk.suggestedSourceLocationName}`
+          ? `Move ${quantityLabel(risk.suggestedTransferQuantityBase)} from ${risk.suggestedSourceLocationName}`
           : 'Review stock position';
       return {
         title: plainInventoryTitle(risk),
@@ -844,7 +853,7 @@ export function CommandCentreClient() {
                   </div>
                   <small>
                     {risk.suggestedTransferQuantityBase && risk.suggestedSourceLocationName
-                      ? `Move ${risk.suggestedTransferQuantityBase} from ${risk.suggestedSourceLocationName}`
+                      ? `Move ${quantityLabel(risk.suggestedTransferQuantityBase)} from ${risk.suggestedSourceLocationName}`
                       : 'No transfer recommendation'}
                   </small>
                 </div>
