@@ -142,6 +142,19 @@ describeIntegration('operator sync device health', () => {
       syncAgeSeconds: null,
       operationalStatus: 'STALE',
     });
+
+    await database.query(
+      `UPDATE sync_pos_device_roster
+       SET status='REVOKED',source_updated_at='2026-08-29T18:01:00Z',received_at=now()
+       WHERE device_id='register-never-seen'`,
+    );
+    const afterRevocation = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(viewerHeaders)
+      .expect(200);
+    expect(afterRevocation.body.map((device: { deviceId: string }) => device.deviceId)).toEqual([
+      'register-alpha',
+    ]);
   });
 
   it('rejects cross-organisation access for an organisation operator', async () => {
