@@ -74,6 +74,12 @@ function status(value: unknown): DeviceCloudStatus {
   };
 }
 
+function trimmedStringField(body: Record<string, unknown>, key: string): string {
+  const value = stringField(body, key).trim();
+  if (value.length === 0) throw new BadRequestException(`${key} is required`);
+  return value;
+}
+
 function nullableStringField(body: Record<string, unknown>, key: string): string | null {
   const value = body[key];
   if (value === null) return null;
@@ -97,8 +103,8 @@ function posDevice(value: unknown): PosDeviceCloudRosterEntry {
     throw new BadRequestException('POS device roster updatedAt must be an ISO timestamp');
   }
   return {
-    deviceId: stringField(body, 'deviceId').trim(),
-    eventId: stringField(body, 'eventId').trim(),
+    deviceId: trimmedStringField(body, 'deviceId'),
+    eventId: trimmedStringField(body, 'eventId'),
     salesLocationId: nullableStringField(body, 'salesLocationId'),
     registerId: nullableStringField(body, 'registerId'),
     status: rosterStatus,
