@@ -22,6 +22,11 @@ interface EventOrgRow extends QueryResultRow {
   id: string;
 }
 
+interface SalesLocationScopeRow extends QueryResultRow {
+  id: string;
+  event_id: string;
+}
+
 type HeadersRecord = Record<string, string | string[] | undefined>;
 type TenantBoundEvent = { id: string; payload: Record<string, unknown> };
 
@@ -125,9 +130,19 @@ export class EdgeCloudAuthService {
       batch.events.map((event) => ({ id: event.eventInstanceId, payload: event.payload })),
     );
 
-    const eventDeviceIds = new Set(batch.events.map((event) => event.deviceId));
+    const posDevices = batch.posDevices ?? [];
+    await this.authorizeEventIds(
+      identity,
+      posDevices.map((device) => device.eventId),
+    );
+    await this.authorizeRosterLocations(identity, posDevices);
+
+    const representedDeviceIds = new Set([
+      ...batch.events.map((event) => event.deviceId),
+      ...posDevices.map((device) => device.deviceId),
+    ]);
     const unexpectedStatus = batch.deviceStatuses.find(
-      (status) => !eventDeviceIds.has(status.deviceId),
+      (status) => !representedDeviceIds.has(status.deviceId),
     );
     if (unexpectedStatus) {
       throw new BadRequestException(
@@ -158,6 +173,34 @@ export class EdgeCloudAuthService {
          AND organisation_id IS NULL`,
       [identity.edgeId, identity.organisationId, ids],
     );
+  }
+
+  private async authorizeRosterLocations(
+    identity: EdgeCloudIdentity,
+    devices: NonNullable<EdgeCloudBatch['posDevices']>,
+  ): Promise<void> {
+    const assigned = devices.filter(
+      (device): device is typeof device & { salesLocationId: string } =>
+        device.salesLocationId !== null,
+    );
+    if (assigned.length === 0) return;
+
+    const locationIds = [...new Set(assigned.map((device) => device.salesLocationId))];
+    const rows = await this.database.query<SalesLocationScopeRow>(
+      `SELECT id::text,event_id::text
+       FROM sales_locations
+       WHERE organisation_id=$1 AND id::text = ANY($2::text[])`,
+      [identity.organisationId, locationIds],
+    );
+    const byId = new Map(rows.map((row) => [row.id, row.event_id]));
+    const invalid = assigned.find(
+      (device) => byId.get(device.salesLocationId) !== device.eventId,
+    );
+    if (invalid) {
+      throw new UnauthorizedException(
+        'POS device sales location is outside the authenticated Event Edge event scope',
+      );
+    }
   }
 
   private assertEdgeId(identity: EdgeCloudIdentity, bodyEdgeId: string): void {
