@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { provisionOperator } from './operator-auth-testkit';
+import { provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -35,7 +36,7 @@ describeIntegration('operator sync device health', () => {
 
   beforeEach(async () => {
     await database.query(
-      'TRUNCATE pos_menu_install_receipts, pos_menu_publications, operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_device_state',
+      'TRUNCATE pos_menu_install_receipts, pos_menu_publications, operator_login_challenges, operator_auth_audit, operator_sessions, operator_memberships, operator_identities, sync_pos_device_roster, sync_device_state',
     );
     await database.query(
       `INSERT INTO sync_device_state(
@@ -95,6 +96,44 @@ describeIntegration('operator sync device health', () => {
       operationalStatus: 'STALE',
     });
     expect(response.body[0].syncAgeSeconds).toBeGreaterThan(120);
+  });
+
+  it('includes an active provisioned register before it has ever reported telemetry', async () => {
+    const eventId = randomUUID();
+    const edgeId = 'sync-health-roster-edge';
+    await provisionSyncEdge(database, {
+      edgeId,
+      organisationId,
+      eventIds: [eventId],
+    });
+    await database.query(
+      `INSERT INTO sync_pos_device_roster(
+         device_id,organisation_id,edge_id,event_id,sales_location_id,register_id,
+         status,source_updated_at
+       ) VALUES ('register-never-seen',$1,$2,$3,NULL,'Till 02','ACTIVE',
+                 '2026-08-29T18:00:00Z')`,
+      [organisationId, edgeId, eventId],
+    );
+
+    const response = await request(app.getHttpServer())
+      .get('/sync/devices')
+      .set(viewerHeaders)
+      .expect(200);
+
+    const expected = response.body.find(
+      (device: { deviceId: string }) => device.deviceId === 'register-never-seen',
+    );
+    expect(response.body).toHaveLength(2);
+    expect(expected).toMatchObject({
+      deviceId: 'register-never-seen',
+      lastSeenAt: null,
+      lastSequenceSeen: 0,
+      edgeAcceptedThroughSequence: 0,
+      edgeBacklogCount: 0,
+      lastCloudDeliveryAt: null,
+      syncAgeSeconds: null,
+      operationalStatus: 'STALE',
+    });
   });
 
   it('rejects cross-organisation access for an organisation operator', async () => {
