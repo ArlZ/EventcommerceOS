@@ -190,7 +190,7 @@ describeIntegration('live event command centre', () => {
       succeededCount: 1,
       unknownCount: 1,
       failedCount: 1,
-      successRate: 1 / 3,
+      successRate: 0.3333,
     });
     expect(response.body.salesLocations[0]).toMatchObject({
       salesLocationId,
@@ -227,7 +227,7 @@ describeIntegration('live event command centre', () => {
 
     expect(response.body.salesLocations[0]).toMatchObject({
       salesLocationId,
-      paymentSuccessRate: 1 / 3,
+      paymentSuccessRate: 0.3333,
       tillsHealthy: 1,
       tillsTotal: 1,
       issueCount: 1,
