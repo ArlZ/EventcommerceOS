@@ -25,7 +25,7 @@ export class PosDeviceRosterService {
              source_updated_at=EXCLUDED.source_updated_at,
              cloud_received_at=now()
            WHERE cloud_pos_device_roster.organisation_id=EXCLUDED.organisation_id
-             AND cloud_pos_device_roster.source_updated_at <= EXCLUDED.source_updated_at
+             AND cloud_pos_device_roster.source_updated_at < EXCLUDED.source_updated_at
            RETURNING device_id`,
           [
             entry.deviceId,
@@ -49,7 +49,7 @@ export class PosDeviceRosterService {
               `device ${entry.deviceId} is already attributed to another organisation`,
             );
           }
-          // An older replay is harmless; the newer roster assignment remains authoritative.
+          // Same or older roster replay is harmless; newer configuration remains authoritative.
         }
       }
     });
