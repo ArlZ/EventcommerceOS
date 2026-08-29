@@ -421,6 +421,26 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
       .send(syncBatch(edgeA, first, true))
       .expect(201);
 
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeB, tokenB))
+      .send({
+        edgeId: edgeB,
+        events: [],
+        deviceStatuses: [],
+        posDevices: [
+          {
+            deviceId: sharedDevice,
+            eventId: otherEventId,
+            salesLocationId: null,
+            registerId: 'Till collision',
+            status: 'ACTIVE',
+            updatedAt: '2026-08-29T18:00:00Z',
+          },
+        ],
+      })
+      .expect(409);
+
     const second = orderEvent('device-b', otherEventId, sharedDevice, 1, 'device-order-b');
     await request(app.getHttpServer())
       .post('/sync/edge-events')
