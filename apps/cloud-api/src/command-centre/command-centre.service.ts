@@ -664,12 +664,26 @@ export class CommandCentreService {
 
   private async devices(eventId: string): Promise<DeviceRow[]> {
     return this.database.query<DeviceRow>(
-      `WITH event_devices AS (
-         SELECT DISTINCT ON (device_id)
-                device_id, sales_location_id, occurred_at
-         FROM sync_order_state
-         WHERE event_id = $1
-         ORDER BY device_id, occurred_at DESC
+      `WITH active_roster AS (
+         SELECT roster.device_id, roster.sales_location_id::text AS sales_location_id
+         FROM sync_pos_device_roster roster
+         WHERE roster.event_id::text=$1 AND roster.status='ACTIVE'
+       ), rostered_devices AS (
+         SELECT roster.device_id FROM sync_pos_device_roster roster
+       ), legacy_event_devices AS (
+         SELECT DISTINCT ON (state.device_id)
+                state.device_id, state.sales_location_id
+         FROM sync_order_state state
+         WHERE state.event_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM rostered_devices roster
+             WHERE roster.device_id=state.device_id
+           )
+         ORDER BY state.device_id, state.occurred_at DESC
+       ), event_devices AS (
+         SELECT device_id,sales_location_id FROM active_roster
+         UNION ALL
+         SELECT device_id,sales_location_id FROM legacy_event_devices
        )
        SELECT event_device.device_id,
               event_device.sales_location_id,
@@ -691,8 +705,28 @@ export class CommandCentreService {
 
   private async watermark(eventId: string): Promise<WatermarkRow> {
     const rows = await this.database.query<WatermarkRow>(
-      `WITH event_devices AS (
-         SELECT DISTINCT device_id FROM sync_order_state WHERE event_id = $1
+      `WITH event_scope AS (
+         SELECT event.organisation_id
+         FROM events event
+         WHERE event.id::text=$1
+       ), active_roster AS (
+         SELECT roster.device_id
+         FROM sync_pos_device_roster roster
+         WHERE roster.event_id::text=$1 AND roster.status='ACTIVE'
+       ), rostered_devices AS (
+         SELECT roster.device_id FROM sync_pos_device_roster roster
+       ), legacy_event_devices AS (
+         SELECT DISTINCT state.device_id
+         FROM sync_order_state state
+         WHERE state.event_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM rostered_devices roster
+             WHERE roster.device_id=state.device_id
+           )
+       ), event_devices AS (
+         SELECT device_id FROM active_roster
+         UNION ALL
+         SELECT device_id FROM legacy_event_devices
        ), marks AS (
          SELECT
            (SELECT max(occurred_at) FROM sync_order_state WHERE event_id = $1) AS orders_at,
@@ -704,12 +738,18 @@ export class CommandCentreService {
            (SELECT max(updated_at) FROM command_centre_inventory_alert_control WHERE event_id::text = $1) AS control_at,
            (SELECT max(device.last_seen_at)
               FROM sync_device_state device JOIN event_devices USING (device_id)) AS devices_at,
+           (SELECT max(roster.received_at)
+              FROM sync_pos_device_roster roster
+              JOIN event_scope ON event_scope.organisation_id=roster.organisation_id) AS roster_at,
            (SELECT count(*) FROM sync_order_state WHERE event_id = $1) AS order_count,
            (SELECT count(*)
               FROM payments payment JOIN payment_attempts attempt ON attempt.payment_id = payment.id
              WHERE payment.event_id = $1) AS attempt_count,
            (SELECT count(*) FROM inventory_alert_projection WHERE event_id = $1) AS alert_count,
-           (SELECT count(*) FROM inventory_transfer_projection WHERE event_id = $1) AS transfer_count
+           (SELECT count(*) FROM inventory_transfer_projection WHERE event_id = $1) AS transfer_count,
+           (SELECT count(*)
+              FROM sync_pos_device_roster roster
+              JOIN event_scope ON event_scope.organisation_id=roster.organisation_id) AS roster_count
        )
        SELECT NULLIF(
                 greatest(
@@ -718,7 +758,8 @@ export class CommandCentreService {
                   coalesce(alerts_at, 'epoch'::timestamptz),
                   coalesce(transfers_at, 'epoch'::timestamptz),
                   coalesce(control_at, 'epoch'::timestamptz),
-                  coalesce(devices_at, 'epoch'::timestamptz)
+                  coalesce(devices_at, 'epoch'::timestamptz),
+                  coalesce(roster_at, 'epoch'::timestamptz)
                 ),
                 'epoch'::timestamptz
               ) AS latest_source_at,
@@ -726,7 +767,9 @@ export class CommandCentreService {
                 coalesce(orders_at::text,''), coalesce(payments_at::text,''),
                 coalesce(alerts_at::text,''), coalesce(transfers_at::text,''),
                 coalesce(control_at::text,''), coalesce(devices_at::text,''),
-                order_count::text, attempt_count::text, alert_count::text, transfer_count::text
+                coalesce(roster_at::text,''),
+                order_count::text, attempt_count::text, alert_count::text,
+                transfer_count::text, roster_count::text
               )) AS version_token
        FROM marks`,
       [eventId],
