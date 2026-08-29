@@ -10,10 +10,7 @@ import type { QueryResultRow } from 'pg';
 import { from, type Observable, timer } from 'rxjs';
 import { distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import { DatabaseService } from '../database/database.service';
-import {
-  deviceOperationalStatus,
-  deviceSyncAgeSeconds,
-} from '../sync/device-operational-status';
+import { deviceOperationalStatus, deviceSyncAgeSeconds } from '../sync/device-operational-status';
 
 interface RosterDeviceRow extends QueryResultRow {
   device_id: string;
@@ -46,10 +43,7 @@ function severityRank(alert: CommandCentreAlert): number {
 export class CommandCentreDeviceRosterService {
   constructor(@Inject(DatabaseService) private readonly database: DatabaseService) {}
 
-  async enrich(
-    eventId: string,
-    snapshot: CommandCentreSnapshot,
-  ): Promise<CommandCentreSnapshot> {
+  async enrich(eventId: string, snapshot: CommandCentreSnapshot): Promise<CommandCentreSnapshot> {
     const snapshotDeviceIds = snapshot.devices.map((device) => device.deviceId);
     const rows = await this.database.query<RosterDeviceRow>(
       `SELECT roster.device_id,
@@ -72,12 +66,8 @@ export class CommandCentreDeviceRosterService {
     );
 
     const rosteredIds = new Set(rows.map((row) => row.device_id));
-    const activeRows = rows.filter(
-      (row) => row.event_id === eventId && row.status === 'ACTIVE',
-    );
-    const legacyDevices = snapshot.devices.filter(
-      (device) => !rosteredIds.has(device.deviceId),
-    );
+    const activeRows = rows.filter((row) => row.event_id === eventId && row.status === 'ACTIVE');
+    const legacyDevices = snapshot.devices.filter((device) => !rosteredIds.has(device.deviceId));
     const activeDevices = activeRows.map((row) => this.deviceView(row));
     const devices = [...legacyDevices, ...activeDevices].sort((left, right) =>
       left.deviceId.localeCompare(right.deviceId),
@@ -162,8 +152,7 @@ export class CommandCentreDeviceRosterService {
           tillsTotal: 0,
           issueCount: Math.max(
             0,
-            location.issueCount -
-              (previousDeviceIssues.get(location.salesLocationId) ?? 0),
+            location.issueCount - (previousDeviceIssues.get(location.salesLocationId) ?? 0),
           ),
         },
       ]),
