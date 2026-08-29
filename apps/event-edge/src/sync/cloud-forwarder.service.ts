@@ -4,6 +4,7 @@ import type { QueryResultRow } from 'pg';
 import type {
   DeviceCloudStatus,
   EdgeCloudBatch,
+  EdgePosDeviceRosterEntry,
   SyncEventEnvelope,
 } from '@event-commerce/contracts';
 import { EdgeDatabaseService } from '../database/database.service';
@@ -27,6 +28,15 @@ interface StatusRow extends QueryResultRow {
   backlog_count: string;
 }
 
+interface RosterRow extends QueryResultRow {
+  device_id: string;
+  event_id: string;
+  sales_location_id: string | null;
+  register_id: string | null;
+  status: 'ACTIVE' | 'REVOKED';
+  updated_at: Date;
+}
+
 interface CountRow extends QueryResultRow {
   count: string;
 }
@@ -35,6 +45,8 @@ interface CountRow extends QueryResultRow {
 export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private lastRosterSyncAt = 0;
+  private readonly rosterHeartbeatMs = 10_000;
 
   constructor(
     private readonly database: EdgeDatabaseService,
@@ -66,6 +78,7 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
       edgeId: process.env.EDGE_ID ?? 'edge-local',
       events: rows.map((row) => row.envelope),
       deviceStatuses: await this.deviceStatuses([...new Set(rows.map((row) => row.device_id))]),
+      deviceRoster: await this.deviceRoster(),
     };
 
     try {
@@ -108,6 +121,7 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
           [deviceIds],
         );
       });
+      this.lastRosterSyncAt = Date.now();
       return { sent: rows.length, backlog: await this.backlogCount() };
     } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 500) : 'cloud sync failed';
@@ -137,12 +151,28 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
-      await this.drainOnce();
+      const result = await this.drainOnce();
+      if (result.backlog === 0 && Date.now() - this.lastRosterSyncAt >= this.rosterHeartbeatMs) {
+        await this.syncRosterOnce();
+      }
     } catch {
       // Durable rows remain queued; health of the sales path is independent of cloud reachability.
     } finally {
       this.running = false;
     }
+  }
+
+  private async syncRosterOnce(): Promise<void> {
+    const deviceRoster = await this.deviceRoster();
+    if (deviceRoster.length === 0) return;
+    const batch: EdgeCloudBatch = {
+      edgeId: process.env.EDGE_ID ?? 'edge-local',
+      events: [],
+      deviceStatuses: [],
+      deviceRoster,
+    };
+    await this.transport.send(batch);
+    this.lastRosterSyncAt = Date.now();
   }
 
   private async deviceStatuses(deviceIds: string[]): Promise<DeviceCloudStatus[]> {
@@ -162,6 +192,22 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
       edgeAcceptedThroughSequence: Number.parseInt(row.accepted_through_sequence, 10),
       edgeBacklogCount: Number.parseInt(row.backlog_count, 10),
       lastCloudDeliveryAt: row.last_cloud_delivery_at?.toISOString() ?? null,
+    }));
+  }
+
+  private async deviceRoster(): Promise<EdgePosDeviceRosterEntry[]> {
+    const rows = await this.database.query<RosterRow>(
+      `SELECT device_id,event_id,sales_location_id,register_id,status,updated_at
+       FROM edge_pos_devices
+       ORDER BY device_id ASC`,
+    );
+    return rows.map((row) => ({
+      deviceId: row.device_id,
+      eventId: row.event_id,
+      salesLocationId: row.sales_location_id,
+      registerId: row.register_id,
+      status: row.status,
+      updatedAt: row.updated_at.toISOString(),
     }));
   }
 }
