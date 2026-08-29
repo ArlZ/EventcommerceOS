@@ -665,7 +665,9 @@ export class CommandCentreService {
   private async devices(eventId: string): Promise<DeviceRow[]> {
     return this.database.query<DeviceRow>(
       `WITH active_roster AS (
-         SELECT roster.device_id, roster.sales_location_id::text AS sales_location_id
+         SELECT roster.device_id,
+                roster.sales_location_id::text AS sales_location_id,
+                roster.source_updated_at
          FROM sync_pos_device_roster roster
          WHERE roster.event_id::text=$1 AND roster.status='ACTIVE'
        ), rostered_devices AS (
