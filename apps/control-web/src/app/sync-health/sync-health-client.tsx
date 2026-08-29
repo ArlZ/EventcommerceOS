@@ -2,14 +2,20 @@
 
 import type { DeviceCloudStatus } from '@event-commerce/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { eventControlContextChangedEvent, readEventControlContext } from '../event-context';
+import {
+  eventControlContextChangedEvent,
+  readEventControlContext,
+} from '../event-context';
 import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
 function ageLabel(value: string | null): string {
   if (value === null) return 'never';
-  const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
+  const ageSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(value)) / 1000),
+  );
   if (ageSeconds < 60) return `${ageSeconds}s ago`;
   if (ageSeconds < 3600) return `${Math.floor(ageSeconds / 60)}m ago`;
   return `${Math.floor(ageSeconds / 3600)}h ago`;
@@ -28,10 +34,15 @@ function compactId(value: string): string {
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
 
-function operationalStatus(device: DeviceCloudStatus): 'HEALTHY' | 'DEGRADED' | 'STALE' {
+function operationalStatus(
+  device: DeviceCloudStatus,
+): 'HEALTHY' | 'DEGRADED' | 'STALE' {
   if (device.operationalStatus) return device.operationalStatus;
   if (device.lastSeenAt === null) return 'STALE';
-  const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(device.lastSeenAt)) / 1000));
+  const ageSeconds = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(device.lastSeenAt)) / 1000),
+  );
   if (ageSeconds > 120) return 'STALE';
   if (device.edgeBacklogCount > 0 || ageSeconds > 30) return 'DEGRADED';
   return 'HEALTHY';
@@ -120,7 +131,9 @@ export function SyncHealthClient() {
       setLastUpdatedAt(Date.now());
       setError(null);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Unable to load sync health');
+      setError(
+        failure instanceof Error ? failure.message : 'Unable to load sync health',
+      );
     } finally {
       setLoading(false);
     }
@@ -141,7 +154,10 @@ export function SyncHealthClient() {
     () => devices.filter((device) => operationalStatus(device) === 'HEALTHY').length,
     [devices],
   );
-  const attentionDevices = useMemo(() => devices.filter(deviceNeedsAttention).length, [devices]);
+  const attentionDevices = useMemo(
+    () => devices.filter(deviceNeedsAttention).length,
+    [devices],
+  );
   const orderedDevices = useMemo(
     () =>
       [...devices].sort((left, right) => {
@@ -186,7 +202,10 @@ export function SyncHealthClient() {
           {activeOrganisationId ? (
             <>
               <span className="ec-context-subtle"> • refreshes every 5 seconds</span>
-              <span className="ec-context-subtle"> • updated {updatedLabel(lastUpdatedAt)}</span>
+              <span className="ec-context-subtle">
+                {' '}
+                • updated {updatedLabel(lastUpdatedAt)}
+              </span>
             </>
           ) : (
             <span className="ec-context-subtle"> • select an organisation</span>
@@ -228,7 +247,9 @@ export function SyncHealthClient() {
 
       {activeOrganisationId && devices.length === 0 && !error && !loading ? (
         <div className="ec-empty-state">
-          <strong>No register configuration or telemetry has reached the online service yet.</strong>{' '}
+          <strong>
+            No register configuration or telemetry has reached the online service yet.
+          </strong>{' '}
           This does not prove a till is unavailable; check the venue's local server and network
           before interrupting service.
         </div>
@@ -259,7 +280,11 @@ export function SyncHealthClient() {
               </div>
 
               <div
-                className={status.tone === 'warning' ? 'ec-banner ec-banner--warning' : 'ec-banner'}
+                className={
+                  status.tone === 'warning'
+                    ? 'ec-banner ec-banner--warning'
+                    : 'ec-banner'
+                }
               >
                 {status.detail}
               </div>
