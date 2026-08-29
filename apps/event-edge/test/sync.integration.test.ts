@@ -12,6 +12,7 @@ import {
   DEFAULT_DEVICE_EVENT_ID,
   posDeviceHeaders,
   provisionPosDevice,
+  revokePosDevice,
 } from './pos-device-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
@@ -84,6 +85,45 @@ describeIntegration('device to edge synchronization', () => {
   afterAll(async () => {
     await app.close();
     delete process.env.EDGE_FORWARDER_DISABLED;
+  });
+
+  it('syncs provisioned POS devices before any sales activity', async () => {
+    cloudAvailable = true;
+    await provisionPosDevice(database, 'device-roster-active', {
+      salesLocationId: 'bar-roster',
+      registerId: 'Till 01',
+    });
+    await provisionPosDevice(database, 'device-roster-revoked', {
+      salesLocationId: 'bar-roster',
+      registerId: 'Till 02',
+    });
+    await revokePosDevice(database, 'device-roster-revoked');
+
+    const result = await forwarder.syncPosDeviceRosterOnce(true);
+
+    expect(result.sent).toBe(2);
+    expect(sentBatches).toHaveLength(1);
+    expect(sentBatches[0]).toMatchObject({
+      edgeId: 'edge-local',
+      events: [],
+      deviceStatuses: [],
+      posDevices: [
+        {
+          deviceId: 'device-roster-active',
+          eventId: DEFAULT_DEVICE_EVENT_ID,
+          salesLocationId: 'bar-roster',
+          registerId: 'Till 01',
+          status: 'ACTIVE',
+        },
+        {
+          deviceId: 'device-roster-revoked',
+          eventId: DEFAULT_DEVICE_EVENT_ID,
+          salesLocationId: 'bar-roster',
+          registerId: 'Till 02',
+          status: 'REVOKED',
+        },
+      ],
+    });
   });
 
   it('replays a persisted event twenty times after a lost acknowledgement with one durable effect', async () => {
