@@ -835,7 +835,7 @@ export class CommandCentreService {
       location.paymentSuccessRate =
         payment && payment.total > 0 ? rate(payment.succeeded, payment.total) : null;
       const locationDevices = devices.filter(
-        (device) => device.salesLocationId === location.salesLocationId,
+        (device) => (device.salesLocationId ?? 'unassigned') === location.salesLocationId,
       );
       location.tillsTotal = locationDevices.length;
       location.tillsHealthy = locationDevices.filter(
