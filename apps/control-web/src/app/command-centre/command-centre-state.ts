@@ -54,11 +54,7 @@ export function venueTelemetry(
   };
 }
 
-export type CommandCentreDeviceReportingState =
-  | 'NEVER_REPORTED'
-  | 'HEALTHY'
-  | 'DEGRADED'
-  | 'STALE';
+export type CommandCentreDeviceReportingState = 'NEVER_REPORTED' | 'HEALTHY' | 'DEGRADED' | 'STALE';
 
 export function deviceReportingState(
   device: CommandCentreSnapshot['devices'][number],
