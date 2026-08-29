@@ -14,6 +14,7 @@ import { eventControlContextChangedEvent, readEventControlContext } from '../eve
 import { OperatorContextSwitcher } from '../operator-context-switcher';
 import {
   COMMAND_CENTRE_POLL_INTERVAL_MS,
+  deviceReportingState,
   nextRealtimeMode,
   snapshotIsStale,
   venueTelemetry,
@@ -281,12 +282,19 @@ function actionPresentation(
   }
   const deviceId = alert.id.startsWith('device:') ? alert.id.slice('device:'.length) : '';
   const device = snapshot.devices.find((candidate) => candidate.deviceId === deviceId);
+  const reportingState = device ? deviceReportingState(device) : null;
+  const deviceLabel = device ? (deviceLabels.get(device.deviceId) ?? 'Till') : null;
   return {
-    title: device
-      ? `${deviceLabels.get(device.deviceId) ?? 'Till'} ${device.status === 'STALE' ? 'is not reporting' : 'is reporting late'}`
-      : alert.title,
+    title:
+      device && deviceLabel
+        ? reportingState === 'NEVER_REPORTED'
+          ? `${deviceLabel} has not reported yet`
+          : reportingState === 'STALE'
+            ? `${deviceLabel} is not reporting`
+            : `${deviceLabel} is reporting late`
+        : alert.title,
     context: device
-      ? `${device.edgeBacklogCount} queued sale update${device.edgeBacklogCount === 1 ? '' : 's'} · last heartbeat ${ageLabel(device.lastSeenAt, Date.now())}`
+      ? `${device.edgeBacklogCount} queued sale update${device.edgeBacklogCount === 1 ? '' : 's'} · ${reportingState === 'NEVER_REPORTED' ? 'no heartbeat observed' : `last heartbeat ${ageLabel(device.lastSeenAt, Date.now())}`}`
       : alert.detail,
     actionHref: '/sync-health',
     actionLabel: 'Diagnose till',
@@ -1109,8 +1117,9 @@ export function CommandCentreClient() {
                   <div>
                     <strong>{deviceLabels.get(device.deviceId) ?? device.deviceId}</strong>
                     <small>
-                      {device.status === 'STALE' ? 'Not reporting' : 'Delayed'} · heartbeat{' '}
-                      {ageLabel(device.lastSeenAt, now)}
+                      {deviceReportingState(device) === 'NEVER_REPORTED'
+                        ? 'Not reported yet · no heartbeat observed'
+                        : `${device.status === 'STALE' ? 'Not reporting' : 'Delayed'} · heartbeat ${ageLabel(device.lastSeenAt, now)}`}
                     </small>
                   </div>
                   <b>{device.edgeBacklogCount} queued</b>
