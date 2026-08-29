@@ -37,7 +37,7 @@ interface PosDeviceRosterRow extends QueryResultRow {
   sales_location_id: string | null;
   register_id: string | null;
   status: 'ACTIVE' | 'REVOKED';
-  updated_at: Date;
+  roster_updated_at: Date;
 }
 
 const POS_DEVICE_ROSTER_SYNC_INTERVAL_MS = 30_000;
@@ -165,9 +165,22 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
     if (!force && now < this.nextPosDeviceRosterSyncAt) return { sent: 0 };
 
     const rows = await this.database.query<PosDeviceRosterRow>(
-      `SELECT device_id,event_id,sales_location_id,register_id,status,updated_at
-       FROM edge_pos_devices
-       ORDER BY device_id
+      `SELECT device.device_id,
+              device.event_id,
+              device.sales_location_id,
+              device.register_id,
+              device.status,
+              coalesce(
+                (
+                  SELECT max(audit.created_at)
+                  FROM edge_pos_device_audit audit
+                  WHERE audit.device_id=device.device_id
+                    AND audit.action IN ('PROVISIONED','REASSIGNED','REVOKED')
+                ),
+                device.updated_at
+              ) AS roster_updated_at
+       FROM edge_pos_devices device
+       ORDER BY device.device_id
        LIMIT $1`,
       [MAX_POS_DEVICE_ROSTER_ENTRIES + 1],
     );
@@ -192,7 +205,7 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
         salesLocationId: row.sales_location_id,
         registerId: row.register_id,
         status: row.status,
-        updatedAt: row.updated_at.toISOString(),
+        updatedAt: row.roster_updated_at.toISOString(),
       })),
     };
 
