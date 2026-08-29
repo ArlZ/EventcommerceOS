@@ -127,7 +127,10 @@ export class EdgeCloudAuthService {
     }
   }
 
-  async authorizeSyncBatch(identity: EdgeCloudIdentity, batch: EdgeCloudBatch): Promise<void> {
+  async authorizeSyncBatch(
+    identity: EdgeCloudIdentity,
+    batch: EdgeCloudBatch & { deviceRoster: EdgePosDeviceRosterEntry[] },
+  ): Promise<void> {
     this.assertEdgeId(identity, batch.edgeId);
     await this.assertEventsBelongToOrganisation(
       identity,
