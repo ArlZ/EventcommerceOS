@@ -233,6 +233,34 @@ describeIntegration('live event command centre', () => {
     });
   });
 
+  it('preserves closed sales that are not assigned to a configured location', async () => {
+    await database.query(
+      `INSERT INTO sync_order_state(
+         order_id,device_id,last_sequence,state,total_minor,currency,event_id,
+         sales_location_id,lines,occurred_at
+       ) VALUES (
+         'order-unassigned','device-unassigned',1,'CLOSED',2500,'KES',$1,NULL,'[]'::jsonb,now()
+       )`,
+      [eventId],
+    );
+
+    const response = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    const unassigned = response.body.salesLocations.find(
+      (location: { salesLocationId: string }) => location.salesLocationId === 'unassigned',
+    );
+
+    expect(unassigned).toMatchObject({
+      salesLocationId: 'unassigned',
+      name: 'Unassigned',
+      transactionCount: 1,
+      grossSales: [{ currency: 'KES', amountMinor: '2500' }],
+    });
+  });
+
   it('counts unresolved payment states as live location issues', async () => {
     await database.query(
       `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
