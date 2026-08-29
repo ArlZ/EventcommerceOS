@@ -6,10 +6,10 @@ import { deviceOperationalStatus, deviceSyncAgeSeconds } from './device-operatio
 
 interface DeviceHealthRow extends QueryResultRow {
   device_id: string;
-  last_seen_at: Date | string;
-  last_sequence_seen: string;
-  edge_accepted_through_sequence: string;
-  edge_backlog_count: number;
+  last_seen_at: Date | string | null;
+  last_sequence_seen: string | null;
+  edge_accepted_through_sequence: string | null;
+  edge_backlog_count: number | null;
   last_cloud_delivery_at: Date | string | null;
 }
 
@@ -33,34 +33,73 @@ export class SyncDeviceHealthService {
 
   async listForOrganisation(organisationId: string): Promise<DeviceCloudStatus[]> {
     const rows = await this.database.query<DeviceHealthRow>(
-      `SELECT device_id,
+      `WITH active_roster AS (
+         SELECT roster.device_id
+         FROM sync_pos_device_roster roster
+         WHERE roster.organisation_id=$1 AND roster.status='ACTIVE'
+       ), legacy_state AS (
+         SELECT state.device_id,
+                state.last_seen_at,
+                state.last_sequence_seen,
+                state.edge_accepted_through_sequence,
+                state.edge_backlog_count,
+                state.last_cloud_delivery_at
+         FROM sync_device_state state
+         WHERE state.organisation_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM sync_pos_device_roster roster
+             WHERE roster.device_id=state.device_id
+           )
+       ), combined AS (
+         SELECT roster.device_id,
+                state.last_seen_at,
+                state.last_sequence_seen,
+                state.edge_accepted_through_sequence,
+                state.edge_backlog_count,
+                state.last_cloud_delivery_at
+         FROM active_roster roster
+         LEFT JOIN sync_device_state state
+           ON state.device_id=roster.device_id AND state.organisation_id=$1
+         UNION ALL
+         SELECT device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
+                edge_backlog_count,last_cloud_delivery_at
+         FROM legacy_state
+       )
+       SELECT device_id,
               last_seen_at,
               last_sequence_seen::text,
               edge_accepted_through_sequence::text,
               edge_backlog_count,
               last_cloud_delivery_at
-       FROM sync_device_state
-       WHERE organisation_id=$1
-       ORDER BY last_seen_at DESC, device_id ASC`,
+       FROM combined
+       ORDER BY last_seen_at ASC NULLS FIRST, device_id ASC`,
       [organisationId],
     );
 
     const now = new Date();
     return rows.map((row) => {
-      const syncAgeSeconds = deviceSyncAgeSeconds(row.last_seen_at, now) ?? 0;
+      const syncAgeSeconds = deviceSyncAgeSeconds(row.last_seen_at, now);
+      const edgeBacklogCount = row.edge_backlog_count ?? 0;
       const operationalStatus = deviceOperationalStatus({
         syncAgeSeconds,
-        edgeBacklogCount: row.edge_backlog_count,
+        edgeBacklogCount,
       });
       return {
         deviceId: row.device_id,
-        lastSeenAt: isoTimestamp(row.last_seen_at, 'last_seen_at'),
-        lastSequenceSeen: safeSequence(row.last_sequence_seen, 'last_sequence_seen'),
-        edgeAcceptedThroughSequence: safeSequence(
-          row.edge_accepted_through_sequence,
-          'edge_accepted_through_sequence',
-        ),
-        edgeBacklogCount: row.edge_backlog_count,
+        lastSeenAt:
+          row.last_seen_at === null ? null : isoTimestamp(row.last_seen_at, 'last_seen_at'),
+        lastSequenceSeen:
+          row.last_sequence_seen === null
+            ? 0
+            : safeSequence(row.last_sequence_seen, 'last_sequence_seen'),
+        edgeAcceptedThroughSequence:
+          row.edge_accepted_through_sequence === null
+            ? 0
+            : safeSequence(
+                row.edge_accepted_through_sequence,
+                'edge_accepted_through_sequence',
+              ),
+        edgeBacklogCount,
         lastCloudDeliveryAt:
           row.last_cloud_delivery_at === null
             ? null
