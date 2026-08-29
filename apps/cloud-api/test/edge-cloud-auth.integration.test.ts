@@ -274,6 +274,52 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
 
     await request(app.getHttpServer())
       .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeA, tokenA))
+      .send({
+        edgeId: edgeA,
+        events: [],
+        deviceStatuses: [],
+        posDevices: [
+          {
+            deviceId: 'roster-device',
+            eventId: DEFAULT_SYNC_EVENT_ID,
+            salesLocationId,
+            registerId: 'Till 01',
+            status: 'REVOKED',
+            updatedAt: '2026-08-29T18:02:00Z',
+          },
+        ],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeA, tokenA))
+      .send({
+        edgeId: edgeA,
+        events: [],
+        deviceStatuses: [],
+        posDevices: [
+          {
+            deviceId: 'roster-device',
+            eventId: DEFAULT_SYNC_EVENT_ID,
+            salesLocationId,
+            registerId: 'Till 01',
+            status: 'ACTIVE',
+            updatedAt: '2026-08-29T18:01:00Z',
+          },
+        ],
+      })
+      .expect(201);
+
+    const monotonic = await database.query<{ status: string; source_updated_at: string }>(
+      `SELECT status,source_updated_at::text
+       FROM sync_pos_device_roster WHERE device_id='roster-device'`,
+    );
+    expect(monotonic[0]!.status).toBe('REVOKED');
+
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
       .set(syncEdgeHeaders(edgeB, tokenB))
       .send({
         edgeId: edgeB,
