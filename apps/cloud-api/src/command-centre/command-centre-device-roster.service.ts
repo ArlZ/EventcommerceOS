@@ -95,11 +95,17 @@ export class CommandCentreDeviceRosterService {
 
   private async version(eventId: string): Promise<string> {
     const rows = await this.database.query<RosterVersionRow>(
-      `SELECT md5(concat_ws('|',
-                count(*)::text,
-                count(*) FILTER (WHERE status='ACTIVE')::text,
-                coalesce(max(source_updated_at)::text,'')
-              )) AS version_token
+      `SELECT md5(coalesce(string_agg(
+                concat_ws(':',
+                  device_id,
+                  event_id::text,
+                  coalesce(sales_location_id::text,''),
+                  coalesce(register_id,''),
+                  status,
+                  source_updated_at::text
+                ),
+                '|' ORDER BY device_id
+              ),'')) AS version_token
        FROM cloud_pos_device_roster
        WHERE event_id::text=$1`,
       [eventId],
