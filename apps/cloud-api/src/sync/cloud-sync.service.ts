@@ -77,6 +77,9 @@ export class CloudSyncService {
       ].sort();
       for (const deviceId of deviceIds) {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `sync-device-identity:${deviceId}`,
+        ]);
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
           `sync-device:${identity.organisationId}:${deviceId}`,
         ]);
       }
