@@ -36,19 +36,29 @@ export interface DeviceSyncAck {
 
 export interface DeviceCloudStatus {
   deviceId: string;
-  lastSeenAt: string;
+  lastSeenAt: string | null;
   lastSequenceSeen: number;
   edgeAcceptedThroughSequence: number;
   edgeBacklogCount: number;
   lastCloudDeliveryAt: string | null;
-  syncAgeSeconds?: number;
+  syncAgeSeconds?: number | null;
   operationalStatus?: 'HEALTHY' | 'DEGRADED' | 'STALE';
+}
+
+export interface EdgePosDeviceRosterEntry {
+  deviceId: string;
+  eventId: string;
+  salesLocationId: string | null;
+  registerId: string | null;
+  status: 'ACTIVE' | 'REVOKED';
+  updatedAt: string;
 }
 
 export interface EdgeCloudBatch {
   edgeId: string;
   events: SyncEventEnvelope[];
   deviceStatuses: DeviceCloudStatus[];
+  deviceRoster?: EdgePosDeviceRosterEntry[];
 }
 
 export interface EdgeCloudAck {

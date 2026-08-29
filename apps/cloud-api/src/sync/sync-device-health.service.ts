@@ -6,7 +6,7 @@ import { deviceOperationalStatus, deviceSyncAgeSeconds } from './device-operatio
 
 interface DeviceHealthRow extends QueryResultRow {
   device_id: string;
-  last_seen_at: Date | string;
+  last_seen_at: Date | string | null;
   last_sequence_seen: string;
   edge_accepted_through_sequence: string;
   edge_backlog_count: number;
@@ -33,28 +33,41 @@ export class SyncDeviceHealthService {
 
   async listForOrganisation(organisationId: string): Promise<DeviceCloudStatus[]> {
     const rows = await this.database.query<DeviceHealthRow>(
-      `SELECT device_id,
-              last_seen_at,
-              last_sequence_seen::text,
-              edge_accepted_through_sequence::text,
-              edge_backlog_count,
-              last_cloud_delivery_at
-       FROM sync_device_state
-       WHERE organisation_id=$1
-       ORDER BY last_seen_at DESC, device_id ASC`,
+      `WITH device_scope AS (
+         SELECT roster.device_id
+         FROM cloud_pos_device_roster roster
+         WHERE roster.organisation_id=$1 AND roster.status='ACTIVE'
+         UNION
+         SELECT state.device_id
+         FROM sync_device_state state
+         WHERE state.organisation_id=$1
+           AND NOT EXISTS (
+             SELECT 1 FROM cloud_pos_device_roster roster WHERE roster.device_id=state.device_id
+           )
+       )
+       SELECT scope.device_id,
+              state.last_seen_at,
+              coalesce(state.last_sequence_seen,0)::text AS last_sequence_seen,
+              coalesce(state.edge_accepted_through_sequence,0)::text AS edge_accepted_through_sequence,
+              coalesce(state.edge_backlog_count,0) AS edge_backlog_count,
+              state.last_cloud_delivery_at
+       FROM device_scope scope
+       LEFT JOIN sync_device_state state ON state.device_id=scope.device_id
+       ORDER BY state.last_seen_at ASC NULLS FIRST, scope.device_id ASC`,
       [organisationId],
     );
 
     const now = new Date();
     return rows.map((row) => {
-      const syncAgeSeconds = deviceSyncAgeSeconds(row.last_seen_at, now) ?? 0;
+      const syncAgeSeconds = deviceSyncAgeSeconds(row.last_seen_at, now);
       const operationalStatus = deviceOperationalStatus({
         syncAgeSeconds,
         edgeBacklogCount: row.edge_backlog_count,
       });
       return {
         deviceId: row.device_id,
-        lastSeenAt: isoTimestamp(row.last_seen_at, 'last_seen_at'),
+        lastSeenAt:
+          row.last_seen_at === null ? null : isoTimestamp(row.last_seen_at, 'last_seen_at'),
         lastSequenceSeen: safeSequence(row.last_sequence_seen, 'last_sequence_seen'),
         edgeAcceptedThroughSequence: safeSequence(
           row.edge_accepted_through_sequence,

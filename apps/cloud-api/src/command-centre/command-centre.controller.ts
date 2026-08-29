@@ -10,10 +10,11 @@ import {
   Sse,
 } from '@nestjs/common';
 import type { MessageEvent } from '@nestjs/common';
-import { from, type Observable } from 'rxjs';
+import { from, merge, type Observable } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { uuid } from '../configuration/validation';
+import { CommandCentreDeviceRosterService } from './command-centre-device-roster.service';
 import { CommandCentreDeviceSalesService } from './command-centre-device-sales.service';
 import { CommandCentreService } from './command-centre.service';
 import { parseInventoryAlertAction } from './command-centre-validation';
@@ -22,6 +23,8 @@ import { parseInventoryAlertAction } from './command-centre-validation';
 export class CommandCentreController {
   constructor(
     @Inject(CommandCentreService) private readonly commandCentre: CommandCentreService,
+    @Inject(CommandCentreDeviceRosterService)
+    private readonly deviceRoster: CommandCentreDeviceRosterService,
     @Inject(CommandCentreDeviceSalesService)
     private readonly deviceSales: CommandCentreDeviceSalesService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
@@ -37,10 +40,16 @@ export class CommandCentreController {
       'VIEWER',
     ]);
     const snapshot = await this.commandCentre.snapshot(context, normalizedEventId);
+    let rosterSnapshot = snapshot;
     try {
-      return await this.deviceSales.enrich(normalizedEventId, snapshot);
+      rosterSnapshot = await this.deviceRoster.enrich(normalizedEventId, snapshot);
     } catch {
-      return snapshot;
+      // Core event truth remains available if roster enrichment is temporarily unavailable.
+    }
+    try {
+      return await this.deviceSales.enrich(normalizedEventId, rosterSnapshot);
+    } catch {
+      return rosterSnapshot;
     }
   }
 
@@ -57,7 +66,14 @@ export class CommandCentreController {
         'FINANCE',
         'VIEWER',
       ]),
-    ).pipe(switchMap((context) => this.commandCentre.stream(context, normalizedEventId)));
+    ).pipe(
+      switchMap((context) =>
+        merge(
+          this.commandCentre.stream(context, normalizedEventId),
+          this.deviceRoster.stream(normalizedEventId),
+        ),
+      ),
+    );
   }
 
   @Post('events/:eventId/inventory-alerts/:alertId/actions')

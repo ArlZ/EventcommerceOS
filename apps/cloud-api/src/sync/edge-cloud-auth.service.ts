@@ -1,6 +1,10 @@
 import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { EdgeCloudBatch, InventoryEdgeBatch } from '@event-commerce/contracts';
+import type {
+  EdgeCloudBatch,
+  EdgePosDeviceRosterEntry,
+  InventoryEdgeBatch,
+} from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
 
@@ -20,6 +24,11 @@ interface EdgeClientRow extends QueryResultRow {
 
 interface EventOrgRow extends QueryResultRow {
   id: string;
+}
+
+interface LocationEventRow extends QueryResultRow {
+  id: string;
+  event_id: string;
 }
 
 type HeadersRecord = Record<string, string | string[] | undefined>;
@@ -118,12 +127,20 @@ export class EdgeCloudAuthService {
     }
   }
 
-  async authorizeSyncBatch(identity: EdgeCloudIdentity, batch: EdgeCloudBatch): Promise<void> {
+  async authorizeSyncBatch(
+    identity: EdgeCloudIdentity,
+    batch: EdgeCloudBatch & { deviceRoster: EdgePosDeviceRosterEntry[] },
+  ): Promise<void> {
     this.assertEdgeId(identity, batch.edgeId);
     await this.assertEventsBelongToOrganisation(
       identity,
       batch.events.map((event) => ({ id: event.eventInstanceId, payload: event.payload })),
     );
+    await this.authorizeEventIds(
+      identity,
+      batch.deviceRoster.map((entry) => entry.eventId),
+    );
+    await this.assertRosterLocations(identity, batch.deviceRoster);
 
     const eventDeviceIds = new Set(batch.events.map((event) => event.deviceId));
     const unexpectedStatus = batch.deviceStatuses.find(
@@ -172,5 +189,36 @@ export class EdgeCloudAuthService {
   ): Promise<void> {
     const eventIds = [...new Set(events.map(eventIdFromPayload))];
     await this.authorizeEventIds(identity, eventIds);
+  }
+
+  private async assertRosterLocations(
+    identity: EdgeCloudIdentity,
+    roster: EdgePosDeviceRosterEntry[],
+  ): Promise<void> {
+    const locationIds = [
+      ...new Set(
+        roster
+          .map((entry) => entry.salesLocationId)
+          .filter((value): value is string => value !== null),
+      ),
+    ];
+    if (locationIds.length === 0) return;
+    const rows = await this.database.query<LocationEventRow>(
+      `SELECT id::text,event_id::text
+       FROM sales_locations
+       WHERE organisation_id=$1 AND id::text = ANY($2::text[])`,
+      [identity.organisationId, locationIds],
+    );
+    const eventByLocation = new Map(rows.map((row) => [row.id, row.event_id]));
+    const invalid = roster.find(
+      (entry) =>
+        entry.salesLocationId !== null &&
+        eventByLocation.get(entry.salesLocationId) !== entry.eventId,
+    );
+    if (invalid) {
+      throw new UnauthorizedException(
+        'POS device roster location is outside its authenticated event assignment',
+      );
+    }
   }
 }
