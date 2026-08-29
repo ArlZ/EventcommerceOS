@@ -210,7 +210,14 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
-      await this.transport.send(batch);
+      const ack = await this.transport.send(batch);
+      if (
+        ack.acceptedEventInstanceIds.length !== 0 ||
+        ack.duplicateEventInstanceIds.length !== 0 ||
+        ack.conflictEventInstanceIds.length !== 0
+      ) {
+        throw new Error('roster-only cloud acknowledgement unexpectedly referenced commerce events');
+      }
       this.posDeviceRosterAttempts = 0;
       this.nextPosDeviceRosterSyncAt = Date.now() + POS_DEVICE_ROSTER_SYNC_INTERVAL_MS;
       return { sent: rows.length };
