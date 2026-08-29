@@ -59,7 +59,9 @@ export class SyncDeviceHealthService {
                 state.last_cloud_delivery_at
          FROM active_roster roster
          LEFT JOIN sync_device_state state
-           ON state.device_id=roster.device_id AND state.organisation_id=$1
+           ON state.device_id=roster.device_id
+          AND state.organisation_id=$1
+          AND state.last_seen_at >= roster.source_updated_at
          UNION ALL
          SELECT device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
                 edge_backlog_count,last_cloud_delivery_at
