@@ -31,10 +31,24 @@ interface CountRow extends QueryResultRow {
   count: string;
 }
 
+interface PosDeviceRosterRow extends QueryResultRow {
+  device_id: string;
+  event_id: string;
+  sales_location_id: string | null;
+  register_id: string | null;
+  status: 'ACTIVE' | 'REVOKED';
+  updated_at: Date;
+}
+
+const POS_DEVICE_ROSTER_SYNC_INTERVAL_MS = 30_000;
+const MAX_POS_DEVICE_ROSTER_ENTRIES = 5_000;
+
 @Injectable()
 export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private nextPosDeviceRosterSyncAt = 0;
+  private posDeviceRosterAttempts = 0;
 
   constructor(
     private readonly database: EdgeDatabaseService,
@@ -138,10 +152,60 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       await this.drainOnce();
+      await this.syncPosDeviceRosterOnce();
     } catch {
-      // Durable rows remain queued; health of the sales path is independent of cloud reachability.
+      // Durable rows and the source roster remain available for retry; local sales stay independent.
     } finally {
       this.running = false;
+    }
+  }
+
+  async syncPosDeviceRosterOnce(force = false): Promise<{ sent: number }> {
+    const now = Date.now();
+    if (!force && now < this.nextPosDeviceRosterSyncAt) return { sent: 0 };
+
+    const rows = await this.database.query<PosDeviceRosterRow>(
+      `SELECT device_id,event_id,sales_location_id,register_id,status,updated_at
+       FROM edge_pos_devices
+       ORDER BY device_id
+       LIMIT $1`,
+      [MAX_POS_DEVICE_ROSTER_ENTRIES + 1],
+    );
+    if (rows.length > MAX_POS_DEVICE_ROSTER_ENTRIES) {
+      throw new Error(
+        `POS device roster exceeds supported limit of ${MAX_POS_DEVICE_ROSTER_ENTRIES}`,
+      );
+    }
+    if (rows.length === 0) {
+      this.posDeviceRosterAttempts = 0;
+      this.nextPosDeviceRosterSyncAt = now + POS_DEVICE_ROSTER_SYNC_INTERVAL_MS;
+      return { sent: 0 };
+    }
+
+    const batch: EdgeCloudBatch = {
+      edgeId: process.env.EDGE_ID ?? 'edge-local',
+      events: [],
+      deviceStatuses: [],
+      posDevices: rows.map((row) => ({
+        deviceId: row.device_id,
+        eventId: row.event_id,
+        salesLocationId: row.sales_location_id,
+        registerId: row.register_id,
+        status: row.status,
+        updatedAt: row.updated_at.toISOString(),
+      })),
+    };
+
+    try {
+      await this.transport.send(batch);
+      this.posDeviceRosterAttempts = 0;
+      this.nextPosDeviceRosterSyncAt = Date.now() + POS_DEVICE_ROSTER_SYNC_INTERVAL_MS;
+      return { sent: rows.length };
+    } catch {
+      this.posDeviceRosterAttempts += 1;
+      this.nextPosDeviceRosterSyncAt =
+        Date.now() + retryDelayMs(this.posDeviceRosterAttempts);
+      return { sent: 0 };
     }
   }
 
