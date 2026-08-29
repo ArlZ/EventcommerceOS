@@ -11,6 +11,7 @@ import type { DeviceCloudStatus, EdgeCloudAck } from '@event-commerce/contracts'
 import { OperatorAuthService, type HeadersRecord } from '../auth/operator-auth.service';
 import { CloudSyncService } from './cloud-sync.service';
 import { EdgeCloudAuthService } from './edge-cloud-auth.service';
+import { PosDeviceRosterService } from './pos-device-roster.service';
 import { SyncDeviceHealthService } from './sync-device-health.service';
 import { parseEdgeBatch } from './sync-validation';
 
@@ -44,6 +45,7 @@ export class CloudSyncController {
   constructor(
     @Inject(CloudSyncService) private readonly sync: CloudSyncService,
     @Inject(EdgeCloudAuthService) private readonly edgeAuth: EdgeCloudAuthService,
+    @Inject(PosDeviceRosterService) private readonly deviceRoster: PosDeviceRosterService,
     @Inject(SyncDeviceHealthService) private readonly deviceHealth: SyncDeviceHealthService,
     @Inject(OperatorAuthService) private readonly operators: OperatorAuthService,
   ) {}
@@ -67,6 +69,7 @@ export class CloudSyncController {
     const identity = await this.edgeAuth.authenticate(headers);
     const batch = parseEdgeBatch(body);
     await this.edgeAuth.authorizeSyncBatch(identity, batch);
+    await this.deviceRoster.ingest(batch.deviceRoster, identity);
     return this.sync.ingest(withPostDeliveryStatus(batch), identity);
   }
 }
