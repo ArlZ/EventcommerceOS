@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CommandCentreSnapshot } from '@event-commerce/contracts';
 import {
+  deviceReportingState,
   nextRealtimeMode,
   snapshotIsStale,
   venueTelemetry,
@@ -122,5 +123,16 @@ describe('command centre venue telemetry', () => {
       reportingCount: 1,
       totalCount: 1,
     });
+  });
+
+  it('distinguishes a provisioned till that has never reported from a stale till', () => {
+    const neverReported = device('till-new', 'STALE');
+    neverReported.lastSeenAt = null;
+    neverReported.lastCloudDeliveryAt = null;
+    neverReported.syncAgeSeconds = null;
+
+    expect(deviceReportingState(neverReported)).toBe('NEVER_REPORTED');
+    expect(deviceReportingState(device('till-stale', 'STALE'))).toBe('STALE');
+    expect(deviceReportingState(device('till-late', 'DEGRADED'))).toBe('DEGRADED');
   });
 });
