@@ -15,6 +15,12 @@ interface SequenceRow extends QueryResultRow {
   event_instance_id: string;
 }
 
+interface RosterIdentityRow extends QueryResultRow {
+  device_id: string;
+  organisation_id: string;
+  edge_id: string;
+}
+
 interface OrderStateRow extends QueryResultRow {
   device_id: string;
   last_sequence: string;
@@ -54,12 +60,66 @@ export class CloudSyncService {
       const accepted: string[] = [];
       const duplicates: string[] = [];
       const conflicts: string[] = [];
+      const posDevices = batch.posDevices ?? [];
 
-      const deviceIds = [...new Set(batch.events.map((event) => event.deviceId))].sort();
+      const deviceIds = [
+        ...new Set([
+          ...batch.events.map((event) => event.deviceId),
+          ...batch.deviceStatuses.map((status) => status.deviceId),
+          ...posDevices.map((device) => device.deviceId),
+        ]),
+      ].sort();
       for (const deviceId of deviceIds) {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
           `sync-device:${identity.organisationId}:${deviceId}`,
         ]);
+      }
+
+      if (posDevices.length > 0) {
+        const existingRoster = await client.query<RosterIdentityRow>(
+          `SELECT device_id,organisation_id::text,edge_id
+           FROM sync_pos_device_roster
+           WHERE device_id = ANY($1::text[])`,
+          [posDevices.map((device) => device.deviceId)],
+        );
+        const collision = existingRoster.rows.find(
+          (row) =>
+            row.organisation_id !== identity.organisationId || row.edge_id !== identity.edgeId,
+        );
+        if (collision) {
+          throw new ConflictException(
+            `POS device ${collision.device_id} is already attributed to another Event Edge scope`,
+          );
+        }
+
+        for (const device of posDevices) {
+          await client.query(
+            `INSERT INTO sync_pos_device_roster(
+               device_id,organisation_id,edge_id,event_id,sales_location_id,register_id,
+               status,source_updated_at,received_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())
+             ON CONFLICT (device_id) DO UPDATE SET
+               event_id=EXCLUDED.event_id,
+               sales_location_id=EXCLUDED.sales_location_id,
+               register_id=EXCLUDED.register_id,
+               status=EXCLUDED.status,
+               source_updated_at=EXCLUDED.source_updated_at,
+               received_at=now()
+             WHERE sync_pos_device_roster.organisation_id=EXCLUDED.organisation_id
+               AND sync_pos_device_roster.edge_id=EXCLUDED.edge_id
+               AND EXCLUDED.source_updated_at > sync_pos_device_roster.source_updated_at`,
+            [
+              device.deviceId,
+              identity.organisationId,
+              identity.edgeId,
+              device.eventId,
+              device.salesLocationId,
+              device.registerId,
+              device.status,
+              device.updatedAt,
+            ],
+          );
+        }
       }
 
       for (const event of batch.events) {
