@@ -34,7 +34,7 @@ export class SyncDeviceHealthService {
   async listForOrganisation(organisationId: string): Promise<DeviceCloudStatus[]> {
     const rows = await this.database.query<DeviceHealthRow>(
       `WITH active_roster AS (
-         SELECT roster.device_id
+         SELECT roster.device_id, roster.source_updated_at
          FROM sync_pos_device_roster roster
          WHERE roster.organisation_id=$1 AND roster.status='ACTIVE'
        ), legacy_state AS (
