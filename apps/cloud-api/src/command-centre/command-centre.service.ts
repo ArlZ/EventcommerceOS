@@ -672,7 +672,7 @@ export class CommandCentreService {
          SELECT roster.device_id FROM sync_pos_device_roster roster
        ), legacy_event_devices AS (
          SELECT DISTINCT ON (state.device_id)
-                state.device_id, state.sales_location_id
+                state.device_id, state.sales_location_id, NULL::timestamptz AS source_updated_at
          FROM sync_order_state state
          WHERE state.event_id=$1
            AND NOT EXISTS (
@@ -681,9 +681,9 @@ export class CommandCentreService {
            )
          ORDER BY state.device_id, state.occurred_at DESC
        ), event_devices AS (
-         SELECT device_id,sales_location_id FROM active_roster
+         SELECT device_id,sales_location_id,source_updated_at FROM active_roster
          UNION ALL
-         SELECT device_id,sales_location_id FROM legacy_event_devices
+         SELECT device_id,sales_location_id,source_updated_at FROM legacy_event_devices
        )
        SELECT event_device.device_id,
               event_device.sales_location_id,
@@ -695,7 +695,12 @@ export class CommandCentreService {
                    ELSE greatest(0, extract(epoch FROM (now() - device.last_seen_at)))::integer
               END AS sync_age_seconds
        FROM event_devices event_device
-       LEFT JOIN sync_device_state device ON device.device_id = event_device.device_id
+       LEFT JOIN sync_device_state device
+         ON device.device_id = event_device.device_id
+        AND (
+          event_device.source_updated_at IS NULL
+          OR device.last_seen_at >= event_device.source_updated_at
+        )
        LEFT JOIN sales_locations location
          ON location.id::text = event_device.sales_location_id AND location.event_id::text = $1
        ORDER BY device.last_seen_at ASC NULLS FIRST, event_device.device_id`,
@@ -710,13 +715,13 @@ export class CommandCentreService {
          FROM events event
          WHERE event.id::text=$1
        ), active_roster AS (
-         SELECT roster.device_id
+         SELECT roster.device_id, roster.source_updated_at
          FROM sync_pos_device_roster roster
          WHERE roster.event_id::text=$1 AND roster.status='ACTIVE'
        ), rostered_devices AS (
          SELECT roster.device_id FROM sync_pos_device_roster roster
        ), legacy_event_devices AS (
-         SELECT DISTINCT state.device_id
+         SELECT DISTINCT state.device_id, NULL::timestamptz AS source_updated_at
          FROM sync_order_state state
          WHERE state.event_id=$1
            AND NOT EXISTS (
@@ -724,9 +729,9 @@ export class CommandCentreService {
              WHERE roster.device_id=state.device_id
            )
        ), event_devices AS (
-         SELECT device_id FROM active_roster
+         SELECT device_id,source_updated_at FROM active_roster
          UNION ALL
-         SELECT device_id FROM legacy_event_devices
+         SELECT device_id,source_updated_at FROM legacy_event_devices
        ), marks AS (
          SELECT
            (SELECT max(occurred_at) FROM sync_order_state WHERE event_id = $1) AS orders_at,
@@ -737,7 +742,13 @@ export class CommandCentreService {
            (SELECT max(source_updated_at) FROM inventory_transfer_projection WHERE event_id = $1) AS transfers_at,
            (SELECT max(updated_at) FROM command_centre_inventory_alert_control WHERE event_id::text = $1) AS control_at,
            (SELECT max(device.last_seen_at)
-              FROM sync_device_state device JOIN event_devices USING (device_id)) AS devices_at,
+              FROM sync_device_state device
+              JOIN event_devices
+                ON event_devices.device_id=device.device_id
+               AND (
+                 event_devices.source_updated_at IS NULL
+                 OR device.last_seen_at >= event_devices.source_updated_at
+               )) AS devices_at,
            (SELECT max(roster.received_at)
               FROM sync_pos_device_roster roster
               JOIN event_scope ON event_scope.organisation_id=roster.organisation_id) AS roster_at,
