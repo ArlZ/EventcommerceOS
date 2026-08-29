@@ -242,6 +242,14 @@ describeIntegration('live event command centre', () => {
       eventIds: [eventId],
     });
     await database.query(
+      `INSERT INTO sync_device_state(
+         device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
+         edge_backlog_count,last_cloud_delivery_at,edge_id,organisation_id
+       ) VALUES ('device-quiet-roster','2026-08-29T17:59:00Z',3,3,0,
+                 '2026-08-29T17:59:00Z',$2,$1)`,
+      [organisationId, edgeId],
+    );
+    await database.query(
       `INSERT INTO sync_pos_device_roster(
          device_id,organisation_id,edge_id,event_id,sales_location_id,register_id,
          status,source_updated_at
