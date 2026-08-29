@@ -104,7 +104,9 @@ function rosterEntry(value: unknown): EdgePosDeviceRosterEntry {
   };
 }
 
-export function parseEdgeBatch(value: unknown): EdgeCloudBatch {
+export function parseEdgeBatch(
+  value: unknown,
+): EdgeCloudBatch & { deviceRoster: EdgePosDeviceRosterEntry[] } {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new BadRequestException('edge batch must be an object');
   const body = value as Record<string, unknown>;
