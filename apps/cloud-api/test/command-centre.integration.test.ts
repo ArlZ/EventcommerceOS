@@ -124,7 +124,8 @@ describeIntegration('live event command centre', () => {
     await database.query(
       `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
        VALUES ('payment-1',$1,'order-1',10000,'KES'),
-              ('payment-2',$1,'order-2',20000,'KES')`,
+              ('payment-2',$1,'order-2',20000,'KES'),
+              ('payment-3',$1,'order-1',5000,'KES')`,
       [eventId],
     );
     await database.query(
@@ -133,7 +134,8 @@ describeIntegration('live event command centre', () => {
        ) VALUES
          ('attempt-old','payment-1','mpesa','idem-old','SUCCEEDED','fp-old',now()-interval '2 minutes',now()-interval '2 minutes'),
          ('attempt-new','payment-1','pesapal_sabi','idem-new','SUCCEEDED','fp-new',now()-interval '1 minute',now()-interval '1 minute'),
-         ('attempt-unknown','payment-2','mpesa','idem-unknown','UNKNOWN','fp-unknown',NULL,now())`,
+         ('attempt-unknown','payment-2','mpesa','idem-unknown','UNKNOWN','fp-unknown',NULL,now()),
+         ('attempt-failed','payment-3','mpesa','idem-failed','FAILED','fp-failed',now()-interval '30 seconds',now()-interval '30 seconds')`,
     );
 
     await database.query(
@@ -184,16 +186,18 @@ describeIntegration('live event command centre', () => {
       grossSales: [{ currency: 'KES', amountMinor: '10000' }],
     });
     expect(response.body.payments.attempts).toMatchObject({
-      totalCount: 2,
+      totalCount: 3,
       succeededCount: 1,
       unknownCount: 1,
-      successRate: 0.5,
+      failedCount: 1,
+      successRate: 1 / 3,
     });
     expect(response.body.salesLocations[0]).toMatchObject({
       salesLocationId,
-      paymentSuccessRate: 1,
+      paymentSuccessRate: 0.5,
       tillsHealthy: 1,
       tillsTotal: 1,
+      issueCount: 0,
     });
     expect(response.body.inventory.risks[0]).toMatchObject({
       alertId: 'alert-1',
