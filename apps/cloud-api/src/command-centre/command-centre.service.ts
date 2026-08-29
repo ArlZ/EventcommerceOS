@@ -47,9 +47,15 @@ interface SalesRow extends QueryResultRow {
   last_sale_at: Date | string | null;
 }
 
-interface LocationRow extends SalesRow {
+interface LocationRow extends QueryResultRow {
   sales_location_id: string;
   name: string;
+  currency: string | null;
+  transaction_count: string;
+  gross_minor: string;
+  average_minor: string;
+  velocity_minor_per_minute: string;
+  last_sale_at: Date | string | null;
 }
 
 interface ProductRow extends QueryResultRow {
@@ -462,24 +468,54 @@ export class CommandCentreService {
 
   private async locations(eventId: string): Promise<LocationRow[]> {
     return this.database.query<LocationRow>(
-      `SELECT coalesce(state.sales_location_id, 'unassigned') AS sales_location_id,
-              coalesce(location.name, 'Unassigned') AS name,
-              state.currency,
-              count(*)::text AS transaction_count,
-              coalesce(sum(state.total_minor),0)::text AS gross_minor,
-              coalesce(round(avg(state.total_minor)),0)::bigint::text AS average_minor,
-              coalesce(round(
-                coalesce(sum(state.total_minor) FILTER (
-                  WHERE state.occurred_at >= now() - interval '15 minutes'
-                ),0)::numeric / 15
-              ),0)::bigint::text AS velocity_minor_per_minute,
-              max(state.occurred_at) AS last_sale_at
-       FROM sync_order_state state
-       LEFT JOIN sales_locations location
-         ON location.id::text = state.sales_location_id AND location.event_id::text = $1
-       WHERE state.event_id = $1 AND state.state = 'CLOSED'
-       GROUP BY state.sales_location_id, location.name, state.currency
-       ORDER BY max(state.occurred_at) ASC NULLS FIRST, name, state.currency`,
+      `WITH configured AS (
+         SELECT location.id::text AS sales_location_id, location.name
+         FROM sales_locations location
+         WHERE location.event_id::text = $1
+       ), closed_sales AS (
+         SELECT state.sales_location_id,
+                state.currency,
+                count(*)::text AS transaction_count,
+                coalesce(sum(state.total_minor),0)::text AS gross_minor,
+                coalesce(round(avg(state.total_minor)),0)::bigint::text AS average_minor,
+                coalesce(round(
+                  coalesce(sum(state.total_minor) FILTER (
+                    WHERE state.occurred_at >= now() - interval '15 minutes'
+                  ),0)::numeric / 15
+                ),0)::bigint::text AS velocity_minor_per_minute,
+                max(state.occurred_at) AS last_sale_at
+         FROM sync_order_state state
+         WHERE state.event_id = $1 AND state.state = 'CLOSED'
+         GROUP BY state.sales_location_id, state.currency
+       )
+       SELECT configured.sales_location_id,
+              configured.name,
+              closed_sales.currency,
+              coalesce(closed_sales.transaction_count,'0') AS transaction_count,
+              coalesce(closed_sales.gross_minor,'0') AS gross_minor,
+              coalesce(closed_sales.average_minor,'0') AS average_minor,
+              coalesce(closed_sales.velocity_minor_per_minute,'0') AS velocity_minor_per_minute,
+              closed_sales.last_sale_at
+       FROM configured
+       LEFT JOIN closed_sales
+         ON closed_sales.sales_location_id = configured.sales_location_id
+       UNION ALL
+       SELECT coalesce(closed_sales.sales_location_id,'unassigned') AS sales_location_id,
+              CASE
+                WHEN closed_sales.sales_location_id IS NULL THEN 'Unassigned'
+                ELSE 'Unknown location'
+              END AS name,
+              closed_sales.currency,
+              closed_sales.transaction_count,
+              closed_sales.gross_minor,
+              closed_sales.average_minor,
+              closed_sales.velocity_minor_per_minute,
+              closed_sales.last_sale_at
+       FROM closed_sales
+       LEFT JOIN configured
+         ON configured.sales_location_id = closed_sales.sales_location_id
+       WHERE configured.sales_location_id IS NULL
+       ORDER BY last_sale_at ASC NULLS FIRST, name, currency NULLS FIRST`,
       [eventId],
     );
   }
@@ -780,11 +816,13 @@ export class CommandCentreService {
         issueCount: 0,
       };
       current.transactionCount += Number(row.transaction_count);
-      current.grossSales.push({ currency: row.currency, amountMinor: row.gross_minor });
-      current.currentSalesVelocity.push({
-        currency: row.currency,
-        amountMinorPerMinute: row.velocity_minor_per_minute,
-      });
+      if (row.currency !== null) {
+        current.grossSales.push({ currency: row.currency, amountMinor: row.gross_minor });
+        current.currentSalesVelocity.push({
+          currency: row.currency,
+          amountMinorPerMinute: row.velocity_minor_per_minute,
+        });
+      }
       const candidate = isoNullable(row.last_sale_at);
       if (candidate && (!current.lastSaleAt || candidate > current.lastSaleAt)) {
         current.lastSaleAt = candidate;

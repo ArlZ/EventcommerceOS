@@ -317,6 +317,7 @@ function locationTone(location: CommandCentreSnapshot['salesLocations'][number])
   if (location.issueCount > 0 || someTillsDown || (paymentRate !== null && paymentRate < 0.97)) {
     return 'warning';
   }
+  if (location.transactionCount === 0) return 'neutral';
   return 'success';
 }
 
@@ -957,13 +958,21 @@ export function CommandCentreClient() {
                     ? 'warning'
                     : 'success';
             const tillTone: Tone =
-              location.tillsTotal > 0 && location.tillsHealthy === 0
-                ? 'danger'
-                : location.tillsHealthy < location.tillsTotal
-                  ? 'warning'
-                  : 'success';
+              location.tillsTotal === 0
+                ? 'neutral'
+                : location.tillsHealthy === 0
+                  ? 'danger'
+                  : location.tillsHealthy < location.tillsTotal
+                    ? 'warning'
+                    : 'success';
             const issueTone: Tone =
-              location.issueCount >= 5 ? 'danger' : location.issueCount > 0 ? 'warning' : 'success';
+              location.issueCount >= 5
+                ? 'danger'
+                : location.issueCount > 0
+                  ? 'warning'
+                  : location.transactionCount === 0
+                    ? 'neutral'
+                    : 'success';
 
             return (
               <div className="ec-location-lane" data-tone={tone} key={location.salesLocationId}>
@@ -976,10 +985,16 @@ export function CommandCentreClient() {
                     : `${(location.paymentSuccessRate * 100).toFixed(1)}%`}
                 </span>
                 <span data-tone={tillTone}>
-                  {location.tillsHealthy}/{location.tillsTotal}
+                  {location.tillsTotal > 0
+                    ? `${location.tillsHealthy}/${location.tillsTotal}`
+                    : '—'}
                 </span>
                 <span data-tone={issueTone}>
-                  {location.issueCount > 0 ? location.issueCount : 'Clear'}
+                  {location.issueCount > 0
+                    ? location.issueCount
+                    : location.transactionCount === 0
+                      ? 'No sales yet'
+                      : 'Clear'}
                 </span>
               </div>
             );

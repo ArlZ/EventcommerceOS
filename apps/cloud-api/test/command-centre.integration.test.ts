@@ -14,6 +14,7 @@ const eventId = '22222222-2222-4222-8222-222222222222';
 const actorId = '33333333-3333-4333-8333-333333333333';
 const assignedActorId = '44444444-4444-4444-8444-444444444444';
 const salesLocationId = '55555555-5555-4555-8555-555555555555';
+const quietSalesLocationId = '55555555-5555-4555-8555-666666666666';
 const inventoryLocationId = '66666666-6666-4666-8666-666666666666';
 const productId = '77777777-7777-4777-8777-777777777777';
 const skuId = '88888888-8888-4888-8888-888888888888';
@@ -86,8 +87,9 @@ describeIntegration('live event command centre', () => {
     );
     await database.query(
       `INSERT INTO sales_locations(id,organisation_id,event_id,name,type)
-       VALUES ($1,$2,$3,'Main Bar','BAR')`,
-      [salesLocationId, organisationId, eventId],
+       VALUES ($1,$3,$4,'Main Bar','BAR'),
+              ($2,$3,$4,'Quiet Bar','BAR')`,
+      [salesLocationId, quietSalesLocationId, organisationId, eventId],
     );
     await database.query(
       `INSERT INTO inventory_locations(id,organisation_id,event_id,name,type)
@@ -203,6 +205,59 @@ describeIntegration('live event command centre', () => {
       alertId: 'alert-1',
       state: 'OPEN',
       skuName: 'Water 500ml',
+    });
+  });
+
+  it('keeps configured locations visible before their first sale', async () => {
+    const response = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    const quietLocation = response.body.salesLocations.find(
+      (location: { salesLocationId: string }) => location.salesLocationId === quietSalesLocationId,
+    );
+
+    expect(response.body.salesLocations).toHaveLength(2);
+    expect(quietLocation).toMatchObject({
+      salesLocationId: quietSalesLocationId,
+      name: 'Quiet Bar',
+      transactionCount: 0,
+      grossSales: [],
+      currentSalesVelocity: [],
+      lastSaleAt: null,
+      paymentSuccessRate: null,
+      tillsHealthy: 0,
+      tillsTotal: 0,
+      issueCount: 0,
+    });
+  });
+
+  it('preserves closed sales that are not assigned to a configured location', async () => {
+    await database.query(
+      `INSERT INTO sync_order_state(
+         order_id,device_id,last_sequence,state,total_minor,currency,event_id,
+         sales_location_id,lines,occurred_at
+       ) VALUES (
+         'order-unassigned','device-unassigned',1,'CLOSED',2500,'KES',$1,NULL,'[]'::jsonb,now()
+       )`,
+      [eventId],
+    );
+
+    const response = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    const unassigned = response.body.salesLocations.find(
+      (location: { salesLocationId: string }) => location.salesLocationId === 'unassigned',
+    );
+
+    expect(unassigned).toMatchObject({
+      salesLocationId: 'unassigned',
+      name: 'Unassigned',
+      transactionCount: 1,
+      grossSales: [{ currency: 'KES', amountMinor: '2500' }],
     });
   });
 
