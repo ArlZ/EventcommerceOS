@@ -1,6 +1,10 @@
 import { BadRequestException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { EdgeCloudBatch, InventoryEdgeBatch } from '@event-commerce/contracts';
+import type {
+  EdgeCloudBatch,
+  InventoryEdgeBatch,
+  PosDeviceCloudRosterEntry,
+} from '@event-commerce/contracts';
 import type { QueryResultRow } from 'pg';
 import { DatabaseService } from '../database/database.service';
 
@@ -180,7 +184,7 @@ export class EdgeCloudAuthService {
     devices: NonNullable<EdgeCloudBatch['posDevices']>,
   ): Promise<void> {
     const assigned = devices.filter(
-      (device): device is typeof device & { salesLocationId: string } =>
+      (device): device is PosDeviceCloudRosterEntry & { salesLocationId: string } =>
         device.salesLocationId !== null,
     );
     if (assigned.length === 0) return;
