@@ -58,7 +58,7 @@ export interface EdgeCloudBatch {
   edgeId: string;
   events: SyncEventEnvelope[];
   deviceStatuses: DeviceCloudStatus[];
-  deviceRoster: EdgePosDeviceRosterEntry[];
+  deviceRoster?: EdgePosDeviceRosterEntry[];
 }
 
 export interface EdgeCloudAck {
