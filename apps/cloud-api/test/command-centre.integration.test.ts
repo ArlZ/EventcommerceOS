@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DatabaseService } from '../src/database/database.service';
 import { provisionOperator } from './operator-auth-testkit';
+import { provisionSyncEdge } from './sync-auth-testkit';
 
 const describeIntegration = process.env.DATABASE_URL ? describe : describe.skip;
 const organisationId = '11111111-1111-4111-8111-111111111111';
@@ -230,6 +231,51 @@ describeIntegration('live event command centre', () => {
       tillsHealthy: 0,
       tillsTotal: 0,
       issueCount: 0,
+    });
+  });
+
+  it('surfaces a provisioned quiet-bar register before its first sale or heartbeat', async () => {
+    const edgeId = 'command-centre-roster-edge';
+    await provisionSyncEdge(database, {
+      edgeId,
+      organisationId,
+      eventIds: [eventId],
+    });
+    await database.query(
+      `INSERT INTO sync_pos_device_roster(
+         device_id,organisation_id,edge_id,event_id,sales_location_id,register_id,
+         status,source_updated_at
+       ) VALUES ('device-quiet-roster',$1,$2,$3,$4,'Till Quiet','ACTIVE',
+                 '2026-08-29T18:00:00Z')`,
+      [organisationId, edgeId, eventId, quietSalesLocationId],
+    );
+
+    const response = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    const quietLocation = response.body.salesLocations.find(
+      (location: { salesLocationId: string }) => location.salesLocationId === quietSalesLocationId,
+    );
+    const expectedDevice = response.body.devices.find(
+      (device: { deviceId: string }) => device.deviceId === 'device-quiet-roster',
+    );
+
+    expect(quietLocation).toMatchObject({
+      salesLocationId: quietSalesLocationId,
+      transactionCount: 0,
+      tillsHealthy: 0,
+      tillsTotal: 1,
+      issueCount: 1,
+    });
+    expect(expectedDevice).toMatchObject({
+      deviceId: 'device-quiet-roster',
+      salesLocationId: quietSalesLocationId,
+      salesLocationName: 'Quiet Bar',
+      lastSeenAt: null,
+      syncAgeSeconds: null,
+      status: 'STALE',
     });
   });
 
