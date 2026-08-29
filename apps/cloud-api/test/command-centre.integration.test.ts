@@ -206,6 +206,34 @@ describeIntegration('live event command centre', () => {
     });
   });
 
+  it('counts unresolved payment states as live location issues', async () => {
+    await database.query(
+      `INSERT INTO payments(id,event_id,order_id,amount_minor,currency)
+       VALUES ('payment-pending',$1,'order-1',5000,'KES')`,
+      [eventId],
+    );
+    await database.query(
+      `INSERT INTO payment_attempts(
+         id,payment_id,provider_id,idempotency_key,status,request_fingerprint,resolved_at,updated_at
+       ) VALUES (
+         'attempt-pending','payment-pending','mpesa','idem-pending','PENDING','fp-pending',NULL,now()
+       )`,
+    );
+
+    const response = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+
+    expect(response.body.salesLocations[0]).toMatchObject({
+      salesLocationId,
+      paymentSuccessRate: 1 / 3,
+      tillsHealthy: 1,
+      tillsTotal: 1,
+      issueCount: 1,
+    });
+  });
+
   it('uses the same stale device status in Command Centre and Sync Health', async () => {
     await database.query(
       `UPDATE sync_device_state
