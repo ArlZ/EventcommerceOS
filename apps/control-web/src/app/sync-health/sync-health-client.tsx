@@ -7,7 +7,8 @@ import { OperatorContextSwitcher } from '../operator-context-switcher';
 
 const apiBase = process.env.NEXT_PUBLIC_CLOUD_API_URL ?? 'http://localhost:3001';
 
-function ageLabel(value: string): string {
+function ageLabel(value: string | null): string {
+  if (value === null) return 'never';
   const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(value)) / 1000));
   if (ageSeconds < 60) return `${ageSeconds}s ago`;
   if (ageSeconds < 3600) return `${Math.floor(ageSeconds / 60)}m ago`;
@@ -29,6 +30,7 @@ function compactId(value: string): string {
 
 function operationalStatus(device: DeviceCloudStatus): 'HEALTHY' | 'DEGRADED' | 'STALE' {
   if (device.operationalStatus) return device.operationalStatus;
+  if (device.lastSeenAt === null) return 'STALE';
   const ageSeconds = Math.max(0, Math.floor((Date.now() - Date.parse(device.lastSeenAt)) / 1000));
   if (ageSeconds > 120) return 'STALE';
   if (device.edgeBacklogCount > 0 || ageSeconds > 30) return 'DEGRADED';
@@ -45,6 +47,14 @@ function deviceStatus(device: DeviceCloudStatus): {
   detail: string;
 } {
   const status = operationalStatus(device);
+  if (device.lastSeenAt === null) {
+    return {
+      label: 'Never reported',
+      tone: 'danger',
+      detail:
+        'This register is provisioned, but no POS activity has reached Cloud telemetry yet. Confirm the device and venue connection before service starts.',
+    };
+  }
   if (status === 'STALE') {
     return {
       label: 'Not reporting',
@@ -143,6 +153,11 @@ export function SyncHealthClient() {
         const attentionDelta =
           Number(deviceNeedsAttention(right)) - Number(deviceNeedsAttention(left));
         if (attentionDelta !== 0) return attentionDelta;
+        if (left.lastSeenAt === null && right.lastSeenAt !== null) return -1;
+        if (left.lastSeenAt !== null && right.lastSeenAt === null) return 1;
+        if (left.lastSeenAt === null || right.lastSeenAt === null) {
+          return left.deviceId.localeCompare(right.deviceId);
+        }
         return Date.parse(left.lastSeenAt) - Date.parse(right.lastSeenAt);
       }),
     [devices],
@@ -202,7 +217,7 @@ export function SyncHealthClient() {
       </div>
 
       <section className="ec-kpi-grid" aria-label="Device sync summary">
-        <SyncMetric label="Registers seen" value={devices.length.toString()} />
+        <SyncMetric label="Registers tracked" value={devices.length.toString()} />
         <SyncMetric label="Healthy" value={healthyDevices.toString()} />
         <SyncMetric label="Need attention" value={attentionDevices.toString()} />
         <SyncMetric label="Queued sale updates" value={queuedUploadCount.toString()} />
@@ -218,9 +233,9 @@ export function SyncHealthClient() {
 
       {activeOrganisationId && devices.length === 0 && !error && !loading ? (
         <div className="ec-empty-state">
-          <strong>No register updates have reached the online service yet.</strong> This does not
-          prove a till is unavailable; check the venue's local server and network before
-          interrupting service.
+          <strong>No active register roster or device telemetry has reached Cloud yet.</strong>{' '}
+          This does not prove a till is unavailable; check Event Edge provisioning and the venue
+          network before interrupting service.
         </div>
       ) : null}
 
@@ -237,7 +252,11 @@ export function SyncHealthClient() {
                 <div className="ec-entity-heading">
                   <p className="ec-eyebrow">Register</p>
                   <h2>{compactId(device.deviceId)}</h2>
-                  <p>Last register activity {ageLabel(device.lastSeenAt)}</p>
+                  <p>
+                    {device.lastSeenAt
+                      ? `Last register activity ${ageLabel(device.lastSeenAt)}`
+                      : 'No register activity has reached Cloud yet'}
+                  </p>
                 </div>
                 <span className="ec-status-pill" data-tone={status.tone}>
                   {status.label}
