@@ -26,6 +26,7 @@ const edgeA = 'edge-security-a';
 const edgeB = 'edge-security-b';
 const tokenA = 'edge-security-token-a-0123456789-abcdefghijklmnopqrstuvwxyz';
 const tokenB = 'edge-security-token-b-0123456789-abcdefghijklmnopqrstuvwxyz';
+const salesLocationId = '55555555-5555-4555-8555-555555555555';
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -120,6 +121,7 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
          inventory_ledger,
          inventory_edge_events,
          sync_reconciliation_exceptions,
+         sync_pos_device_roster,
          sync_device_state,
          sync_order_state,
          sync_processed_events,
@@ -141,6 +143,11 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
       eventIds: [otherEventId],
       token: tokenB,
     });
+    await database.query(
+      `INSERT INTO sales_locations(id,organisation_id,event_id,name,type)
+       VALUES ($1,$2,$3,'Roster Bar','BAR')`,
+      [salesLocationId, DEFAULT_SYNC_ORGANISATION_ID, DEFAULT_SYNC_EVENT_ID],
+    );
   });
 
   afterAll(async () => {
@@ -222,6 +229,103 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
     );
     expect(processed[0]).toEqual({ edge_id: edgeA, organisation_id: DEFAULT_SYNC_ORGANISATION_ID });
     expect(device[0]).toEqual({ edge_id: edgeA, organisation_id: DEFAULT_SYNC_ORGANISATION_ID });
+  });
+
+  it('accepts a tenant-bound POS roster before any sales and rejects Edge takeover', async () => {
+    const body: EdgeCloudBatch = {
+      edgeId: edgeA,
+      events: [],
+      deviceStatuses: [],
+      posDevices: [
+        {
+          deviceId: 'roster-device',
+          eventId: DEFAULT_SYNC_EVENT_ID,
+          salesLocationId,
+          registerId: 'Till 01',
+          status: 'ACTIVE',
+          updatedAt: '2026-08-29T18:00:00Z',
+        },
+      ],
+    };
+
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeA, tokenA))
+      .send(body)
+      .expect(201);
+
+    const roster = await database.query<{
+      organisation_id: string;
+      edge_id: string;
+      event_id: string;
+      sales_location_id: string;
+      status: string;
+    }>(
+      `SELECT organisation_id::text,edge_id,event_id::text,sales_location_id::text,status
+       FROM sync_pos_device_roster WHERE device_id='roster-device'`,
+    );
+    expect(roster[0]).toEqual({
+      organisation_id: DEFAULT_SYNC_ORGANISATION_ID,
+      edge_id: edgeA,
+      event_id: DEFAULT_SYNC_EVENT_ID,
+      sales_location_id: salesLocationId,
+      status: 'ACTIVE',
+    });
+
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeB, tokenB))
+      .send({
+        edgeId: edgeB,
+        events: [],
+        deviceStatuses: [],
+        posDevices: [
+          {
+            deviceId: 'roster-device',
+            eventId: otherEventId,
+            salesLocationId: null,
+            registerId: 'Till Other',
+            status: 'ACTIVE',
+            updatedAt: '2026-08-29T18:01:00Z',
+          },
+        ],
+      })
+      .expect(409);
+
+    const unchanged = await database.query<{ edge_id: string }>(
+      `SELECT edge_id FROM sync_pos_device_roster WHERE device_id='roster-device'`,
+    );
+    expect(unchanged[0]!.edge_id).toBe(edgeA);
+  });
+
+  it('rejects a POS roster location that does not belong to its event', async () => {
+    const otherSameOrgEvent = '22222222-2222-4222-8222-333333333333';
+    await database.query(
+      `INSERT INTO events(id,organisation_id,name,timezone,lifecycle,starts_at,ends_at)
+       VALUES ($1,$2,'Other same-org event','Africa/Nairobi','ACTIVE',
+               '2026-08-14T12:00:00Z','2026-08-15T12:00:00Z')`,
+      [otherSameOrgEvent, DEFAULT_SYNC_ORGANISATION_ID],
+    );
+
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeA, tokenA))
+      .send({
+        edgeId: edgeA,
+        events: [],
+        deviceStatuses: [],
+        posDevices: [
+          {
+            deviceId: 'wrong-location-event-device',
+            eventId: otherSameOrgEvent,
+            salesLocationId,
+            registerId: null,
+            status: 'ACTIVE',
+            updatedAt: '2026-08-29T18:00:00Z',
+          },
+        ],
+      })
+      .expect(401);
   });
 
   it('rejects a revoked Edge immediately', async () => {
