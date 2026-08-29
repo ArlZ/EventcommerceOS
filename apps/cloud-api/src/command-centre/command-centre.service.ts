@@ -82,6 +82,7 @@ interface LocationPaymentRow extends QueryResultRow {
   sales_location_id: string;
   total_count: string;
   succeeded_count: string;
+  unresolved_count: string;
 }
 
 interface SettledMethodRow extends QueryResultRow {
@@ -444,7 +445,10 @@ export class CommandCentreService {
        )
        SELECT coalesce(state.sales_location_id,'unassigned') AS sales_location_id,
               count(*)::text AS total_count,
-              count(*) FILTER (WHERE latest_attempt.status='SUCCEEDED')::text AS succeeded_count
+              count(*) FILTER (WHERE latest_attempt.status='SUCCEEDED')::text AS succeeded_count,
+              count(*) FILTER (
+                WHERE latest_attempt.status IN ('CREATED','INITIATED','PENDING','UNKNOWN')
+              )::text AS unresolved_count
        FROM payments payment
        JOIN latest_attempt ON latest_attempt.payment_id=payment.id
        LEFT JOIN sync_order_state state
@@ -756,6 +760,7 @@ export class CommandCentreService {
         {
           total: Number(row.total_count),
           succeeded: Number(row.succeeded_count),
+          unresolved: Number(row.unresolved_count),
         },
       ]),
     );
@@ -800,7 +805,7 @@ export class CommandCentreService {
       ).length;
       location.issueCount =
         locationDevices.filter((device) => device.status !== 'HEALTHY').length +
-        (payment ? payment.total - payment.succeeded : 0);
+        (payment?.unresolved ?? 0);
     }
 
     return [...grouped.values()].sort((left, right) => {
