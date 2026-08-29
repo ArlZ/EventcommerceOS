@@ -269,7 +269,7 @@ describeIntegration('live event command centre', () => {
       grossSales: [{ currency: 'KES', amountMinor: '2500' }],
       tillsHealthy: 1,
       tillsTotal: 1,
-      issueCount: 0,
+      issueCount: 1,
     });
   });
 
