@@ -49,10 +49,10 @@ function deviceStatus(device: DeviceCloudStatus): {
   const status = operationalStatus(device);
   if (device.lastSeenAt === null) {
     return {
-      label: 'Never reported',
+      label: 'Not yet reporting',
       tone: 'danger',
       detail:
-        'This register is provisioned, but no POS activity has reached Cloud telemetry yet. Confirm the device and venue connection before service starts.',
+        'No POS activity has reached Cloud since this register’s current provisioning or assignment became effective. Confirm the device and venue connection before service starts.',
     };
   }
   if (status === 'STALE') {
@@ -255,7 +255,7 @@ export function SyncHealthClient() {
                   <p>
                     {device.lastSeenAt
                       ? `Last register activity ${ageLabel(device.lastSeenAt)}`
-                      : 'No register activity has reached Cloud yet'}
+                      : 'No register activity has reached Cloud for the current assignment yet'}
                   </p>
                 </div>
                 <span className="ec-status-pill" data-tone={status.tone}>
