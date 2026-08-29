@@ -285,6 +285,29 @@ describeIntegration('live event command centre', () => {
       syncAgeSeconds: null,
       status: 'STALE',
     });
+
+    await database.query(
+      `UPDATE sync_pos_device_roster
+       SET status='REVOKED',source_updated_at='2026-08-29T18:01:00Z',received_at=now()
+       WHERE device_id='device-quiet-roster'`,
+    );
+    const afterRevocation = await request(app.getHttpServer())
+      .get(`/command-centre/events/${eventId}`)
+      .set(adminHeaders(organisationId))
+      .expect(200);
+    const quietAfterRevocation = afterRevocation.body.salesLocations.find(
+      (location: { salesLocationId: string }) => location.salesLocationId === quietSalesLocationId,
+    );
+    expect(quietAfterRevocation).toMatchObject({
+      tillsHealthy: 0,
+      tillsTotal: 0,
+      issueCount: 0,
+    });
+    expect(
+      afterRevocation.body.devices.some(
+        (device: { deviceId: string }) => device.deviceId === 'device-quiet-roster',
+      ),
+    ).toBe(false);
   });
 
   it('preserves closed sales that are not assigned to a configured location', async () => {
