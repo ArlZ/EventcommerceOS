@@ -3,6 +3,7 @@ import {
   SYNC_SCHEMA_VERSION,
   type DeviceCloudStatus,
   type EdgeCloudBatch,
+  type PosDeviceCloudRosterEntry,
   type SyncEventEnvelope,
 } from '@event-commerce/contracts';
 
@@ -73,18 +74,67 @@ function status(value: unknown): DeviceCloudStatus {
   };
 }
 
+function nullableStringField(body: Record<string, unknown>, key: string): string | null {
+  const value = body[key];
+  if (value === null) return null;
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new BadRequestException(`${key} must be null or a non-empty string`);
+  }
+  return value.trim();
+}
+
+function posDevice(value: unknown): PosDeviceCloudRosterEntry {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('POS device roster entry must be an object');
+  }
+  const body = value as Record<string, unknown>;
+  const rosterStatus = body.status;
+  if (rosterStatus !== 'ACTIVE' && rosterStatus !== 'REVOKED') {
+    throw new BadRequestException('POS device roster status must be ACTIVE or REVOKED');
+  }
+  const updatedAt = stringField(body, 'updatedAt');
+  if (Number.isNaN(Date.parse(updatedAt))) {
+    throw new BadRequestException('POS device roster updatedAt must be an ISO timestamp');
+  }
+  return {
+    deviceId: stringField(body, 'deviceId').trim(),
+    eventId: stringField(body, 'eventId').trim(),
+    salesLocationId: nullableStringField(body, 'salesLocationId'),
+    registerId: nullableStringField(body, 'registerId'),
+    status: rosterStatus,
+    updatedAt,
+  };
+}
+
 export function parseEdgeBatch(value: unknown): EdgeCloudBatch {
   if (value === null || typeof value !== 'object' || Array.isArray(value))
     throw new BadRequestException('edge batch must be an object');
   const body = value as Record<string, unknown>;
-  if (!Array.isArray(body.events) || body.events.length === 0 || body.events.length > 100) {
-    throw new BadRequestException('events must contain between 1 and 100 events');
+  if (!Array.isArray(body.events) || body.events.length > 100) {
+    throw new BadRequestException('events must contain between 0 and 100 events');
   }
   if (!Array.isArray(body.deviceStatuses))
     throw new BadRequestException('deviceStatuses must be an array');
+
+  const rawPosDevices = body.posDevices;
+  if (rawPosDevices !== undefined && !Array.isArray(rawPosDevices)) {
+    throw new BadRequestException('posDevices must be an array when provided');
+  }
+  const posDevices = (rawPosDevices ?? []).map(posDevice);
+  if (posDevices.length > 5_000) {
+    throw new BadRequestException('posDevices must contain at most 5000 entries');
+  }
+  if (new Set(posDevices.map((device) => device.deviceId)).size !== posDevices.length) {
+    throw new BadRequestException('posDevices must not contain duplicate deviceId values');
+  }
+  if (body.events.length === 0 && posDevices.length === 0) {
+    throw new BadRequestException('sync batch must contain events or POS device roster entries');
+  }
+
   return {
     edgeId: stringField(body, 'edgeId'),
     events: body.events.map(envelope),
     deviceStatuses: body.deviceStatuses.map(status),
+    posDevices,
   };
 }
