@@ -21,6 +21,12 @@ interface RosterIdentityRow extends QueryResultRow {
   edge_id: string;
 }
 
+interface DeviceStateIdentityRow extends QueryResultRow {
+  device_id: string;
+  organisation_id: string | null;
+  edge_id: string | null;
+}
+
 interface OrderStateRow extends QueryResultRow {
   device_id: string;
   last_sequence: string;
@@ -75,12 +81,12 @@ export class CloudSyncService {
         ]);
       }
 
-      if (posDevices.length > 0) {
+      if (deviceIds.length > 0) {
         const existingRoster = await client.query<RosterIdentityRow>(
           `SELECT device_id,organisation_id::text,edge_id
            FROM sync_pos_device_roster
            WHERE device_id = ANY($1::text[])`,
-          [posDevices.map((device) => device.deviceId)],
+          [deviceIds],
         );
         const collision = existingRoster.rows.find(
           (row) =>
@@ -89,6 +95,25 @@ export class CloudSyncService {
         if (collision) {
           throw new ConflictException(
             `POS device ${collision.device_id} is already attributed to another Event Edge scope`,
+          );
+        }
+      }
+
+      if (posDevices.length > 0) {
+        const existingTelemetry = await client.query<DeviceStateIdentityRow>(
+          `SELECT device_id,organisation_id::text,edge_id
+           FROM sync_device_state
+           WHERE device_id = ANY($1::text[])`,
+          [posDevices.map((device) => device.deviceId)],
+        );
+        const telemetryCollision = existingTelemetry.rows.find(
+          (row) =>
+            (row.organisation_id !== null && row.organisation_id !== identity.organisationId) ||
+            (row.edge_id !== null && row.edge_id !== identity.edgeId),
+        );
+        if (telemetryCollision) {
+          throw new ConflictException(
+            `POS device ${telemetryCollision.device_id} already has telemetry from another Event Edge scope`,
           );
         }
 
