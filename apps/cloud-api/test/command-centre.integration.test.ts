@@ -243,6 +243,15 @@ describeIntegration('live event command centre', () => {
        )`,
       [eventId],
     );
+    await database.query(
+      `INSERT INTO sync_device_state(
+         device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
+         edge_backlog_count,last_cloud_delivery_at,organisation_id
+       ) VALUES (
+         'device-unassigned',now()-interval '5 seconds',1,1,0,now()-interval '5 seconds',$1
+       )`,
+      [organisationId],
+    );
 
     const response = await request(app.getHttpServer())
       .get(`/command-centre/events/${eventId}`)
@@ -258,6 +267,9 @@ describeIntegration('live event command centre', () => {
       name: 'Unassigned',
       transactionCount: 1,
       grossSales: [{ currency: 'KES', amountMinor: '2500' }],
+      tillsHealthy: 1,
+      tillsTotal: 1,
+      issueCount: 1,
     });
   });
 
