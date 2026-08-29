@@ -944,7 +944,7 @@ export function CommandCentreClient() {
             <span>Velocity</span>
             <span>Payments</span>
             <span>Tills</span>
-            <span>Issues</span>
+            <span>Live issues</span>
           </div>
           {snapshot.salesLocations.map((location) => {
             const tone = locationTone(location);
