@@ -62,9 +62,7 @@ describeIntegration('POS device roster Cloud sync', () => {
       registerId: 'register-quiet-1',
     });
 
-    await (
-      forwarder as unknown as { syncRosterOnce(): Promise<void> }
-    ).syncRosterOnce();
+    await (forwarder as unknown as { syncRosterOnce(): Promise<void> }).syncRosterOnce();
 
     expect(sentBatches).toHaveLength(1);
     expect(sentBatches[0]!.events).toEqual([]);
@@ -83,9 +81,7 @@ describeIntegration('POS device roster Cloud sync', () => {
     await provisionPosDevice(database, 'device-revoked');
     await revokePosDevice(database, 'device-revoked');
 
-    await (
-      forwarder as unknown as { syncRosterOnce(): Promise<void> }
-    ).syncRosterOnce();
+    await (forwarder as unknown as { syncRosterOnce(): Promise<void> }).syncRosterOnce();
 
     expect(sentBatches[0]!.deviceRoster).toEqual([
       expect.objectContaining({ deviceId: 'device-revoked', status: 'REVOKED' }),
