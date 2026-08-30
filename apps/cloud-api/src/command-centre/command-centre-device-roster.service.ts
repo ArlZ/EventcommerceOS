@@ -58,7 +58,11 @@ export class CommandCentreDeviceRosterService {
        FROM cloud_pos_device_roster roster
        LEFT JOIN sales_locations location
          ON location.id=roster.sales_location_id AND location.event_id=roster.event_id
-       LEFT JOIN sync_device_state state ON state.device_id=roster.device_id
+       LEFT JOIN sync_device_state state
+         ON state.device_id=roster.device_id
+        AND state.organisation_id=roster.organisation_id
+        AND state.edge_id=roster.edge_id
+        AND state.last_seen_at >= roster.source_updated_at
        WHERE roster.event_id::text=$1
           OR roster.device_id = ANY($2::text[])
        ORDER BY roster.device_id`,

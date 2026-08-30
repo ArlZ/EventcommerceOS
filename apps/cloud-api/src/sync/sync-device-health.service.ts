@@ -34,11 +34,11 @@ export class SyncDeviceHealthService {
   async listForOrganisation(organisationId: string): Promise<DeviceCloudStatus[]> {
     const rows = await this.database.query<DeviceHealthRow>(
       `WITH device_scope AS (
-         SELECT roster.device_id
+         SELECT roster.device_id,roster.edge_id,roster.source_updated_at
          FROM cloud_pos_device_roster roster
          WHERE roster.organisation_id=$1 AND roster.status='ACTIVE'
-         UNION
-         SELECT state.device_id
+         UNION ALL
+         SELECT state.device_id,state.edge_id,NULL::timestamptz AS source_updated_at
          FROM sync_device_state state
          WHERE state.organisation_id=$1
            AND NOT EXISTS (
@@ -52,7 +52,16 @@ export class SyncDeviceHealthService {
               coalesce(state.edge_backlog_count,0) AS edge_backlog_count,
               state.last_cloud_delivery_at
        FROM device_scope scope
-       LEFT JOIN sync_device_state state ON state.device_id=scope.device_id
+       LEFT JOIN sync_device_state state
+         ON state.device_id=scope.device_id
+        AND (
+          scope.source_updated_at IS NULL
+          OR (
+            state.organisation_id=$1
+            AND state.edge_id=scope.edge_id
+            AND state.last_seen_at >= scope.source_updated_at
+          )
+        )
        ORDER BY state.last_seen_at ASC NULLS FIRST, scope.device_id ASC`,
       [organisationId],
     );

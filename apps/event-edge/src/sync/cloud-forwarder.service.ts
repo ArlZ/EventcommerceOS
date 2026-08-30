@@ -197,9 +197,22 @@ export class CloudForwarderService implements OnModuleInit, OnModuleDestroy {
 
   private async deviceRoster(): Promise<EdgePosDeviceRosterEntry[]> {
     const rows = await this.database.query<RosterRow>(
-      `SELECT device_id,event_id,sales_location_id,register_id,status,updated_at
-       FROM edge_pos_devices
-       ORDER BY device_id ASC`,
+      `SELECT device.device_id,
+              device.event_id,
+              device.sales_location_id,
+              device.register_id,
+              device.status,
+              coalesce(
+                (
+                  SELECT max(audit.created_at)
+                  FROM edge_pos_device_audit audit
+                  WHERE audit.device_id=device.device_id
+                    AND audit.action IN ('PROVISIONED','REASSIGNED','REVOKED')
+                ),
+                device.updated_at
+              ) AS updated_at
+       FROM edge_pos_devices device
+       ORDER BY device.device_id ASC`,
     );
     return rows.map((row) => ({
       deviceId: row.device_id,

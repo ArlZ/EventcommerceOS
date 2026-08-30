@@ -87,4 +87,41 @@ describeIntegration('POS device roster Cloud sync', () => {
       expect.objectContaining({ deviceId: 'device-revoked', status: 'REVOKED' }),
     ]);
   });
+
+  it('does not reset the assignment-health boundary when credentials rotate', async () => {
+    await provisionPosDevice(database, 'device-rotated', {
+      salesLocationId: 'bar-rotated',
+      registerId: 'register-rotated-1',
+    });
+    await database.query(
+      `INSERT INTO edge_pos_device_audit(
+         device_id,action,credential_version,event_id,sales_location_id,register_id,actor,created_at
+       ) VALUES (
+         'device-rotated','PROVISIONED',1,'event-pos-auth-test','bar-rotated',
+         'register-rotated-1','test','2026-08-14T12:30:00Z'
+       )`,
+    );
+    await database.query(
+      `UPDATE edge_pos_devices
+       SET credential_version=2,updated_at='2026-08-14T12:40:00Z'
+       WHERE device_id='device-rotated'`,
+    );
+    await database.query(
+      `INSERT INTO edge_pos_device_audit(
+         device_id,action,credential_version,event_id,sales_location_id,register_id,actor,created_at
+       ) VALUES (
+         'device-rotated','ROTATED',2,'event-pos-auth-test','bar-rotated',
+         'register-rotated-1','test','2026-08-14T12:40:00Z'
+       )`,
+    );
+
+    await (forwarder as unknown as { syncRosterOnce(): Promise<void> }).syncRosterOnce();
+
+    expect(sentBatches[0]!.deviceRoster).toEqual([
+      expect.objectContaining({
+        deviceId: 'device-rotated',
+        updatedAt: '2026-08-14T12:30:00.000Z',
+      }),
+    ]);
+  });
 });

@@ -15,6 +15,12 @@ interface SequenceRow extends QueryResultRow {
   event_instance_id: string;
 }
 
+interface DeviceIdentityClaimRow extends QueryResultRow {
+  device_id: string;
+  organisation_id: string | null;
+  edge_id: string | null;
+}
+
 interface OrderStateRow extends QueryResultRow {
   device_id: string;
   last_sequence: string;
@@ -55,11 +61,71 @@ export class CloudSyncService {
       const duplicates: string[] = [];
       const conflicts: string[] = [];
 
-      const deviceIds = [...new Set(batch.events.map((event) => event.deviceId))].sort();
+      const deviceIds = [
+        ...new Set([
+          ...batch.events.map((event) => event.deviceId),
+          ...batch.deviceStatuses.map((status) => status.deviceId),
+        ]),
+      ].sort();
       for (const deviceId of deviceIds) {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+          `sync-device-identity:${deviceId}`,
+        ]);
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
           `sync-device:${identity.organisationId}:${deviceId}`,
         ]);
+      }
+
+      if (deviceIds.length > 0) {
+        const rosterClaims = await client.query<DeviceIdentityClaimRow>(
+          `SELECT device_id,organisation_id::text,edge_id
+           FROM cloud_pos_device_roster
+           WHERE device_id = ANY($1::text[])`,
+          [deviceIds],
+        );
+        const rosterCollision = rosterClaims.rows.find(
+          (row) =>
+            row.organisation_id !== identity.organisationId || row.edge_id !== identity.edgeId,
+        );
+        if (rosterCollision) {
+          throw new ConflictException(
+            `device ${rosterCollision.device_id} is already attributed to another Event Edge scope`,
+          );
+        }
+
+        const stateClaims = await client.query<DeviceIdentityClaimRow>(
+          `SELECT device_id,organisation_id::text,edge_id
+           FROM sync_device_state
+           WHERE device_id = ANY($1::text[])`,
+          [deviceIds],
+        );
+        const stateCollision = stateClaims.rows.find(
+          (row) =>
+            (row.organisation_id !== null && row.organisation_id !== identity.organisationId) ||
+            (row.edge_id !== null && row.edge_id !== identity.edgeId),
+        );
+        if (stateCollision) {
+          throw new ConflictException(
+            `device ${stateCollision.device_id} already has telemetry from another Event Edge scope`,
+          );
+        }
+
+        const processedClaims = await client.query<DeviceIdentityClaimRow>(
+          `SELECT DISTINCT device_id,organisation_id::text,edge_id
+           FROM sync_processed_events
+           WHERE organisation_id=$1
+             AND device_id = ANY($2::text[])
+             AND edge_id IS NOT NULL`,
+          [identity.organisationId, deviceIds],
+        );
+        const processedCollision = processedClaims.rows.find(
+          (row) => row.edge_id !== identity.edgeId,
+        );
+        if (processedCollision) {
+          throw new ConflictException(
+            `device ${processedCollision.device_id} already has events from another Event Edge scope`,
+          );
+        }
       }
 
       for (const event of batch.events) {
@@ -83,8 +149,10 @@ export class CloudSyncService {
              last_cloud_delivery_at = COALESCE(EXCLUDED.last_cloud_delivery_at, sync_device_state.last_cloud_delivery_at),
              edge_id = EXCLUDED.edge_id,
              organisation_id = EXCLUDED.organisation_id
-           WHERE sync_device_state.organisation_id IS NULL
-              OR sync_device_state.organisation_id = EXCLUDED.organisation_id
+           WHERE (sync_device_state.organisation_id IS NULL
+                  OR sync_device_state.organisation_id = EXCLUDED.organisation_id)
+             AND (sync_device_state.edge_id IS NULL
+                  OR sync_device_state.edge_id = EXCLUDED.edge_id)
            RETURNING device_id`,
           [
             status.deviceId,
@@ -99,7 +167,7 @@ export class CloudSyncService {
         );
         if (deviceState.rowCount !== 1) {
           throw new ConflictException(
-            `device ${status.deviceId} is already attributed to another organisation`,
+            `device ${status.deviceId} is already attributed to another Event Edge scope`,
           );
         }
       }
