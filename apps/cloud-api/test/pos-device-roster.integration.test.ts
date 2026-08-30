@@ -155,6 +155,168 @@ describeIntegration('Cloud POS device roster', () => {
     ]);
   });
 
+  it('ignores telemetry that predates the current assignment in both operational views', async () => {
+    const deviceId = 'device-reassigned';
+    await database.query(
+      `INSERT INTO sync_device_state(
+         device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
+         edge_backlog_count,last_cloud_delivery_at,edge_id,organisation_id
+       ) VALUES ($1,'2026-08-14T12:20:00Z',5,5,0,'2026-08-14T12:20:00Z',$2,$3)`,
+      [deviceId, edgeId, DEFAULT_SYNC_ORGANISATION_ID],
+    );
+
+    await roster.ingest(
+      [
+        {
+          deviceId,
+          eventId: DEFAULT_SYNC_EVENT_ID,
+          salesLocationId: null,
+          registerId: 'register-reassigned',
+          status: 'ACTIVE',
+          updatedAt: '2026-08-14T12:30:00.000Z',
+        },
+      ],
+      {
+        edgeId,
+        organisationId: DEFAULT_SYNC_ORGANISATION_ID,
+        credentialVersion: 1,
+      },
+    );
+
+    expect(await health.listForOrganisation(DEFAULT_SYNC_ORGANISATION_ID)).toEqual([
+      expect.objectContaining({
+        deviceId,
+        lastSeenAt: null,
+        lastSequenceSeen: 0,
+        edgeAcceptedThroughSequence: 0,
+        edgeBacklogCount: 0,
+        lastCloudDeliveryAt: null,
+        syncAgeSeconds: null,
+        operationalStatus: 'STALE',
+      }),
+    ]);
+    expect(
+      (await commandCentreRoster.enrich(DEFAULT_SYNC_EVENT_ID, emptySnapshot())).devices,
+    ).toEqual([
+      expect.objectContaining({
+        deviceId,
+        lastSeenAt: null,
+        status: 'STALE',
+      }),
+    ]);
+
+    await database.query(
+      `UPDATE sync_device_state
+       SET last_seen_at='2026-08-14T12:31:00Z',
+           last_sequence_seen=6,
+           edge_accepted_through_sequence=6,
+           last_cloud_delivery_at='2026-08-14T12:31:00Z'
+       WHERE device_id=$1`,
+      [deviceId],
+    );
+
+    expect(await health.listForOrganisation(DEFAULT_SYNC_ORGANISATION_ID)).toEqual([
+      expect.objectContaining({
+        deviceId,
+        lastSeenAt: '2026-08-14T12:31:00.000Z',
+        lastSequenceSeen: 6,
+        edgeAcceptedThroughSequence: 6,
+      }),
+    ]);
+    expect(
+      (await commandCentreRoster.enrich(DEFAULT_SYNC_EVENT_ID, emptySnapshot())).devices,
+    ).toEqual([
+      expect.objectContaining({
+        deviceId,
+        lastSeenAt: '2026-08-14T12:31:00.000Z',
+      }),
+    ]);
+  });
+
+  it('rejects a newer roster claim from another Event Edge in the same organisation', async () => {
+    const otherEdgeId = 'edge-roster-other';
+    await provisionSyncEdge(database, { edgeId: otherEdgeId });
+
+    await roster.ingest(
+      [
+        {
+          deviceId: 'device-edge-bound',
+          eventId: DEFAULT_SYNC_EVENT_ID,
+          salesLocationId: null,
+          registerId: null,
+          status: 'ACTIVE',
+          updatedAt: '2026-08-14T12:30:00.000Z',
+        },
+      ],
+      {
+        edgeId,
+        organisationId: DEFAULT_SYNC_ORGANISATION_ID,
+        credentialVersion: 1,
+      },
+    );
+
+    await expect(
+      roster.ingest(
+        [
+          {
+            deviceId: 'device-edge-bound',
+            eventId: DEFAULT_SYNC_EVENT_ID,
+            salesLocationId: null,
+            registerId: null,
+            status: 'ACTIVE',
+            updatedAt: '2026-08-14T12:31:00.000Z',
+          },
+        ],
+        {
+          edgeId: otherEdgeId,
+          organisationId: DEFAULT_SYNC_ORGANISATION_ID,
+          credentialVersion: 1,
+        },
+      ),
+    ).rejects.toThrow('another Event Edge scope');
+
+    const stored = await database.query<{ edge_id: string; source_updated_at: string }>(
+      `SELECT edge_id,source_updated_at::text
+       FROM cloud_pos_device_roster WHERE device_id='device-edge-bound'`,
+    );
+    expect(stored[0]!.edge_id).toBe(edgeId);
+  });
+
+  it('rejects a roster claim when telemetry already belongs to another Event Edge', async () => {
+    const otherEdgeId = 'edge-roster-telemetry-other';
+    await provisionSyncEdge(database, { edgeId: otherEdgeId });
+    await database.query(
+      `INSERT INTO sync_device_state(
+         device_id,last_seen_at,last_sequence_seen,edge_accepted_through_sequence,
+         edge_backlog_count,last_cloud_delivery_at,edge_id,organisation_id
+       ) VALUES (
+         'device-telemetry-owned','2026-08-14T12:20:00Z',5,5,0,
+         '2026-08-14T12:20:00Z',$1,$2
+       )`,
+      [edgeId, DEFAULT_SYNC_ORGANISATION_ID],
+    );
+
+    await expect(
+      roster.ingest(
+        [
+          {
+            deviceId: 'device-telemetry-owned',
+            eventId: DEFAULT_SYNC_EVENT_ID,
+            salesLocationId: null,
+            registerId: null,
+            status: 'ACTIVE',
+            updatedAt: '2026-08-14T12:30:00.000Z',
+          },
+        ],
+        {
+          edgeId: otherEdgeId,
+          organisationId: DEFAULT_SYNC_ORGANISATION_ID,
+          credentialVersion: 1,
+        },
+      ),
+    ).rejects.toThrow('telemetry from another Event Edge scope');
+  });
+
   it('removes a revoked till from active operational coverage', async () => {
     await roster.ingest(
       [
