@@ -24,8 +24,10 @@ const otherOrganisationId = '11111111-1111-4111-8111-222222222222';
 const otherEventId = '22222222-2222-4222-8222-444444444444';
 const edgeA = 'edge-security-a';
 const edgeB = 'edge-security-b';
+const edgeSameOrg = 'edge-security-same-org';
 const tokenA = 'edge-security-token-a-0123456789-abcdefghijklmnopqrstuvwxyz';
 const tokenB = 'edge-security-token-b-0123456789-abcdefghijklmnopqrstuvwxyz';
+const tokenSameOrg = 'edge-security-token-same-org-0123456789-abcdefghijklmnopqrstuvwxyz';
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
@@ -140,6 +142,12 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
       organisationId: otherOrganisationId,
       eventIds: [otherEventId],
       token: tokenB,
+    });
+    await provisionSyncEdge(database, {
+      edgeId: edgeSameOrg,
+      organisationId: DEFAULT_SYNC_ORGANISATION_ID,
+      eventIds: [DEFAULT_SYNC_EVENT_ID],
+      token: tokenSameOrg,
     });
   });
 
@@ -288,6 +296,43 @@ describeIntegration('authenticated Event Edge Cloud ingress', () => {
     );
     expect(state[0]).toEqual({ organisation_id: DEFAULT_SYNC_ORGANISATION_ID, edge_id: edgeA });
     expect(secondEvent[0]!.count).toBe('0');
+  });
+
+  it('prevents another Event Edge in the same organisation from claiming an event device id', async () => {
+    const sharedDevice = 'same-org-edge-owned-device';
+    const first = orderEvent(
+      'same-org-edge-a',
+      DEFAULT_SYNC_EVENT_ID,
+      sharedDevice,
+      1,
+      'same-org-edge-order-a',
+    );
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeA, tokenA))
+      .send(syncBatch(edgeA, first))
+      .expect(201);
+
+    const second = orderEvent(
+      'same-org-edge-b',
+      DEFAULT_SYNC_EVENT_ID,
+      sharedDevice,
+      2,
+      'same-org-edge-order-b',
+    );
+    await request(app.getHttpServer())
+      .post('/sync/edge-events')
+      .set(syncEdgeHeaders(edgeSameOrg, tokenSameOrg))
+      .send(syncBatch(edgeSameOrg, second))
+      .expect(409);
+
+    const claims = await database.query<{ edge_id: string }>(
+      `SELECT DISTINCT edge_id
+       FROM sync_processed_events
+       WHERE organisation_id=$1 AND device_id=$2`,
+      [DEFAULT_SYNC_ORGANISATION_ID, sharedDevice],
+    );
+    expect(claims).toEqual([{ edge_id: edgeA }]);
   });
 
   it('scopes device sequence replay protection by organisation', async () => {
