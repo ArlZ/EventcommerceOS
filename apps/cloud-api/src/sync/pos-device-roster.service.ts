@@ -36,8 +36,7 @@ export class PosDeviceRosterService {
         [deviceIds],
       );
       const rosterCollision = rosterClaims.rows.find(
-        (row) =>
-          row.organisation_id !== identity.organisationId || row.edge_id !== identity.edgeId,
+        (row) => row.organisation_id !== identity.organisationId || row.edge_id !== identity.edgeId,
       );
       if (rosterCollision) {
         throw new ConflictException(
@@ -116,7 +115,8 @@ export class PosDeviceRosterService {
           const current = existing.rows[0];
           if (
             current &&
-            (current.organisation_id !== identity.organisationId || current.edge_id !== identity.edgeId)
+            (current.organisation_id !== identity.organisationId ||
+              current.edge_id !== identity.edgeId)
           ) {
             throw new ConflictException(
               `device ${entry.deviceId} is already attributed to another Event Edge scope`,
