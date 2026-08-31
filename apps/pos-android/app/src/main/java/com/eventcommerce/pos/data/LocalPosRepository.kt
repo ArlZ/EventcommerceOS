@@ -106,6 +106,7 @@ class LocalPosRepository(
     private const val DEVELOPMENT_EVENT_ID = "dev-event-offline"
     private const val DEVELOPMENT_MENU_ID = "dev-menu-v1"
     private const val DEVELOPMENT_SOURCE_ACTOR = "built-in-task003"
+    private const val DEVELOPMENT_SALES_LOCATION_ID = "dev-main-bar"
 
     fun isBuiltInDevelopmentMenu(menu: CachedMenu): Boolean =
       menu.eventId == DEVELOPMENT_EVENT_ID &&
@@ -115,6 +116,7 @@ class LocalPosRepository(
     fun developmentMenuCandidate(): MenuCandidate {
       val unsigned = MenuCandidate(
         eventId = DEVELOPMENT_EVENT_ID,
+        salesLocationId = DEVELOPMENT_SALES_LOCATION_ID,
         menuId = DEVELOPMENT_MENU_ID,
         version = 1,
         activatedAtEpochMs = 1_700_000_000_000,
