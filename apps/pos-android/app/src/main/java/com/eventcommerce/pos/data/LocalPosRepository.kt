@@ -8,6 +8,7 @@ import com.eventcommerce.pos.domain.MenuCandidateItem
 import com.eventcommerce.pos.domain.MenuIntegrity
 import com.eventcommerce.pos.domain.PaymentAttemptState
 import java.util.UUID
+import org.json.JSONObject
 
 class LocalPosRepository(
   private val db: AppDatabase,
@@ -23,7 +24,11 @@ class LocalPosRepository(
 
   suspend fun ensureDevelopmentMenu(): CachedMenu = activeMenu() ?: installMenu(developmentMenuCandidate())
 
-  suspend fun installMenu(candidate: MenuCandidate): CachedMenu = menus.install(candidate)
+  suspend fun installMenu(candidate: MenuCandidate): CachedMenu {
+    val installed = menus.install(candidate)
+    repairLegacyProductionSalesLocation(installed)
+    return installed
+  }
 
   suspend fun activeMenu(): CachedMenu? = menus.active()
 
@@ -102,10 +107,51 @@ class LocalPosRepository(
 
   suspend fun allOutboxEvents(): List<OutboxEventEntity> = outbox.events()
 
+  suspend fun repairLegacyProductionSalesLocation(menu: CachedMenu): Int {
+    if (isBuiltInDevelopmentMenu(menu)) return 0
+    val salesLocationId = menu.salesLocationId ?: return 0
+    val watermark = DeviceSyncStateStore(db).health().acknowledgedThroughSequence
+    return db.withTransaction {
+      val legacyOrders = db.orders().ordersForSalesLocation(
+        menu.eventId,
+        menu.version,
+        LEGACY_PRODUCTION_SALES_LOCATION_ID,
+      )
+      if (legacyOrders.isEmpty()) return@withTransaction 0
+      val orderIds = legacyOrders.mapTo(mutableSetOf()) { it.id }
+
+      legacyOrders.forEach { order ->
+        db.orders().updateOrder(order.copy(salesLocationId = salesLocationId))
+      }
+
+      db.pendingEvents().events()
+        .asSequence()
+        .filter { event ->
+          event.aggregateType == "ORDER" &&
+            event.aggregateId in orderIds &&
+            event.sequence > watermark
+        }
+        .forEach { event ->
+          val payload = JSONObject(event.payloadJson)
+          if (
+            payload.optString("eventId") == menu.eventId &&
+            payload.optString("salesLocationId") == LEGACY_PRODUCTION_SALES_LOCATION_ID
+          ) {
+            payload.put("salesLocationId", salesLocationId)
+            db.pendingEvents().update(event.copy(payloadJson = payload.toString()))
+          }
+        }
+
+      legacyOrders.size
+    }
+  }
+
   companion object {
     private const val DEVELOPMENT_EVENT_ID = "dev-event-offline"
     private const val DEVELOPMENT_MENU_ID = "dev-menu-v1"
     private const val DEVELOPMENT_SOURCE_ACTOR = "built-in-task003"
+    private const val DEVELOPMENT_SALES_LOCATION_ID = "dev-main-bar"
+    private const val LEGACY_PRODUCTION_SALES_LOCATION_ID = "dev-main-bar"
 
     fun isBuiltInDevelopmentMenu(menu: CachedMenu): Boolean =
       menu.eventId == DEVELOPMENT_EVENT_ID &&
@@ -115,6 +161,7 @@ class LocalPosRepository(
     fun developmentMenuCandidate(): MenuCandidate {
       val unsigned = MenuCandidate(
         eventId = DEVELOPMENT_EVENT_ID,
+        salesLocationId = DEVELOPMENT_SALES_LOCATION_ID,
         menuId = DEVELOPMENT_MENU_ID,
         version = 1,
         activatedAtEpochMs = 1_700_000_000_000,

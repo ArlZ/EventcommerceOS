@@ -24,6 +24,7 @@ data class MenuCandidateItem(
 
 data class MenuCandidate(
   val eventId: String,
+  val salesLocationId: String,
   val menuId: String,
   val version: Long,
   val activatedAtEpochMs: Long,
@@ -35,6 +36,7 @@ data class MenuCandidate(
 
 data class CachedMenu(
   val eventId: String,
+  val salesLocationId: String?,
   val menuId: String,
   val version: Long,
   val activatedAtEpochMs: Long,

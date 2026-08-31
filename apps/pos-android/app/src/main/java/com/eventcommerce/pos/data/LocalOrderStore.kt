@@ -39,7 +39,9 @@ class LocalOrderStore(
         val order = active ?: OrderEntity(
           id = idFactory(),
           eventId = menu.eventId,
-          salesLocationId = DEVELOPMENT_SALES_LOCATION_ID,
+          salesLocationId = requireNotNull(menu.salesLocationId) {
+            "menu sales location is unavailable; refresh from Event Edge before starting an order"
+          },
           deviceId = deviceState.id(),
           menuVersion = menu.version,
           state = OrderState.OPEN.name,
@@ -162,7 +164,4 @@ class LocalOrderStore(
     },
   )
 
-  companion object {
-    const val DEVELOPMENT_SALES_LOCATION_ID = "dev-main-bar"
-  }
 }

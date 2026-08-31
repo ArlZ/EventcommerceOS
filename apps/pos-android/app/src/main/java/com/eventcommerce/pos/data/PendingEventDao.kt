@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 
 @Dao
 interface PendingEventDao {
@@ -15,4 +16,7 @@ interface PendingEventDao {
 
   @Query("SELECT * FROM outbox_events ORDER BY sequence ASC")
   suspend fun events(): List<OutboxEventEntity>
+
+  @Update
+  suspend fun update(value: OutboxEventEntity)
 }

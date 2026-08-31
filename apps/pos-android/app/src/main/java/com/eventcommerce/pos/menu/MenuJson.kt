@@ -10,6 +10,7 @@ object MenuJson {
     val items = value.getJSONArray("items")
     return MenuCandidate(
       eventId = value.getString("eventId"),
+      salesLocationId = value.getString("salesLocationId"),
       menuId = value.getString("menuId"),
       version = value.getLong("version"),
       activatedAtEpochMs = value.getLong("activatedAtEpochMs"),

@@ -33,6 +33,7 @@ object MenuIntegrity {
 
   fun validate(candidate: MenuCandidate) {
     require(candidate.eventId.isNotBlank()) { "eventId is required" }
+    require(candidate.salesLocationId.isNotBlank()) { "salesLocationId is required" }
     require(candidate.menuId.isNotBlank()) { "menuId is required" }
     require(candidate.version > 0) { "menu version must be positive" }
     require(candidate.activatedAtEpochMs > 0) { "menu activation time must be positive" }

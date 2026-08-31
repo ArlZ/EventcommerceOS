@@ -43,4 +43,13 @@ interface OrderDao {
 
   @Query("SELECT COUNT(*) FROM pos_orders WHERE menuVersion = :menuVersion")
   suspend fun orderCountForMenuVersion(menuVersion: Long): Int
+
+  @Query(
+    "SELECT * FROM pos_orders WHERE eventId = :eventId AND menuVersion = :menuVersion AND salesLocationId = :salesLocationId",
+  )
+  suspend fun ordersForSalesLocation(
+    eventId: String,
+    menuVersion: Long,
+    salesLocationId: String,
+  ): List<OrderEntity>
 }
