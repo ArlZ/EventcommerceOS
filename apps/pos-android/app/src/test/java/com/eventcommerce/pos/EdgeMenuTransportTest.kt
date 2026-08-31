@@ -69,6 +69,7 @@ class EdgeMenuTransportTest {
     val signed = parsed.copy(checksum = MenuIntegrity.checksum(parsed))
 
     assertEquals("event-1", signed.eventId)
+    assertEquals("bar-1", signed.salesLocationId)
     assertEquals("menu-1", signed.menuId)
     assertEquals(7L, signed.version)
     assertEquals(10000L, signed.items.single().priceMinor)
