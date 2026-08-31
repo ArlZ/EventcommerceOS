@@ -14,10 +14,7 @@ class MenuRefreshCoordinator(
 
   suspend fun refreshOnce(): Long {
     val remote = transport.current()
-    val local = repository.activeMenu()
-    if (local == null || remote.version != local.version || remote.checksum != local.checksum) {
-      repository.installMenu(remote)
-    }
+    repository.installMenu(remote)
     return remote.version
   }
 
