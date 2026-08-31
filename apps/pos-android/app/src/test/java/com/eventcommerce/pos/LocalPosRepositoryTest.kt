@@ -203,6 +203,55 @@ class LocalPosRepositoryTest {
     assertEquals("bar-two", order.salesLocationId)
   }
 
+
+  @Test
+  fun `known legacy production binding is repaired without changing order identity`() = runBlocking {
+    val unsigned = MenuCandidate(
+      eventId = "event-production",
+      salesLocationId = "bar-production",
+      menuId = "menu-production",
+      version = 13,
+      activatedAtEpochMs = 1_787_600_000_002,
+      sourceActor = "edge-admin",
+      currency = "KES",
+      checksum = "",
+      items = listOf(
+        MenuCandidateItem(
+          itemId = "item-water",
+          skuId = "sku-water",
+          name = "Pilot Water 500ml",
+          category = "Beverage",
+          priceMinor = 10_000,
+        ),
+      ),
+    )
+    val menu = repository.installMenu(MenuIntegrity.signed(unsigned))
+    val closed = repository.recordCashPayment(
+      repository.addItem(menu.items.single().itemId).id,
+    )
+    val originalEvents = repository.allOutboxEvents().filter { it.aggregateId == closed.id }
+
+    db.orders().updateOrder(
+      requireNotNull(db.orders().order(closed.id)).copy(salesLocationId = "dev-main-bar"),
+    )
+    originalEvents.forEach { event ->
+      val payload = JSONObject(event.payloadJson)
+      payload.put("salesLocationId", "dev-main-bar")
+      db.pendingEvents().update(event.copy(payloadJson = payload.toString()))
+    }
+
+    assertEquals(1, repository.repairLegacyProductionSalesLocation(menu))
+
+    val repaired = requireNotNull(db.orders().order(closed.id))
+    assertEquals(closed.id, repaired.id)
+    assertEquals("bar-production", repaired.salesLocationId)
+    repository.allOutboxEvents()
+      .filter { it.aggregateId == closed.id }
+      .forEach { event ->
+        assertEquals("bar-production", JSONObject(event.payloadJson).getString("salesLocationId"))
+      }
+  }
+
   @Test
   fun `invalid menu update leaves last valid menu active`() = runBlocking {
     val active = repository.ensureDevelopmentMenu()
