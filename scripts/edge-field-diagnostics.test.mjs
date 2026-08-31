@@ -5,6 +5,7 @@ import { collectEdgeFieldDiagnostics } from '../infra/edge-pilot/field-diagnosti
 function fakeClient(overrides = {}) {
   return {
     async query(sql) {
+      overrides.queries?.push(sql);
       if (sql.includes('FROM edge_pos_devices d')) {
         return {
           rows: overrides.watermarks ?? [
@@ -160,6 +161,25 @@ test('edge field diagnostics reports event-scoped aggregate evidence', async () 
       `forbidden evidence key ${forbiddenKey} is present`,
     );
   }
+});
+
+test('edge field diagnostics scopes processed events and backlog by payload business event id', async () => {
+  const queries = [];
+  await collectEdgeFieldDiagnostics(fakeClient({ queries }), env);
+
+  const processed = queries.find(
+    (sql) => sql.includes('FROM edge_processed_device_events e') && !sql.includes('JOIN'),
+  );
+  const backlog = queries.find((sql) => sql.includes('FROM edge_cloud_outbox'));
+  const exceptions = queries.find(
+    (sql) =>
+      sql.includes('FROM edge_reconciliation_exceptions') &&
+      !sql.includes('device_id IS NULL'),
+  );
+
+  assert.match(processed ?? '', /payload ->> 'eventId'=\$1/);
+  assert.match(backlog ?? '', /payload ->> 'eventId'=\$1/);
+  assert.match(exceptions ?? '', /payload ->> 'eventId'=\$1/);
 });
 
 test('edge field diagnostics includes revoked pilot devices without losing their evidence', async () => {
