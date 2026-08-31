@@ -53,10 +53,7 @@ export class DeviceSyncService {
 
     return {
       deviceId,
-      acceptedThroughSequence: Number.parseInt(
-        watermarks[0]?.accepted_through_sequence ?? '0',
-        10,
-      ),
+      acceptedThroughSequence: Number.parseInt(watermarks[0]?.accepted_through_sequence ?? '0', 10),
       receipts: [],
       edgeBacklogCount: Number.parseInt(backlog[0]?.count ?? '0', 10),
       serverTime: new Date().toISOString(),
