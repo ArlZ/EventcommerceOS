@@ -7,6 +7,8 @@ import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.data.TransactionFaultInjector
 import com.eventcommerce.pos.domain.MenuCandidate
+import com.eventcommerce.pos.domain.MenuCandidateItem
+import com.eventcommerce.pos.domain.MenuIntegrity
 import com.eventcommerce.pos.domain.OrderState
 import java.util.UUID
 import kotlinx.coroutines.runBlocking
@@ -143,11 +145,70 @@ class LocalPosRepositoryTest {
     assertEquals(item.priceMinor, lines.getJSONObject(0).getLong("unitPriceMinor"))
   }
 
+
+  @Test
+  fun `production order uses sales location delivered by Event Edge menu`() = runBlocking {
+    val unsigned = MenuCandidate(
+      eventId = "event-production",
+      salesLocationId = "bar-production",
+      menuId = "menu-production",
+      version = 11,
+      activatedAtEpochMs = 1_787_600_000_000,
+      sourceActor = "edge-admin",
+      currency = "KES",
+      checksum = "",
+      items = listOf(
+        MenuCandidateItem(
+          itemId = "item-water",
+          skuId = "sku-water",
+          name = "Pilot Water 500ml",
+          category = "Beverage",
+          priceMinor = 10_000,
+        ),
+      ),
+    )
+    val menu = repository.installMenu(MenuIntegrity.signed(unsigned))
+    val order = repository.addItem(menu.items.single().itemId)
+
+    assertEquals("event-production", order.eventId)
+    assertEquals("bar-production", order.salesLocationId)
+  }
+
+  @Test
+  fun `idempotent menu refresh updates sales location assignment`() = runBlocking {
+    val unsigned = MenuCandidate(
+      eventId = "event-production",
+      salesLocationId = "bar-one",
+      menuId = "menu-production",
+      version = 12,
+      activatedAtEpochMs = 1_787_600_000_001,
+      sourceActor = "edge-admin",
+      currency = "KES",
+      checksum = "",
+      items = listOf(
+        MenuCandidateItem(
+          itemId = "item-water",
+          skuId = "sku-water",
+          name = "Pilot Water 500ml",
+          category = "Beverage",
+          priceMinor = 10_000,
+        ),
+      ),
+    )
+    val first = MenuIntegrity.signed(unsigned)
+    repository.installMenu(first)
+    repository.installMenu(first.copy(salesLocationId = "bar-two"))
+
+    val order = repository.addItem(first.items.single().itemId)
+    assertEquals("bar-two", order.salesLocationId)
+  }
+
   @Test
   fun `invalid menu update leaves last valid menu active`() = runBlocking {
     val active = repository.ensureDevelopmentMenu()
     val invalid = MenuCandidate(
       eventId = active.eventId,
+      salesLocationId = requireNotNull(active.salesLocationId),
       menuId = active.menuId,
       version = active.version + 1,
       activatedAtEpochMs = active.activatedAtEpochMs + 1,
