@@ -12,3 +12,7 @@ data class DeviceEdgeAck(
 fun interface DeviceEdgeTransport {
   suspend fun send(deviceId: String, events: List<OutboxEventEntity>): DeviceEdgeAck
 }
+
+interface DeviceEdgeStatusTransport {
+  suspend fun status(deviceId: String): DeviceEdgeAck
+}
