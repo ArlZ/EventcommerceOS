@@ -23,7 +23,7 @@ class LocalMenuStore(
     val current = dao.activeVersion()
     if (current != null && candidate.version == current.version) {
       require(candidate.checksum == current.checksum) { "menu version already exists with different content" }
-      persistAssignment(candidate)
+      db.withTransaction { persistAssignment(candidate) }
       return snapshot(current)
     }
     require(current == null || candidate.version > current.version) { "menu version must advance monotonically" }
@@ -57,18 +57,26 @@ class LocalMenuStore(
     val salesLocationId = metadata.find(ACTIVE_MENU_SALES_LOCATION_ID)?.value
       ?.takeIf { assignmentEventId == entity.eventId && it.isNotBlank() }
     return CachedMenu(
-    eventId = entity.eventId,
-    salesLocationId = salesLocationId,
-    menuId = entity.menuId,
-    version = entity.version,
-    activatedAtEpochMs = entity.activatedAtEpochMs,
-    sourceActor = entity.sourceActor,
-    currency = entity.currency,
-    checksum = entity.checksum,
-    items = dao.items(entity.version).map {
-      MenuCandidateItem(it.itemId, it.skuId, it.name, it.category, it.priceMinor, it.favourite, it.sortOrder)
-    },
-  )
+      eventId = entity.eventId,
+      salesLocationId = salesLocationId,
+      menuId = entity.menuId,
+      version = entity.version,
+      activatedAtEpochMs = entity.activatedAtEpochMs,
+      sourceActor = entity.sourceActor,
+      currency = entity.currency,
+      checksum = entity.checksum,
+      items = dao.items(entity.version).map {
+        MenuCandidateItem(
+          it.itemId,
+          it.skuId,
+          it.name,
+          it.category,
+          it.priceMinor,
+          it.favourite,
+          it.sortOrder,
+        )
+      },
+    )
   }
 
   private suspend fun persistAssignment(candidate: MenuCandidate) {
