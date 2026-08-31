@@ -362,7 +362,7 @@ fun PosScreen(
 
       if (outboxCount > 0) {
         Text(
-          "$outboxCount sale update(s) waiting to sync. They remain stored on this register.",
+          "$outboxCount sale update(s) retained locally for recovery and audit.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
