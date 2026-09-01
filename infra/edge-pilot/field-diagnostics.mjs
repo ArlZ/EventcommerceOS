@@ -70,8 +70,8 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
     ),
     client.query(
       `SELECT device_id,count(*)::text AS processed_count
-       FROM edge_processed_device_events
-       WHERE event_id=$1
+       FROM edge_processed_device_events e
+       WHERE e.payload ->> 'eventId'=$1
        GROUP BY device_id
        ORDER BY device_id`,
       [eventId],
@@ -82,7 +82,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
               coalesce(max(o.attempts) FILTER (WHERE o.delivered_at IS NULL),0)::text AS max_pending_attempts
        FROM edge_cloud_outbox o
        JOIN edge_processed_device_events e ON e.event_instance_id=o.event_instance_id
-       WHERE e.event_id=$1
+       WHERE e.payload ->> 'eventId'=$1
        GROUP BY o.device_id
        ORDER BY o.device_id`,
       [eventId],
@@ -93,7 +93,7 @@ export async function collectEdgeFieldDiagnostics(client, env = process.env, now
        LEFT JOIN edge_processed_device_events e ON e.event_instance_id=x.event_instance_id
        LEFT JOIN edge_pos_devices d ON d.device_id=x.device_id
        WHERE x.resolved_at IS NULL
-         AND (e.event_id=$1 OR d.event_id=$1)
+         AND (e.payload ->> 'eventId'=$1 OR d.event_id=$1)
        GROUP BY x.device_id
        ORDER BY x.device_id NULLS FIRST`,
       [eventId],

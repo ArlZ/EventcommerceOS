@@ -145,6 +145,33 @@ describeIntegration('authenticated POS device to Event Edge boundary', () => {
     expect(rows[0]!.count).toBe('0');
   });
 
+  it('returns authenticated sync status without requiring a new business event', async () => {
+    await request(app.getHttpServer()).get('/sync/device-status').expect(401);
+
+    const initial = await request(app.getHttpServer())
+      .get('/sync/device-status')
+      .set(posDeviceHeaders(deviceId))
+      .expect(200);
+    expect(initial.body.deviceId).toBe(deviceId);
+    expect(initial.body.acceptedThroughSequence).toBe(0);
+    expect(initial.body.edgeBacklogCount).toBe(0);
+    expect(initial.body.receipts).toEqual([]);
+
+    await request(app.getHttpServer())
+      .post('/sync/device-events')
+      .set(posDeviceHeaders(deviceId))
+      .send(syncBody())
+      .expect(201);
+
+    const afterSync = await request(app.getHttpServer())
+      .get('/sync/device-status')
+      .set(posDeviceHeaders(deviceId))
+      .expect(200);
+    expect(afterSync.body.acceptedThroughSequence).toBe(1);
+    expect(afterSync.body.edgeBacklogCount).toBe(1);
+    expect(afterSync.body.receipts).toEqual([]);
+  });
+
   it('rejects a device event outside the server-side event assignment', async () => {
     await request(app.getHttpServer())
       .post('/sync/device-events')

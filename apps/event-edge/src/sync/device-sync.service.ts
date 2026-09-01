@@ -40,6 +40,26 @@ interface CountRow extends QueryResultRow {
 export class DeviceSyncService {
   constructor(private readonly database: EdgeDatabaseService) {}
 
+  async status(deviceId: string): Promise<DeviceSyncAck> {
+    const [watermarks, backlog] = await Promise.all([
+      this.database.query<WatermarkRow>(
+        'SELECT accepted_through_sequence::text FROM edge_device_watermarks WHERE device_id = $1',
+        [deviceId],
+      ),
+      this.database.query<CountRow>(
+        'SELECT count(*)::text AS count FROM edge_cloud_outbox WHERE delivered_at IS NULL',
+      ),
+    ]);
+
+    return {
+      deviceId,
+      acceptedThroughSequence: Number.parseInt(watermarks[0]?.accepted_through_sequence ?? '0', 10),
+      receipts: [],
+      edgeBacklogCount: Number.parseInt(backlog[0]?.count ?? '0', 10),
+      serverTime: new Date().toISOString(),
+    };
+  }
+
   async ingest(batch: DeviceSyncBatch): Promise<DeviceSyncAck> {
     const result = await this.database.transaction(async (client) => {
       const receipts: SyncEventReceipt[] = [];

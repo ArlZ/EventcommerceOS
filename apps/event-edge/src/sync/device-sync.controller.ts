@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Inject, Post } from '@nestjs/common';
 import type { DeviceSyncAck } from '@event-commerce/contracts';
 import { InventoryAlertService } from '../inventory/inventory-alert.service';
 import { InventorySaleConsumerService } from '../inventory/inventory-sale-consumer.service';
@@ -17,6 +17,12 @@ export class DeviceSyncController {
     @Inject(InventoryAlertService) private readonly inventoryAlerts: InventoryAlertService,
     @Inject(DeviceEdgeAuthService) private readonly deviceAuth: DeviceEdgeAuthService,
   ) {}
+
+  @Get('device-status')
+  async status(@Headers() headers: HeadersRecord): Promise<DeviceSyncAck> {
+    const identity = await this.deviceAuth.authenticate(headers);
+    return this.sync.status(identity.deviceId);
+  }
 
   @Post('device-events')
   async ingest(@Headers() headers: HeadersRecord, @Body() body: unknown): Promise<DeviceSyncAck> {

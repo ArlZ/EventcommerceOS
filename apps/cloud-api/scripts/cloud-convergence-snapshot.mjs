@@ -73,7 +73,7 @@ async function main() {
                 event_type AS "eventType",
                 aggregate_id AS "aggregateId"
          FROM sync_processed_events
-         WHERE event_id = $1
+         WHERE payload ->> 'eventId' = $1
          ORDER BY device_id, sequence, event_instance_id`,
         [eventId],
       ),

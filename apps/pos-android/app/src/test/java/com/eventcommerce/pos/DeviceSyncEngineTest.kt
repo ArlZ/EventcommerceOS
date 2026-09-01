@@ -7,6 +7,7 @@ import com.eventcommerce.pos.data.AppDatabase
 import com.eventcommerce.pos.data.DeviceSyncStateStore
 import com.eventcommerce.pos.data.LocalPosRepository
 import com.eventcommerce.pos.sync.DeviceEdgeAck
+import com.eventcommerce.pos.sync.DeviceEdgeStatusTransport
 import com.eventcommerce.pos.sync.DeviceEdgeTransport
 import com.eventcommerce.pos.sync.DeviceSyncEngine
 import com.eventcommerce.pos.sync.HttpsDeviceEdgeTransport
@@ -105,6 +106,40 @@ class DeviceSyncEngineTest {
   }
 
   @Test
+  fun `idle sync refreshes Edge backlog without replaying acknowledged events`() = runBlocking {
+    val menu = repository.ensureDevelopmentMenu()
+    repository.addItem(menu.items.first().itemId)
+    val highest = repository.allOutboxEvents().maxOf { it.sequence }
+    var sentBatches = 0
+    var statusCalls = 0
+    val transport = object : DeviceEdgeTransport, DeviceEdgeStatusTransport {
+      override suspend fun send(
+        deviceId: String,
+        events: List<com.eventcommerce.pos.data.OutboxEventEntity>,
+      ): DeviceEdgeAck {
+        sentBatches += 1
+        return DeviceEdgeAck(deviceId, highest, 3)
+      }
+
+      override suspend fun status(deviceId: String): DeviceEdgeAck {
+        statusCalls += 1
+        return DeviceEdgeAck(deviceId, highest, 0)
+      }
+    }
+    val engine = DeviceSyncEngine(db, transport, state)
+
+    engine.syncOnce()
+    val idle = engine.syncOnce()
+
+    assertEquals(1, sentBatches)
+    assertEquals(1, statusCalls)
+    assertEquals(0, idle.attempted)
+    assertEquals(0, idle.remaining)
+    assertEquals(0, idle.edgeBacklogCount)
+    assertEquals(0, state.health().edgeBacklogCount)
+  }
+
+  @Test
   fun `background sync sends only the bounded unacknowledged batch`() = runBlocking {
     val menu = repository.ensureDevelopmentMenu()
     repeat(25) { repository.addItem(menu.items.first().itemId) }
@@ -163,5 +198,9 @@ class DeviceSyncEngineTest {
         "test-edge-sync-token-0123456789-abcdefghijklmnopqrstuvwxyz",
       )
     }
+    assertEquals(
+      "https://edge.local/sync/device-status",
+      HttpsDeviceEdgeTransport.statusEndpoint("https://edge.local/sync/device-events"),
+    )
   }
 }
