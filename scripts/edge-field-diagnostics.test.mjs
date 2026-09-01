@@ -168,10 +168,7 @@ test('edge field diagnostics scopes by payload business event id', async () => {
   await collectEdgeFieldDiagnostics(fakeClient({ queries }), env);
   const businessEventScope = "payload ->> 'eventId'=$1";
 
-  assert.equal(
-    queries.filter((sql) => sql.includes(businessEventScope)).length >= 3,
-    true,
-  );
+  assert.equal(queries.filter((sql) => sql.includes(businessEventScope)).length >= 3, true);
 });
 
 test('edge field diagnostics includes revoked pilot devices without losing their evidence', async () => {
